@@ -1107,13 +1107,28 @@ gltfLoader.load(
 
     cacheBones();
 
-    // ── Set natural resting pose (out of T-pose) ──────────
+    // ── Set natural girly resting pose (out of T-pose) ───────
     function setRestPose() {
-      if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.1; boneLUpperArm.rotation.x = 0.05; }
-      if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.1; boneRUpperArm.rotation.x = 0.05; }
-      if (boneLLowerArm) { boneLLowerArm.rotation.z =  0.3; }
-      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3; }
-      if (boneSpine)     { boneSpine.rotation.x = 0.02; }
+      // Arms slightly in, not full T-pose
+      if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.0; boneLUpperArm.rotation.x = 0.05; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0; boneRUpperArm.rotation.x = 0.05; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z =  0.35; boneLLowerArm.rotation.x = 0.05; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = 0.05; }
+      // Soft limp wrists — feminine hand droop
+      if (boneLHand) { boneLHand.rotation.z =  0.18; boneLHand.rotation.x = 0.08; }
+      if (boneRHand) { boneRHand.rotation.z = -0.18; boneRHand.rotation.x = 0.08; }
+      // Slight hip shift right — weight on one leg
+      if (boneHips) { boneHips.rotation.z = 0.06; boneHips.rotation.x = 0.01; }
+      // Left knee slightly bent (weight-bearing)
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; }
+      // Feet natural — slight toe point
+      if (boneLFoot) { boneLFoot.rotation.x = -0.05; boneLFoot.rotation.z = -0.03; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.05; boneRFoot.rotation.z =  0.04; }
+      if (boneLToes) { boneLToes.rotation.x =  0.08; }
+      if (boneRToes) { boneRToes.rotation.x =  0.08; }
+      // Gentle spine lean
+      if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
 
@@ -1191,18 +1206,22 @@ function setExpression(mood) {
 }
 
 // ── Bone cache ───────────────────────────────────────────
-let boneHead=null, boneSpine=null, boneChest=null;
+let boneHead=null, boneNeck=null, boneSpine=null, boneChest=null;
 let boneHips=null;
 let boneHipL=null, boneHipR=null;
 let boneLUpperLeg=null, boneRUpperLeg=null;
 let boneLLowerLeg=null, boneRLowerLeg=null;
+let boneLFoot=null, boneRFoot=null;
+let boneLToes=null, boneRToes=null;
 let boneLUpperArm=null, boneRUpperArm=null;
 let boneLLowerArm=null, boneRLowerArm=null;
+let boneLHand=null, boneRHand=null;
 
 function cacheBones() {
   if (!vrm || !vrm.humanoid) return;
   const h         = vrm.humanoid;
   boneHead        = h.getNormalizedBoneNode('head');
+  boneNeck        = h.getNormalizedBoneNode('neck');
   boneSpine       = h.getNormalizedBoneNode('spine');
   boneChest       = h.getNormalizedBoneNode('chest');
   boneHips        = h.getNormalizedBoneNode('hips');
@@ -1212,11 +1231,17 @@ function cacheBones() {
   boneRUpperLeg   = h.getNormalizedBoneNode('rightUpperLeg');
   boneLLowerLeg   = h.getNormalizedBoneNode('leftLowerLeg');
   boneRLowerLeg   = h.getNormalizedBoneNode('rightLowerLeg');
+  boneLFoot       = h.getNormalizedBoneNode('leftFoot');
+  boneRFoot       = h.getNormalizedBoneNode('rightFoot');
+  boneLToes       = h.getNormalizedBoneNode('leftToes');
+  boneRToes       = h.getNormalizedBoneNode('rightToes');
   boneLUpperArm   = h.getNormalizedBoneNode('leftUpperArm');
   boneRUpperArm   = h.getNormalizedBoneNode('rightUpperArm');
   boneLLowerArm   = h.getNormalizedBoneNode('leftLowerArm');
   boneRLowerArm   = h.getNormalizedBoneNode('rightLowerArm');
-  console.log('Bones cached:', { boneHead, boneSpine, boneLUpperLeg, boneRUpperLeg });
+  boneLHand       = h.getNormalizedBoneNode('leftHand');
+  boneRHand       = h.getNormalizedBoneNode('rightHand');
+  console.log('Bones cached:', { boneHead, boneSpine, boneLHand, boneRHand, boneLFoot, boneRFoot });
 }
 
 // ================================================================
@@ -1241,7 +1266,7 @@ const ACTIVITY = {
 };
 
 // Activities pool — picked randomly, no repeats back-to-back
-const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'idle'];
+const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle'];
 let _lastActivity = 'idle';
 
 function activityPickNext() {
@@ -1267,133 +1292,295 @@ function activityUpdate(delta) {
   switch (ACTIVITY.current) {
 
     // ── DARTS ─────────────────────────────────────────────────
-    // Wind-up → aim → throw → reset
     case 'darts': {
-      const cycle = t % 3.2; // one throw every 3.2s
-      if (cycle < 0.8) {
-        // wind-up: right arm pulls back
-        const p = cycle / 0.8;
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.1 - p * 0.8); boneRUpperArm.rotation.x = -p * 0.5; }
-        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.3 + p * 0.4); boneRLowerArm.rotation.x = p * 0.3; }
-        if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.0; boneLUpperArm.rotation.x = 0.15; }
-        if (boneSpine) boneSpine.rotation.y = p * 0.18;
-        if (boneHead)  boneHead.rotation.y  = -p * 0.1;
-      } else if (cycle < 1.1) {
-        // snap throw: arm flies forward fast
-        const p = (cycle - 0.8) / 0.3;
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.3 - p * 0.1); boneRUpperArm.rotation.x = -0.5 + p * 1.0; }
-        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.7 - p * 0.5); boneRLowerArm.rotation.x = 0.3 - p * 0.2; }
-        if (boneSpine) boneSpine.rotation.y = 0.18 - p * 0.18;
-        if (boneHead)  boneHead.rotation.y  = 0.1 * (1 - p);
+      const cycle = t % 3.5;
+      if (cycle < 0.9) {
+        // Wind-up: hip pops to one side, right arm pulls back, wrist cocked
+        const p = cycle / 0.9;
+        if (boneHips)      { boneHips.rotation.z = 0.1 + p * 0.08; boneHips.rotation.y = p * 0.12; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.0 - p * 0.8); boneRUpperArm.rotation.x = -p * 0.4; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.3 + p * 0.5); boneRLowerArm.rotation.x = p * 0.25; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.3 - p * 0.2; boneRHand.rotation.x = -p * 0.15; } // wrist cock
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.85; boneLUpperArm.rotation.x = 0.1; }
+        if (boneLHand)     { boneLHand.rotation.z = 0.2; } // other hand relaxed
+        if (boneSpine)     boneSpine.rotation.y = p * 0.15;
+        if (boneHead)      boneHead.rotation.y = -p * 0.12;
+        // Foot: left heel lifts slightly for pose
+        if (boneLFoot)     boneLFoot.rotation.x = -0.05 - p * 0.08;
+      } else if (cycle < 1.15) {
+        // Snap throw — arm whips forward, wrist snaps through
+        const p = (cycle - 0.9) / 0.25;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.2 - p * 0.05); boneRUpperArm.rotation.x = -0.4 + p * 1.1; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.8 - p * 0.55); boneRLowerArm.rotation.x = 0.25 - p * 0.1; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.5 + p * 0.4; boneRHand.rotation.x = 0.15; } // wrist snap
+        if (boneSpine)     boneSpine.rotation.y = 0.15 - p * 0.15;
+        if (boneHead)      boneHead.rotation.y = -0.12 + p * 0.12;
         setExpression('excited');
-      } else if (cycle < 2.2) {
-        // follow-through hold — watch the dart fly
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.2; boneRUpperArm.rotation.x = 0.5; }
-        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.2; boneRLowerArm.rotation.x = 0.1; }
-        if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0;
-        if (boneHead)      boneHead.rotation.x = 0.05;
+        setBS('O', p * 0.25); // mouth opens on throw
+      } else if (cycle < 2.4) {
+        // Follow-through: arm extended, she watches the dart, hip still popped
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.15; boneRUpperArm.rotation.x = 0.7; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.25; boneRLowerArm.rotation.x = 0.15; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.1; boneRHand.rotation.x = 0.12; }
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.85;
+        if (boneLHand)     { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.08; }
+        if (boneHead)      boneHead.rotation.x = 0.06; // watching dart
+        if (boneHips)      boneHips.rotation.z = 0.1;  // hip still popped
         setExpression('happy');
+        setBS('O', 0);
       } else {
-        // reset: bring arm back to idle
-        const p = (cycle - 2.2) / 1.0;
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.2 - p * 0.9; boneRUpperArm.rotation.x = 0.5 - p * 0.5; }
-        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.2 - p * 0.1;
-        if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0 + p * 0.1;
+        // Reset: arm comes down, she gives a little satisfied hip pop
+        const p = (cycle - 2.4) / 1.1;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.15 - p * 0.73; boneRUpperArm.rotation.x = 0.7 - p * 0.62; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.1 - p * 0.1; }
+        if (boneHips)      { boneHips.rotation.z = 0.1 - p * 0.04; } // settle back
         setExpression('neutral');
+        setBS('O', 0);
       }
       break;
     }
 
     // ── BASKETBALL ────────────────────────────────────────────
-    // Bounce ball → set up shot → jump + release
     case 'basketball': {
-      const cycle = t % 4.0;
-      if (cycle < 1.5) {
-        // dribble: both arms bounce alternately at sides
-        const bounce = Math.abs(Math.sin(cycle * 8)) * 0.18;
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.9 + bounce; boneLUpperArm.rotation.x = 0.3 + bounce * 0.5; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.9 + bounce); boneRUpperArm.rotation.x = 0.3 + bounce * 0.5; }
-        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.4 + bounce * 0.5;
-        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + bounce * 0.5);
-        if (boneSpine) boneSpine.rotation.x = bounce * 0.2;
+      const cycle = t % 4.2;
+      if (cycle < 1.6) {
+        // Dribble: bouncy with hip groove, arms loose and girly
+        const bounce = Math.abs(Math.sin(cycle * 7)) * 0.2;
+        const groove = Math.sin(cycle * 3.5) * 0.06;
+        if (boneHips)      { boneHips.rotation.z = groove * 1.2; boneHips.rotation.y = groove * 0.5; }
+        if (boneSpine)     { boneSpine.rotation.z = -groove * 0.6; }
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.85 + bounce * 0.3; boneLUpperArm.rotation.x = 0.25 + bounce; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.85 + bounce * 0.3); boneRUpperArm.rotation.x = 0.25 + bounce; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z =  0.4 + bounce * 0.3;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + bounce * 0.3);
+        if (boneLHand)     { boneLHand.rotation.z = 0.2 + bounce * 0.15; boneLHand.rotation.x = 0.05; }
+        if (boneRHand)     { boneRHand.rotation.z = -(0.2 + bounce * 0.15); boneRHand.rotation.x = 0.05; }
+        // Feet: little bounce step
+        if (boneLFoot)     boneLFoot.rotation.x = -0.05 + Math.abs(Math.sin(cycle * 7)) * 0.06;
+        if (boneRFoot)     boneRFoot.rotation.x = -0.05 + Math.abs(Math.sin(cycle * 7 + 1)) * 0.06;
         setExpression('neutral');
-      } else if (cycle < 2.2) {
-        // set shot: both hands come up, knees bend (lower hips)
-        const p = (cycle - 1.5) / 0.7;
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.9 - p * 0.6; boneLUpperArm.rotation.x = p * 0.5; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.9 - p * 0.6); boneRUpperArm.rotation.x = p * 0.5; }
-        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.4 + p * 0.3;
-        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + p * 0.3);
-        if (boneHips) boneHips.rotation.x = -p * 0.08;
-        if (boneLUpperLeg) boneLUpperLeg.rotation.x = p * 0.15;
-        if (boneRUpperLeg) boneRUpperLeg.rotation.x = p * 0.15;
+      } else if (cycle < 2.3) {
+        // Set shot: hands rise, she bends knees, hip dips
+        const p = (cycle - 1.6) / 0.7;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.85 - p * 0.65; boneLUpperArm.rotation.x = p * 0.55; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.85 - p * 0.65); boneRUpperArm.rotation.x = p * 0.55; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z =  0.4 + p * 0.35;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + p * 0.35);
+        if (boneLHand)     { boneLHand.rotation.z =  0.15; boneLHand.rotation.x = p * 0.1; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = p * 0.1; }
+        if (boneHips)      boneHips.rotation.x = -p * 0.1;
+        if (boneLUpperLeg) boneLUpperLeg.rotation.x = p * 0.18;
+        if (boneRUpperLeg) boneRUpperLeg.rotation.x = p * 0.18;
         setExpression('neutral');
-      } else if (cycle < 2.7) {
-        // RELEASE: arms shoot up, body jumps
-        const p = (cycle - 2.2) / 0.5;
-        const jumpY = Math.sin(p * Math.PI) * 0.12;
+      } else if (cycle < 2.8) {
+        // RELEASE: shoots up, toes lift, body extends fully, mouth "ahh"
+        const p = (cycle - 2.3) / 0.5;
+        const jumpY = Math.sin(p * Math.PI) * 0.15;
         if (vrm) vrm.scene.position.y = jumpY;
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.3 - p * 0.28; boneLUpperArm.rotation.x = 0.5 + p * 0.3; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.3 - p * 0.28); boneRUpperArm.rotation.x = 0.5 + p * 0.3; }
-        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.7 + p * 0.2;
-        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.7 + p * 0.2);
-        if (boneHead) boneHead.rotation.x = p * 0.1;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.2 - p * 0.18; boneLUpperArm.rotation.x = 0.55 + p * 0.35; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.2 - p * 0.18); boneRUpperArm.rotation.x = 0.55 + p * 0.35; }
+        if (boneLHand)     { boneLHand.rotation.z = 0.1 + p * 0.15; boneLHand.rotation.x = p * 0.12; }
+        if (boneRHand)     { boneRHand.rotation.z = -(0.1 + p * 0.15); boneRHand.rotation.x = p * 0.12; }
+        if (boneHips)      boneHips.rotation.x = -0.1 + p * 0.15;
+        if (boneLUpperLeg) boneLUpperLeg.rotation.x = 0.18 - p * 0.25;
+        if (boneRUpperLeg) boneRUpperLeg.rotation.x = 0.18 - p * 0.25;
+        // Toes point on jump
+        if (boneLFoot)     boneLFoot.rotation.x = -0.05 - p * 0.18;
+        if (boneRFoot)     boneRFoot.rotation.x = -0.05 - p * 0.18;
+        if (boneLToes)     boneLToes.rotation.x =  0.08 + p * 0.12;
+        if (boneRToes)     boneRToes.rotation.x =  0.08 + p * 0.12;
+        if (boneHead)      boneHead.rotation.x = p * 0.12;
         setExpression('excited');
+        setBS('O', p * 0.4); // mouth opens
       } else {
-        // land + watch: arms settle, head tilts up watching
+        // Land + watch — arms fall, she poses watching, one hip out
         if (vrm) vrm.scene.position.y = 0;
-        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.85;
-        if (boneRUpperArm) boneRUpperArm.rotation.z = -0.85;
-        if (boneHead) boneHead.rotation.x = 0.12;
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.75;
+        if (boneRUpperArm) boneRUpperArm.rotation.z = -0.75;
+        if (boneLHand)     { boneLHand.rotation.z =  0.2; boneLHand.rotation.x = 0.08; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.2; boneRHand.rotation.x = 0.08; }
+        if (boneHead)      boneHead.rotation.x = 0.14; // watching
+        if (boneHips)      boneHips.rotation.z = 0.08; // hip pop
         setExpression('happy');
+        setBS('O', 0);
       }
       break;
     }
 
     // ── DANCE / SHIMMY ────────────────────────────────────────
     case 'dance': {
-      const shimmy = Math.sin(t * 7);
-      const bob    = Math.abs(Math.sin(t * 7)) * 0.05;
-      if (boneHips)  { boneHips.rotation.z  = shimmy * 0.14; boneHips.rotation.y  = shimmy * 0.08; }
-      if (boneSpine) { boneSpine.rotation.z = -shimmy * 0.09; boneSpine.rotation.x = bob; }
-      if (boneChest) boneChest.rotation.z = shimmy * 0.06;
-      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.7 + Math.sin(t*7+1)*0.25; boneLUpperArm.rotation.x = 0.2 + bob; }
-      if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.7 + Math.sin(t*7)*0.25); boneRUpperArm.rotation.x = 0.2 + bob; }
-      if (boneLUpperLeg) boneLUpperLeg.rotation.z = shimmy * 0.06;
-      if (boneRUpperLeg) boneRUpperLeg.rotation.z = -shimmy * 0.06;
-      if (boneHead) boneHead.rotation.z = Math.sin(t * 3.5) * 0.05;
+      const shimmy  = Math.sin(t * 6.5);
+      const bob     = Math.abs(Math.sin(t * 6.5)) * 0.055;
+      const armSwing = Math.sin(t * 3.25); // half speed — alternate arms
+
+      if (boneHips)  { boneHips.rotation.z = shimmy * 0.16; boneHips.rotation.y = shimmy * 0.09; boneHips.rotation.x = bob * 0.4; }
+      if (boneSpine) { boneSpine.rotation.z = -shimmy * 0.09; boneSpine.rotation.x = bob * 0.8; boneSpine.rotation.y = shimmy * 0.03; }
+      if (boneChest) { boneChest.rotation.z = shimmy * 0.06; boneChest.rotation.x = bob * 0.5; }
+
+      // Arms: alternating wave + wrist flick
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.65 + Math.sin(t*6.5+1.5)*0.28; boneLUpperArm.rotation.x = 0.18 + bob * 0.5; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.65 + Math.sin(t*6.5)*0.28); boneRUpperArm.rotation.x = 0.18 + bob * 0.5; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.5 + Math.sin(t*6.5+0.8)*0.2; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.5 + Math.sin(t*6.5-0.8)*0.2); }
+      // Wrist flick — fast, snappy, feminine
+      if (boneLHand) { boneLHand.rotation.z = 0.25 + Math.sin(t*9)*0.18; boneLHand.rotation.x = 0.08 + Math.sin(t*7)*0.06; boneLHand.rotation.y = Math.sin(t*5)*0.08; }
+      if (boneRHand) { boneRHand.rotation.z = -(0.25 + Math.sin(t*9+1)*0.18); boneRHand.rotation.x = 0.08 + Math.sin(t*7+1)*0.06; boneRHand.rotation.y = Math.sin(t*5+1)*0.08; }
+
+      // Legs: step-touch weight shift
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = shimmy * 0.08; boneLUpperLeg.rotation.x = bob * 0.3; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = -shimmy * 0.08; boneRUpperLeg.rotation.x = bob * 0.3; }
+      // Heel lifts alternate with shimmy
+      if (boneLFoot) { boneLFoot.rotation.x = -0.04 + Math.max(0, shimmy) * 0.12; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.04 + Math.max(0, -shimmy) * 0.12; }
+      if (boneLToes) boneLToes.rotation.x = 0.08 + Math.max(0, shimmy) * 0.08;
+      if (boneRToes) boneRToes.rotation.x = 0.08 + Math.max(0, -shimmy) * 0.08;
+
+      // Head bobs and tilts with the music
+      if (boneHead) { boneHead.rotation.z = Math.sin(t * 3.25) * 0.06; boneHead.rotation.y = shimmy * 0.05; }
+
       setExpression('happy');
+      // Mouth opens and closes to the beat
+      setBS('A', Math.max(0, Math.sin(t * 6.5)) * 0.22);
       break;
     }
 
     // ── STRETCH ───────────────────────────────────────────────
     case 'stretch': {
-      const cycle = t % 5.0;
-      if (cycle < 2.0) {
-        // arms stretch overhead
+      const cycle = t % 6.0;
+      if (cycle < 1.2) {
+        // Arms rise overhead — she reaches up, hips counter-shift, toes point
         const p = Math.min(cycle / 1.0, 1);
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 1.1 - p * 1.0; boneLUpperArm.rotation.x = p * 0.2; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.1 - p * 1.0); boneRUpperArm.rotation.x = p * 0.2; }
-        if (boneSpine) boneSpine.rotation.x = -p * 0.06;
-        setExpression('relaxed' in GESTURES ? 'relaxed' : 'neutral');
-      } else if (cycle < 3.5) {
-        // hold the stretch + sway
-        const sway = Math.sin(t * 1.5) * 0.03;
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.1 + sway; boneLUpperArm.rotation.x = 0.2; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.1 + sway); boneRUpperArm.rotation.x = 0.2; }
-        if (boneSpine) boneSpine.rotation.x = -0.06 + Math.sin(t * 0.8) * 0.02;
-      } else {
-        // arms come back down
-        const p = (cycle - 3.5) / 1.5;
-        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.1 + p * 1.0; boneLUpperArm.rotation.x = 0.2 - p * 0.2; }
-        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.1 + p * 1.0); boneRUpperArm.rotation.x = 0.2 - p * 0.2; }
-        if (boneSpine) boneSpine.rotation.x = -0.06 + p * 0.06;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 1.0 - p * 1.08; boneLUpperArm.rotation.x = p * 0.18; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.0 - p * 1.08); boneRUpperArm.rotation.x = p * 0.18; }
+        if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.35 - p * 0.3; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - p * 0.3); }
+        // Hands: fingers reach up, wrists extend
+        if (boneLHand) { boneLHand.rotation.z = 0.2 - p * 0.3; boneLHand.rotation.x = -p * 0.12; }
+        if (boneRHand) { boneRHand.rotation.z = -(0.2 - p * 0.3); boneRHand.rotation.x = -p * 0.12; }
+        if (boneSpine) { boneSpine.rotation.x = -p * 0.08; boneSpine.rotation.z = Math.sin(p*2)*0.02; }
+        if (boneHips)  { boneHips.rotation.z = Math.sin(p*3)*0.04; } // hip shifts as she reaches
+        // Heel lift: she rises onto toes
+        if (boneLFoot) boneLFoot.rotation.x = -0.05 - p * 0.15;
+        if (boneRFoot) boneRFoot.rotation.x = -0.05 - p * 0.15;
+        if (boneLToes) boneLToes.rotation.x = 0.08 + p * 0.1;
+        if (boneRToes) boneRToes.rotation.x = 0.08 + p * 0.1;
         setExpression('neutral');
+        setBS('O', p * 0.15); // soft "ooh" as she stretches
+      } else if (cycle < 4.0) {
+        // Hold the stretch + gentle sway — feels good
+        const sway = Math.sin(t * 1.2) * 0.04;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = -0.08 + sway; boneLUpperArm.rotation.x = 0.18; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(- 0.08 + sway); boneRUpperArm.rotation.x = 0.18; }
+        if (boneLHand) { boneLHand.rotation.z = -0.1 + Math.sin(t*1.8)*0.05; boneLHand.rotation.x = -0.12; }
+        if (boneRHand) { boneRHand.rotation.z = 0.1 - Math.sin(t*1.8)*0.05; boneRHand.rotation.x = -0.12; }
+        if (boneSpine) { boneSpine.rotation.x = -0.08 + Math.sin(t * 0.7) * 0.02; boneSpine.rotation.z = sway * 0.5; }
+        if (boneHips)  { boneHips.rotation.z = Math.sin(t * 0.9) * 0.05; }
+        // Stay on toes
+        if (boneLFoot) boneLFoot.rotation.x = -0.2;
+        if (boneRFoot) boneRFoot.rotation.x = -0.2;
+        if (boneLToes) boneLToes.rotation.x = 0.18;
+        if (boneRToes) boneRToes.rotation.x = 0.18;
+        setBS('O', 0.12); // soft held breath
+      } else {
+        // Arms come back down — she exhales, settles, hip pops
+        const p = (cycle - 4.0) / 2.0;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = -0.08 + p * 1.08; boneLUpperArm.rotation.x = 0.18 - p * 0.13; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -((-0.08 + p * 1.08)); boneRUpperArm.rotation.x = 0.18 - p * 0.13; }
+        if (boneLHand) { boneLHand.rotation.z = -0.1 + p * 0.3; boneLHand.rotation.x = -0.12 + p * 0.2; }
+        if (boneRHand) { boneRHand.rotation.z = 0.1 - p * 0.3; boneRHand.rotation.x = -0.12 + p * 0.2; }
+        if (boneSpine) { boneSpine.rotation.x = -0.08 + p * 0.1; }
+        if (boneHips)  { boneHips.rotation.z = 0.06 * Math.sin(p * Math.PI); } // satisfying hip pop on settle
+        // Heels lower back down
+        if (boneLFoot) boneLFoot.rotation.x = -0.2 + p * 0.15;
+        if (boneRFoot) boneRFoot.rotation.x = -0.2 + p * 0.15;
+        if (boneLToes) boneLToes.rotation.x = 0.18 - p * 0.1;
+        if (boneRToes) boneRToes.rotation.x = 0.18 - p * 0.1;
+        setExpression('neutral');
+        setBS('O', 0.12 - p * 0.12); // exhale
       }
       break;
     }
 
-    // ── IDLE (default sway, handled by main render loop) ─────
+    // ── HAIR FLICK ────────────────────────────────────────────
+    // Raises one hand to hair, flicks/fixes it, gives a little smirk
+    case 'hairflick': {
+      const cycle = t % 5.0;
+      if (cycle < 0.6) {
+        // Right hand rises to hair
+        const p = cycle / 0.6;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + p * 0.55; boneRUpperArm.rotation.x = p * 0.65; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - p * 0.2); boneRLowerArm.rotation.x = p * 0.3; }
+        if (boneRHand)     { boneRHand.rotation.z = -(0.18 + p * 0.15); boneRHand.rotation.x = -p * 0.1; }
+        if (boneHips)      boneHips.rotation.z = 0.08; // hip out
+        if (boneHead)      boneHead.rotation.z = -p * 0.06; // head tilts into it
+      } else if (cycle < 2.5) {
+        // Hold at hair + flick motion x2
+        const flick = Math.sin((cycle - 0.6) * 6) * 0.12;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45; boneRUpperArm.rotation.x = 0.65 + flick * 0.2; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.15; boneRLowerArm.rotation.x = 0.3 + Math.abs(flick) * 0.15; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.33 + flick; boneRHand.rotation.y = flick * 0.5; } // wrist flick
+        if (boneHead)      { boneHead.rotation.z = -0.06 + Math.sin((cycle-0.6)*3)*0.03; }
+        if (boneHips)      boneHips.rotation.z = 0.1;
+        setExpression('happy');
+        setBS('I', 0.1); // little smirk
+      } else if (cycle < 3.2) {
+        // Hand comes down, she does a little confident pose
+        const p = (cycle - 2.5) / 0.7;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45 - p * 0.55; boneRUpperArm.rotation.x = 0.65 - p * 0.6; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.15 - p * 0.2; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.33 + p * 0.15; }
+        if (boneHead)      boneHead.rotation.z = -0.06 + p * 0.06;
+        if (boneHips)      boneHips.rotation.z = 0.1 + Math.sin(p * Math.PI) * 0.06; // extra hip pop
+        setExpression('happy');
+        setBS('I', 0.1 - p * 0.1);
+      } else {
+        // Idle pose — left hand on hip, confident slay
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.65; boneLUpperArm.rotation.x = 0.15; }
+        if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.8; boneLLowerArm.rotation.x = 0.3; }
+        if (boneLHand)     { boneLHand.rotation.z = 0.3; boneLHand.rotation.x = 0.1; }
+        if (boneHips)      boneHips.rotation.z = 0.1;
+        setExpression('neutral');
+        setBS('I', 0);
+      }
+      break;
+    }
+
+    // ── HIP ON HIP — classic sassy pose + bob ─────────────────
+    case 'hiponhip': {
+      const bob = Math.sin(t * 2.2) * 0.06;
+      const sway = Math.sin(t * 1.1) * 0.05;
+
+      if (boneHips)  { boneHips.rotation.z = 0.12 + bob; boneHips.rotation.y = sway * 0.3; }
+      if (boneSpine) { boneSpine.rotation.z = -0.06 - bob * 0.4; boneSpine.rotation.x = 0.02; }
+      if (boneChest) { boneChest.rotation.z = -0.03; }
+
+      // Right hand on hip
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.75; boneRUpperArm.rotation.x = 0.35; boneRUpperArm.rotation.y = 0.3; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.6; boneRLowerArm.rotation.x = 0.1; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.3; boneRHand.rotation.y = -0.2; }
+
+      // Left arm: sassy gesture — floats out slightly with wrist limp
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.72 + Math.sin(t*1.8)*0.06; boneLUpperArm.rotation.x = 0.1; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.45 + Math.sin(t*1.8)*0.04; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.28 + Math.sin(t*2.5)*0.08; boneLHand.rotation.y = Math.sin(t*2)*0.06; boneLHand.rotation.x = 0.08; }
+
+      // Head: confident slow nod + glance side
+      if (boneHead) { boneHead.rotation.z = Math.sin(t*1.1)*0.04; boneHead.rotation.y = Math.sin(t*0.7)*0.06; }
+
+      // Weight on right leg — left leg slightly crossed/kicked out
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.06 + sway * 0.5; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = 0.08; }
+      if (boneLFoot)     { boneLFoot.rotation.z = -0.06; boneLFoot.rotation.x = -0.04; }
+      if (boneRFoot)     { boneRFoot.rotation.x = -0.03; }
+
+      setExpression('neutral');
+      // Periodic little lip pout
+      const pout = Math.sin(t * 0.8) * 0.5 + 0.5;
+      setBS('U', pout * 0.1);
+      break;
+    }
+
+    // ── IDLE (base sway handled by render loop) ───────────────
     default:
       break;
   }
@@ -1427,34 +1614,50 @@ let gestureDuration = 0;
 const GESTURES = {
   think: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
-    boneLUpperArm.rotation.z =  1.1 + Math.sin(t*0.8)*0.03;
-    boneRUpperArm.rotation.z = -(0.5 + Math.sin(t*0.6)*0.04);
-    boneRUpperArm.rotation.x =  0.6 + Math.sin(t*0.4)*0.02;
+    boneLUpperArm.rotation.z =  1.05 + Math.sin(t*0.8)*0.03;
+    boneRUpperArm.rotation.z = -(0.45 + Math.sin(t*0.6)*0.04);
+    boneRUpperArm.rotation.x =  0.62 + Math.sin(t*0.4)*0.02;
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.9 + Math.sin(t*0.5)*0.02);
+    // Hand at chin — fingers curled, wrist relaxed
+    if (boneRHand) { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.1; }
+    if (boneLHand) { boneLHand.rotation.z = 0.22; boneLHand.rotation.x = 0.08; }
+    // Tiny mouth movements while thinking
+    setBS('I', Math.abs(Math.sin(t*0.7))*0.08);
   },
   talk: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
-    const wave = Math.sin(t*6)*0.12;
-    boneLUpperArm.rotation.z =  0.8 + wave;
-    boneRUpperArm.rotation.z = -(0.8 + wave*0.7);
-    boneLUpperArm.rotation.x = 0.15 + Math.sin(t*4)*0.08;
-    boneRUpperArm.rotation.x = 0.15 + Math.sin(t*4+1)*0.08;
-    if (boneLLowerArm) boneLLowerArm.rotation.z =  0.5 + Math.sin(t*5)*0.1;
-    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.5 + Math.sin(t*5+0.5)*0.1);
+    const wave = Math.sin(t*5.5)*0.14;
+    boneLUpperArm.rotation.z =  0.75 + wave;
+    boneRUpperArm.rotation.z = -(0.75 + wave*0.7);
+    boneLUpperArm.rotation.x = 0.18 + Math.sin(t*4)*0.08;
+    boneRUpperArm.rotation.x = 0.18 + Math.sin(t*4+1)*0.08;
+    if (boneLLowerArm) boneLLowerArm.rotation.z =  0.48 + Math.sin(t*5)*0.1;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.48 + Math.sin(t*5+0.5)*0.1);
+    // Wrist flicks while talking — very girly
+    if (boneLHand) { boneLHand.rotation.z = 0.22 + Math.sin(t*7)*0.12; boneLHand.rotation.y = Math.sin(t*5)*0.08; }
+    if (boneRHand) { boneRHand.rotation.z = -(0.22 + Math.sin(t*7+1)*0.12); boneRHand.rotation.y = Math.sin(t*5+1)*0.08; }
   },
   wave: (t) => {
     if (!boneRUpperArm) return;
-    boneRUpperArm.rotation.z = -(0.3 + Math.sin(t*8)*0.25);
-    boneRUpperArm.rotation.x =  0.3;
-    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.2 + Math.sin(t*8+0.5)*0.2);
-    if (boneLUpperArm) boneLUpperArm.rotation.z =  1.1;
+    boneRUpperArm.rotation.z = -(0.28 + Math.sin(t*8)*0.28);
+    boneRUpperArm.rotation.x =  0.35;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.18 + Math.sin(t*8+0.5)*0.22);
+    // Wrist wave — fingers flapping
+    if (boneRHand) { boneRHand.rotation.z = -(0.1 + Math.sin(t*10)*0.15); boneRHand.rotation.y = Math.sin(t*8)*0.1; }
+    if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0;
+    if (boneLHand) { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.08; }
   },
   excited: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
-    boneLUpperArm.rotation.z =  0.4 + Math.sin(t*7)*0.15;
-    boneRUpperArm.rotation.z = -(0.4 + Math.sin(t*7+0.3)*0.15);
-    boneLUpperArm.rotation.x =  0.2; boneRUpperArm.rotation.x = 0.2;
+    boneLUpperArm.rotation.z =  0.38 + Math.sin(t*7)*0.17;
+    boneRUpperArm.rotation.z = -(0.38 + Math.sin(t*7+0.3)*0.17);
+    boneLUpperArm.rotation.x =  0.22; boneRUpperArm.rotation.x = 0.22;
     if (boneSpine) boneSpine.rotation.y = Math.sin(t*7)*0.06;
+    if (boneHips)  boneHips.rotation.z = Math.sin(t*7)*0.07;
+    // Hands flap with excitement
+    if (boneLHand) { boneLHand.rotation.z = 0.2 + Math.sin(t*9)*0.15; boneLHand.rotation.x = 0.08; }
+    if (boneRHand) { boneRHand.rotation.z = -(0.2 + Math.sin(t*9+0.5)*0.15); boneRHand.rotation.x = 0.08; }
+    setBS('O', Math.abs(Math.sin(t*7))*0.25); // mouth opens with excitement
   },
 };
 
@@ -1836,30 +2039,123 @@ function render() {
 
     // ── Idle body sway (only when not mid-gesture) ────
     if (!gestureActive()) {
+
+      // ── GIRLY IDLE BASE — always running ──────────────
+      // Weight shift: hips gently rock side to side, one leg bearing weight
+      const hipSway    = Math.sin(idleTime * 1.1) * 0.07;
+      const hipBob     = Math.abs(Math.sin(idleTime * 1.1)) * 0.03;
+      const breathe    = Math.sin(idleTime * 0.8) * 0.012;
+
+      if (boneHips) {
+        boneHips.rotation.z = hipSway;
+        boneHips.rotation.x = hipBob * 0.5;
+        boneHips.rotation.y = Math.sin(idleTime * 0.55) * 0.04;
+      }
       if (boneSpine) {
-        boneSpine.rotation.x = Math.sin(idleTime * 1.3) * 0.018;
-        boneSpine.rotation.z = Math.sin(idleTime * 0.7) * 0.012;
+        boneSpine.rotation.z = -hipSway * 0.6;
+        boneSpine.rotation.x = breathe + Math.sin(idleTime * 1.3) * 0.012;
+        boneSpine.rotation.y = Math.sin(idleTime * 0.55) * 0.02;
       }
       if (boneChest) {
-        boneChest.rotation.x = Math.sin(idleTime * 1.3 + 0.3) * 0.01;
+        boneChest.rotation.z = -hipSway * 0.3;
+        boneChest.rotation.x = breathe * 0.7;
       }
+
+      // Head — gentle tilt, nod, side glance
       if (boneHead) {
-        boneHead.rotation.x = Math.sin(idleTime * 0.9)  * 0.025;
-        boneHead.rotation.y = Math.sin(idleTime * 0.4)  * 0.06;
-        boneHead.rotation.z = Math.sin(idleTime * 0.55) * 0.022;
+        boneHead.rotation.z = Math.sin(idleTime * 0.45) * 0.045; // slow cute tilt
+        boneHead.rotation.x = Math.sin(idleTime * 0.7)  * 0.03 + 0.02;
+        boneHead.rotation.y = Math.sin(idleTime * 0.32) * 0.08; // slow glance side to side
       }
-      // Apply idle arm sway when activity is idle (activities override arms themselves)
+      if (boneNeck) {
+        boneNeck.rotation.z = Math.sin(idleTime * 0.45) * 0.02;
+        boneNeck.rotation.y = Math.sin(idleTime * 0.32) * 0.04;
+      }
+
+      // Legs — weight shift, one leg slightly bent, foot tap
+      const legShift = Math.sin(idleTime * 1.1); // synced to hip sway
+      if (boneLUpperLeg) {
+        boneLUpperLeg.rotation.z = -0.04 + legShift * 0.04;
+        boneLUpperLeg.rotation.x =  0.01;
+      }
+      if (boneRUpperLeg) {
+        boneRUpperLeg.rotation.z =  0.06 - legShift * 0.04;
+        boneRUpperLeg.rotation.x =  0.01;
+      }
+      // Lower legs — subtle knee flex on weight-bearing side
+      if (boneLLowerLeg) {
+        boneLLowerLeg.rotation.x = 0.04 + Math.max(0, legShift) * 0.04;
+      }
+      if (boneRLowerLeg) {
+        boneRLowerLeg.rotation.x = 0.04 + Math.max(0, -legShift) * 0.04;
+      }
+      // Foot tap — right foot does a little impatient tap every ~4s
+      const tapCycle = idleTime % 4.2;
+      const tapAmt   = tapCycle < 0.5 ? Math.sin(tapCycle * Math.PI / 0.5) * 0.12 : 0;
+      if (boneLFoot) {
+        boneLFoot.rotation.x = -0.05 + Math.sin(idleTime * 1.1) * 0.02;
+        boneLFoot.rotation.z = -0.03 + legShift * 0.02;
+      }
+      if (boneRFoot) {
+        boneRFoot.rotation.x = -0.05 + tapAmt;
+        boneRFoot.rotation.z =  0.04 - legShift * 0.02;
+      }
+      // Toe point — toes follow foot
+      if (boneLToes) boneLToes.rotation.x =  0.08 + Math.sin(idleTime * 1.1) * 0.03;
+      if (boneRToes) boneRToes.rotation.x =  0.08 + tapAmt * 0.5;
+
+      // Arms & hands — only idle pose when no activity animating them
       if (ACTIVITY.current === 'idle') {
+        // Left arm: slightly bent, hand on hip vibe
         if (boneLUpperArm) {
-          boneLUpperArm.rotation.z =  1.1 + Math.sin(idleTime * 1.3) * 0.04;
-          boneLUpperArm.rotation.x = Math.sin(idleTime * 0.6) * 0.03;
+          boneLUpperArm.rotation.z =  0.88 + Math.sin(idleTime * 0.9) * 0.06;
+          boneLUpperArm.rotation.x =  0.08 + Math.sin(idleTime * 0.6) * 0.03;
+          boneLUpperArm.rotation.y =  0.05;
         }
+        if (boneLLowerArm) {
+          boneLLowerArm.rotation.z =  0.55 + Math.sin(idleTime * 1.1) * 0.04;
+          boneLLowerArm.rotation.x = -0.05;
+        }
+        // Right arm: loose at side with gentle sway
         if (boneRUpperArm) {
-          boneRUpperArm.rotation.z = -1.1 - Math.sin(idleTime * 1.3) * 0.04;
-          boneRUpperArm.rotation.x = Math.sin(idleTime * 0.6 + 0.5) * 0.03;
+          boneRUpperArm.rotation.z = -0.88 - Math.sin(idleTime * 0.9 + 0.5) * 0.06;
+          boneRUpperArm.rotation.x =  0.08 + Math.sin(idleTime * 0.6 + 0.5) * 0.03;
+          boneRUpperArm.rotation.y = -0.05;
         }
-        if (boneLLowerArm) boneLLowerArm.rotation.z =  0.3 + Math.sin(idleTime * 1.1) * 0.02;
-        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3 - Math.sin(idleTime * 1.1) * 0.02;
+        if (boneRLowerArm) {
+          boneRLowerArm.rotation.z = -0.55 - Math.sin(idleTime * 1.1 + 0.5) * 0.04;
+          boneRLowerArm.rotation.x = -0.05;
+        }
+        // Wrists / hands — soft limp feminine droop + flutter
+        if (boneLHand) {
+          boneLHand.rotation.z =  0.22 + Math.sin(idleTime * 1.8) * 0.06;
+          boneLHand.rotation.x =  0.10 + Math.sin(idleTime * 2.2) * 0.04;
+          boneLHand.rotation.y =  Math.sin(idleTime * 1.4) * 0.05;
+        }
+        if (boneRHand) {
+          boneRHand.rotation.z = -0.22 - Math.sin(idleTime * 1.8 + 1) * 0.06;
+          boneRHand.rotation.x =  0.10 + Math.sin(idleTime * 2.2 + 1) * 0.04;
+          boneRHand.rotation.y =  Math.sin(idleTime * 1.4 + 0.8) * 0.05;
+        }
+      }
+
+      // ── Idle mouth micro-expressions ──────────────────
+      // Little pout, lip press, and soft "hmm" mouth movements
+      const mouthCycle = idleTime % 6.5;
+      if (mouthCycle > 5.5) {
+        // tiny "ooh" pout at the end of each cycle
+        const p = (mouthCycle - 5.5) / 1.0;
+        const pout = Math.sin(p * Math.PI) * 0.18;
+        setBS('O', pout);
+        setBS('U', pout * 0.5);
+      } else if (mouthCycle > 3.8 && mouthCycle < 4.4) {
+        // lip press / hmm
+        const p = Math.sin((mouthCycle - 3.8) / 0.6 * Math.PI);
+        setBS('I', p * 0.12);
+      } else {
+        setBS('O', 0);
+        setBS('U', 0);
+        setBS('I', 0);
       }
     }
 
