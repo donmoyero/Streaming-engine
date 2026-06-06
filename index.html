@@ -516,6 +516,9 @@
   <button id="send-btn">SEND</button>
 </div>
 
+<!-- Twitch chat library -->
+<script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/build/tmi.min.js"></script>
+
 <!-- Three.js + VRM -->
 <script type="importmap">
 {
@@ -538,6 +541,8 @@ const API_URL     = 'https://impactgrid-dijo.onrender.com/chat/message';
 const PROACTIVE_URL = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 const TOPIC_URL   = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
 const USER_ID     = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
+const TTS_URL     = 'https://impactgrid-dijo.onrender.com/tts';
+const TWITCH_CHANNEL = 'Miss_ogtinz';
 
 // ── Elements ────────────────────────────────────────────
 const canvas    = document.getElementById('canvas');
@@ -732,30 +737,18 @@ gltfLoader.load(
     console.log("Camera auto-fit done, camZ:", camZ.toFixed(2), "camY:", camY.toFixed(2));
 
     setProgress(100);
-    setTimeout(async () => {
+    setTimeout(() => {
       loader_el.classList.add('hidden');
-      setStatus('Live ✦', 'ready');
+      setStatus('Ready ✦', 'ready');
+      showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
       startIdleAnimation();
 
-      // ── Start topic polling immediately ──
+      // ── Start topic polling and dead air timer after load ──
       startTopicPolling();
-
-      // ── Fetch a real welcome line from the backend ──
-      try {
-        const res  = await fetch(PROACTIVE_URL, { method: 'POST' });
-        const data = await res.json();
-        const text = data?.response || "Heyyy! Welcome to the stream! What's good?";
-        showBubble(text, 'Miss OG Tinz');
-        doGesture('wave', 2500);
-        await speak(text, 'happy');
-      } catch(_) {
-        showBubble("Heyyy! Welcome to the stream! What's good?", 'Miss OG Tinz');
-        doGesture('wave', 2500);
-        await speak("Heyyy! Welcome to the stream! What's good?", 'happy');
-      }
-
-      // ── Dead air timer starts after welcome finishes ──
       deadAir.start();
+
+      // ── Connect to Twitch chat ──
+      initTwitchChat();
     }, 400);
   },
   (progress) => {
@@ -791,7 +784,41 @@ function stopLipSync() {
   MOUTH_BS.forEach(s => setBS(s, 0));
 }
 
+// runLipSyncLoop removed() {
+  if (!lipSyncActive) return;
+  lipRafId = requestAnimationFrame(runLipSyncLoop);
 
+  analyser.getByteFrequencyData(freqData);
+
+  const bins   = freqData.length;
+  const lowEnd = Math.floor(bins * 0.05);
+  const midEnd = Math.floor(bins * 0.15);
+  const hiEnd  = Math.floor(bins * 0.35);
+
+  let lowVol = 0, midVol = 0, hiVol = 0;
+  for (let i = 0;      i < lowEnd; i++) lowVol += freqData[i];
+  for (let i = lowEnd; i < midEnd; i++) midVol += freqData[i];
+  for (let i = midEnd; i < hiEnd;  i++) hiVol  += freqData[i];
+
+  lowVol /= (lowEnd * 255);
+  midVol /= ((midEnd - lowEnd) * 255);
+  hiVol  /= ((hiEnd  - midEnd) * 255);
+
+  const loudness = (lowVol * 0.5 + midVol * 0.3 + hiVol * 0.2);
+  const gate     = loudness > 0.04 ? 1 : 0;
+
+  const aVal = Math.min(1, lowVol * 3.5) * gate;
+  const oVal = Math.min(1, midVol * 2.8) * gate * 0.7;
+  const iVal = Math.min(1, hiVol  * 2.2) * gate * 0.6;
+  const eVal = Math.min(1, hiVol  * 1.8) * gate * 0.5;
+  const uVal = Math.min(1, midVol * 2.0) * gate * 0.5;
+
+  setBS('A', aVal);
+  setBS('O', oVal);
+  setBS('I', iVal);
+  setBS('E', eVal);
+  setBS('U', uVal);
+}
 
 // ── Expression mapping ──────────────────────────────────
 function setExpression(mood) {
@@ -966,32 +993,54 @@ function doBlink() {
 
 render();
 
-// ── Text-driven mouth animation (no audio/TTS needed) ────
+// ── TTS — Edge TTS via backend, text lip sync as fallback ──────
 async function speak(text, mood='neutral') {
   setExpression(mood);
 
+  // Start lip sync immediately so mouth moves while audio loads
+  const lipDone = runLipSync(text);
+
+  try {
+    const res = await fetch(TTS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text }),
+    });
+    if (res.ok) {
+      const blob  = await res.blob();
+      const url   = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      await new Promise((resolve) => {
+        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.play().catch(() => resolve());
+      });
+      stopLipSync();
+      setExpression('neutral');
+      return;
+    }
+  } catch(_) { /* TTS unavailable — fall through */ }
+
+  // Fallback: wait for text-driven lip sync
+  await lipDone;
+}
+
+// ── Text-driven lip sync ─────────────────────────────────────────
+function runLipSync(text) {
   return new Promise((resolve) => {
     stopLipSync();
-
     lipSyncActive = true;
     const startTime = Date.now();
     const words     = text.split(' ');
     const msPerWord = (text.length * 62) / Math.max(words.length, 1);
     const totalMs   = words.length * msPerWord;
+    const VOWELS    = new Set(['a','e','i','o','u']);
 
-    const VOWELS = new Set(['a','e','i','o','u']);
-
-    function simulateAnalyser() {
+    function tick() {
       if (!lipSyncActive) return;
-      lipRafId = requestAnimationFrame(simulateAnalyser);
-
+      lipRafId = requestAnimationFrame(tick);
       const elapsed = Date.now() - startTime;
-      if (elapsed >= totalMs) {
-        stopLipSync();
-        setExpression('neutral');
-        resolve();
-        return;
-      }
+      if (elapsed >= totalMs) { stopLipSync(); setExpression('neutral'); resolve(); return; }
 
       const wordIndex = Math.floor(elapsed / msPerWord);
       const word      = (words[wordIndex] || '').toLowerCase();
@@ -999,14 +1048,11 @@ async function speak(text, mood='neutral') {
       const char      = word[charPos] || '';
       const isVowel   = VOWELS.has(char);
       const isSilence = char === '' || char === ' ';
-
-      const rhythm     = Math.abs(Math.sin(elapsed * 0.018)) * 0.4 + 0.3;
-      const vowelBoost = isVowel ? 0.5 : 0.0;
-      const base       = isSilence ? 0 : rhythm + vowelBoost;
-
-      const openness = Math.min(1, base);
-      const spread   = isVowel && (char === 'i' || char === 'e') ? 0.6 : 0.1;
-      const round    = isVowel && (char === 'o' || char === 'u') ? 0.5 : 0.1;
+      const rhythm    = Math.abs(Math.sin(elapsed * 0.018)) * 0.4 + 0.3;
+      const base      = isSilence ? 0 : rhythm + (isVowel ? 0.5 : 0);
+      const openness  = Math.min(1, base);
+      const spread    = isVowel && (char==='i'||char==='e') ? 0.6 : 0.1;
+      const round     = isVowel && (char==='o'||char==='u') ? 0.5 : 0.1;
 
       setBS('A', openness * 0.9);
       setBS('O', openness * round);
@@ -1014,8 +1060,7 @@ async function speak(text, mood='neutral') {
       setBS('E', openness * spread * 0.7);
       setBS('U', openness * round * 0.6);
     }
-
-    simulateAnalyser();
+    tick();
   });
 }
 
@@ -1180,6 +1225,94 @@ chatInput.addEventListener('keydown', e => {
 });
 
 
+
+// ── Twitch Chat Integration ──────────────────────────────
+// Connects to Twitch IRC via tmi.js (loaded below)
+// Handles: chat messages, subs, resubs, bits, raids, gift subs
+
+function initTwitchChat() {
+  if (typeof Tmi === 'undefined') {
+    console.warn('[Twitch] tmi.js not loaded');
+    return;
+  }
+
+  const client = new Tmi.Client({
+    channels: [TWITCH_CHANNEL],
+  });
+
+  client.connect().then(() => {
+    console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`);
+    setStatus('Live ✦', 'ready');
+  }).catch(err => {
+    console.warn('[Twitch] Chat connect failed:', err);
+  });
+
+  // ── Regular chat message ──
+  client.on('message', (channel, tags, message, self) => {
+    if (self) return; // ignore bot's own messages
+    const username = tags['display-name'] || tags.username || 'Someone';
+    // Don't respond to every single message — queue them
+    queueTwitchMessage(username, message);
+  });
+
+  // ── New subscriber ──
+  client.on('subscription', (channel, username, method, message, tags) => {
+    const event = `${username} just subscribed! Omo thank you so much! Welcome to the family!`;
+    sendMessage(event, 'StreamEvent');
+  });
+
+  // ── Resubscriber ──
+  client.on('resub', (channel, username, months, message, tags, methods) => {
+    const event = `${username} has been here for ${months} months! ${months >= 6 ? 'A real OG!' : 'Thank you!'} We see you!`;
+    sendMessage(event, 'StreamEvent');
+  });
+
+  // ── Bits/Cheer ──
+  client.on('cheer', (channel, tags, message) => {
+    const username = tags['display-name'] || 'Someone';
+    const bits     = tags.bits || '?';
+    const event    = `${username} just sent ${bits} bits! Ayyyy thank you! The support is real!`;
+    sendMessage(event, 'StreamEvent');
+  });
+
+  // ── Raid ──
+  client.on('raided', (channel, username, viewers) => {
+    const event = `We are being raided by ${username} with ${viewers} viewers! Welcome welcome welcome! Come in, come in!`;
+    sendMessage(event, 'StreamEvent');
+    doGesture('excited', 4000);
+  });
+
+  // ── Gift sub ──
+  client.on('subgift', (channel, username, streakMonths, recipient, methods, tags) => {
+    const event = `${username} just gifted a sub to ${recipient}! Omo that is so generous! Big love!`;
+    sendMessage(event, 'StreamEvent');
+  });
+}
+
+// ── Message queue — so she doesn't get spammed ───────────
+// She responds to one chat message every ~15s max
+let _msgQueue   = [];
+let _msgBusy    = false;
+
+function queueTwitchMessage(username, message) {
+  // Only queue messages that seem worth responding to (>3 words or a question)
+  const words = message.trim().split(' ').length;
+  const isQuestion = message.includes('?');
+  if (words < 2 && !isQuestion) return; // skip one-word spam
+
+  _msgQueue.push({ username, message });
+  if (_msgQueue.length > 5) _msgQueue.shift(); // cap queue at 5
+  if (!_msgBusy) processNextMessage();
+}
+
+async function processNextMessage() {
+  if (_msgQueue.length === 0) { _msgBusy = false; return; }
+  _msgBusy = true;
+  const { username, message } = _msgQueue.shift();
+  await sendMessage(message, username);
+  // Wait before processing next to avoid rapid-fire responses
+  setTimeout(processNextMessage, 15000);
+}
 
 // ── Expose for Twitch bot integration ───────────────────
 // Call window.missOgTinz.receive(username, message) from your Twitch bot
