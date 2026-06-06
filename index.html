@@ -422,24 +422,42 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-    // Force all materials visible — fixes transparent VRM from Blender
+    // Colour map — solid colours per mesh until textures are baked
+    const MESH_COLOURS = {
+      Julie_Figure: 0xb5743a,  // medium brown skin
+      Brow:         0x1a1a1a,  // dark eyebrows
+      Teargum:      0xb5743a,  // skin
+      Ear_Jewel:    0xFFD700,  // gold earring
+      Eye_R:        0x2c1810,  // dark brown eye
+      Eyes_L:       0x2c1810,  // dark brown eye
+      Lashes:       0x0a0a0a,  // black lashes
+      Teeth:        0xf5f0e8,  // off-white teeth
+      Hair_Block:   0x0a0a0a,  // black hair
+      Top:          0xff69b4,  // pink top
+      Bottom:       0xff1493,  // deep pink bottom
+      Shoe_R:       0x1a1a1a,  // black shoes
+      Shoe_L:       0x1a1a1a,  // black shoes
+      Necklece:     0xFFD700,  // gold necklace
+    };
+
     vrm.scene.traverse((obj) => {
       if (obj.isMesh) {
         obj.frustumCulled = false;
+        const colour = MESH_COLOURS[obj.name] || 0xb5743a;
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach(mat => {
           if (mat) {
+            mat.color.set(colour);
+            mat.map = null;         // remove broken texture
             mat.transparent = false;
             mat.opacity = 1;
             mat.depthWrite = true;
             mat.side = THREE.FrontSide;
+            mat.roughness = 0.7;
+            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.8 : 0.0;
             mat.needsUpdate = true;
-            if (mat.color && mat.color.r === 0 && mat.color.g === 0 && mat.color.b === 0) {
-              mat.color.set(0xc68642);
-            }
           }
         });
-        console.log('Mesh:', obj.name, '| mat:', obj.material?.type);
       }
     });
 
