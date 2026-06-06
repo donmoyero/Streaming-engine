@@ -380,9 +380,9 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(30, 1280/720, 0.1, 100);
-camera.position.set(0, 1.35, 3.2);
-camera.lookAt(0, 1.1, 0);
+const camera = new THREE.PerspectiveCamera(35, 1280/720, 0.1, 100);
+camera.position.set(0, 0.8, 4);
+camera.lookAt(0, 0.8, 0);
 
 // Lighting
 const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -399,6 +399,14 @@ scene.add(fillLight);
 const rimLight = new THREE.DirectionalLight(0xffb830, 0.4);
 rimLight.position.set(0, 2, -3);
 scene.add(rimLight);
+
+// DEBUG: test box — remove after avatar works
+const testBox = new THREE.Mesh(
+  new THREE.BoxGeometry(0.5, 0.5, 0.5),
+  new THREE.MeshStandardMaterial({ color: 0xff00ff })
+);
+testBox.position.set(0, 0.8, 0);
+scene.add(testBox);
 
 // ── Load VRM ────────────────────────────────────────────
 let vrm = null;
@@ -418,7 +426,9 @@ gltfLoader.load(
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
     // Position avatar — seated/standing at desk level
-    vrm.scene.position.set(0, -0.05, 0);
+    vrm.scene.position.set(0, -1.0, 0);
+    vrm.scene.scale.set(1, 1, 1);
+    console.log("VRM loaded! Children:", vrm.scene.children.length);
     scene.add(vrm.scene);
 
     // Face camera
