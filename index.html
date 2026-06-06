@@ -527,16 +527,72 @@ gltfLoader.load(
     };
 
     vrm.scene.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.frustumCulled = false;
-        const hexColour = MESH_COLOURS[obj.name] ?? 0xb5743a;
-        const isMetallic = obj.name.includes('Jewel') || obj.name.includes('Necklece');
-        const isSkin     = obj.name === 'Julie_Figure' || obj.name === 'Teargum';
-        // Replace with MeshStandardMaterial so colours are guaranteed to show
+      if (!obj.isMesh) return;
+      obj.frustumCulled = false;
+      const name = obj.name;
+      const isMetallic = name.includes('Jewel') || name.includes('Necklece');
+      const isSkin     = name === 'Julie_Figure' || name === 'Teargum';
+      const isEye      = name === 'Eye_R' || name === 'Eyes_L';
+      const isLash     = name === 'Lashes';
+      const isTooth    = name === 'Teeth';
+
+      if (isEye) {
+        // Build a realistic eye: white sclera base + dark iris canvas texture
+        const eyeCanvas  = document.createElement('canvas');
+        eyeCanvas.width  = 128;
+        eyeCanvas.height = 128;
+        const ctx = eyeCanvas.getContext('2d');
+
+        // Sclera (white)
+        ctx.fillStyle = '#f5f0e8';
+        ctx.fillRect(0, 0, 128, 128);
+
+        // Iris — warm dark brown
+        const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
+        grad.addColorStop(0,   '#1a0a00');
+        grad.addColorStop(0.4, '#3b1f0a');
+        grad.addColorStop(0.8, '#5c3010');
+        grad.addColorStop(1,   '#2a1205');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
+
+        // Pupil
+        ctx.fillStyle = '#050202';
+        ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
+
+        // Catchlight — makes eyes look alive
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
+
+        // Limbal ring (dark edge of iris)
+        ctx.strokeStyle = '#0d0500';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
+
+        const eyeTex = new THREE.CanvasTexture(eyeCanvas);
+        obj.material = new THREE.MeshStandardMaterial({
+          map:       eyeTex,
+          roughness: 0.05,
+          metalness: 0.0,
+          side:      THREE.FrontSide,
+        });
+      } else if (isLash) {
+        obj.material = new THREE.MeshStandardMaterial({
+          color: 0x050202, roughness: 0.9, metalness: 0,
+          side: THREE.DoubleSide,
+        });
+      } else if (isTooth) {
+        obj.material = new THREE.MeshStandardMaterial({
+          color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide,
+        });
+      } else {
+        const hexColour = MESH_COLOURS[name] ?? 0xb5743a;
         obj.material = new THREE.MeshStandardMaterial({
           color:      hexColour,
-          roughness:  isSkin ? 0.55 : isMetallic ? 0.2 : 0.75,
-          metalness:  isMetallic ? 0.85 : 0.0,
+          roughness:  isSkin ? 0.52 : isMetallic ? 0.18 : 0.72,
+          metalness:  isMetallic ? 0.88 : 0.0,
           side:       THREE.FrontSide,
           depthWrite: true,
         });
@@ -670,7 +726,57 @@ let blinkTimer = 0;
 let nextBlink = 3;
 
 function startIdleAnimation() {
-  // Slight idle breathing handled in render loop
+  // Handled in render loop
+}
+
+// ── Gesture system ───────────────────────────────────────
+// Layered on top of idle — temporary pose overrides
+let gesture = null;
+let gestureTime = 0;
+let gestureDuration = 0;
+
+const GESTURES = {
+  // Thinking: one hand raised to chin
+  think: (t) => {
+    if (!boneLUpperArm || !boneRUpperArm) return;
+    boneLUpperArm.rotation.z = 1.1 + Math.sin(t*0.8)*0.03;
+    boneRUpperArm.rotation.z = -(0.5 + Math.sin(t*0.6)*0.04);
+    boneRUpperArm.rotation.x = 0.6 + Math.sin(t*0.4)*0.02;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.9 + Math.sin(t*0.5)*0.02);
+  },
+  // Talking: both hands slightly up and gesturing
+  talk: (t) => {
+    if (!boneLUpperArm || !boneRUpperArm) return;
+    const wave = Math.sin(t * 6) * 0.12;
+    boneLUpperArm.rotation.z =  0.8 + wave;
+    boneRUpperArm.rotation.z = -(0.8 + wave * 0.7);
+    boneLUpperArm.rotation.x = 0.15 + Math.sin(t*4)*0.08;
+    boneRUpperArm.rotation.x = 0.15 + Math.sin(t*4+1)*0.08;
+    if (boneLLowerArm) boneLLowerArm.rotation.z =  0.5 + Math.sin(t*5)*0.1;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.5 + Math.sin(t*5+0.5)*0.1);
+  },
+  // Wave hello: right arm waves
+  wave: (t) => {
+    if (!boneRUpperArm) return;
+    boneRUpperArm.rotation.z = -(0.3 + Math.sin(t*8)*0.25);
+    boneRUpperArm.rotation.x =  0.3;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.2 + Math.sin(t*8+0.5)*0.2);
+    if (boneLUpperArm) boneLUpperArm.rotation.z =  1.1;
+  },
+  // Excited: both arms up
+  excited: (t) => {
+    if (!boneLUpperArm || !boneRUpperArm) return;
+    boneLUpperArm.rotation.z =  0.4 + Math.sin(t*7)*0.15;
+    boneRUpperArm.rotation.z = -(0.4 + Math.sin(t*7+0.3)*0.15);
+    boneLUpperArm.rotation.x =  0.2;
+    boneRUpperArm.rotation.x =  0.2;
+  }
+};
+
+function doGesture(name, durationMs = 3000) {
+  gesture = name;
+  gestureTime = 0;
+  gestureDuration = durationMs / 1000;
 }
 
 // ── Chat bubble ─────────────────────────────────────────
@@ -748,6 +854,16 @@ function render() {
     if (boneHipL) boneHipL.rotation.z =  Math.sin(idleTime * 0.8) * 0.04;
     if (boneHipR) boneHipR.rotation.z = -Math.sin(idleTime * 0.8) * 0.04;
 
+    // Overlay active gesture on top of idle
+    if (gesture) {
+      gestureTime += delta;
+      if (gestureTime < gestureDuration && GESTURES[gesture]) {
+        GESTURES[gesture](gestureTime);
+      } else {
+        gesture = null; // gesture finished, return to idle
+      }
+    }
+
     // vrm.update processes expressions/lookAt AFTER we set bones
     vrm.update(delta);
 
@@ -819,6 +935,7 @@ async function sendMessage(message, displayName='Viewer') {
 
   setStatus('Thinking...', 'thinking');
   sendBtn.disabled = true;
+  doGesture('think', 4000);
 
   chatHistory.push({ role:'user', content: message });
 
@@ -845,6 +962,13 @@ async function sendMessage(message, displayName='Viewer') {
 
     showBubble(reply, 'Miss OG Tinz');
     setStatus('Live ✦', 'ready');
+
+    // Pick gesture based on mood
+    const moodGesture = {
+      happy: 'excited', excited: 'excited', surprised: 'excited',
+      neutral: 'talk', sad: 'think', angry: 'talk'
+    };
+    doGesture(moodGesture[mood] || 'talk', reply.length * 65);
 
     await speak(reply, mood);
 
@@ -878,10 +1002,12 @@ window.speechSynthesis.onvoiceschanged = () => {};
 // ── Expose for Twitch bot integration ───────────────────
 // Call window.missOgTinz.receive(username, message) from your Twitch bot
 window.missOgTinz = {
-  receive: (username, message) => sendMessage(message, username),
-  express: setExpression,
+  receive:  (username, message) => sendMessage(message, username),
+  express:  setExpression,
+  gesture:  doGesture,
   speak,
-  showBubble
+  showBubble,
+  wave:     () => doGesture('wave', 2500),
 };
 
 console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
