@@ -425,7 +425,27 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-    // Position avatar — seated/standing at desk level
+    // Force all materials visible — fixes transparent VRM from Blender
+    vrm.scene.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.frustumCulled = false;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(mat => {
+          if (mat) {
+            mat.transparent = false;
+            mat.opacity = 1;
+            mat.depthWrite = true;
+            mat.side = THREE.FrontSide;
+            mat.needsUpdate = true;
+            if (mat.color && mat.color.r === 0 && mat.color.g === 0 && mat.color.b === 0) {
+              mat.color.set(0xc68642);
+            }
+          }
+        });
+        console.log('Mesh:', obj.name, '| mat:', obj.material?.type);
+      }
+    });
+
     vrm.scene.position.set(0, -1.0, 0);
     vrm.scene.scale.set(1, 1, 1);
     console.log("VRM loaded! Children:", vrm.scene.children.length);
