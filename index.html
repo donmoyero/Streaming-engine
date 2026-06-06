@@ -962,19 +962,27 @@ render();
 async function speak(text, mood='neutral') {
   setExpression(mood);
 
-  // Start lip sync immediately so mouth moves while audio loads
-  const lipDone = runLipSync(text);
-
+  // Try Edge TTS with a short timeout so we don't wait too long
   try {
+    const controller = new AbortController();
+    const ttsTimeout = setTimeout(() => controller.abort(), 6000);
+
     const res = await fetch(TTS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ text }),
+      signal:  controller.signal,
     });
+    clearTimeout(ttsTimeout);
+
     if (res.ok) {
       const blob  = await res.blob();
       const url   = URL.createObjectURL(blob);
       const audio = new Audio(url);
+
+      // Run lip sync alongside real audio
+      runLipSync(text);
+
       await new Promise((resolve) => {
         audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
         audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
@@ -984,10 +992,11 @@ async function speak(text, mood='neutral') {
       setExpression('neutral');
       return;
     }
-  } catch(_) { /* TTS unavailable — fall through */ }
+  } catch(_) { /* TTS unavailable or timed out — use lip sync only */ }
 
-  // Fallback: wait for text-driven lip sync
-  await lipDone;
+  // Fallback: text-driven lip sync only (still looks alive)
+  await runLipSync(text);
+  setExpression('neutral');
 }
 
 // ── Text-driven lip sync ─────────────────────────────────────────
@@ -1196,12 +1205,12 @@ chatInput.addEventListener('keydown', e => {
 // Handles: chat messages, subs, resubs, bits, raids, gift subs
 
 function initTwitchChat() {
-  if (typeof Tmi === 'undefined') {
+  if (typeof tmi === 'undefined') {
     console.warn('[Twitch] tmi.js not loaded');
     return;
   }
 
-  const client = new Tmi.Client({
+  const client = new tmi.Client({
     channels: [TWITCH_CHANNEL],
   });
 
