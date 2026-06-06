@@ -1132,25 +1132,205 @@ function animateRoomLights(delta) {
   }
 }
 
-// ── Camera state machine ─────────────────────────────────
-// Three modes: IDLE (wide), SPEAK (close), THINK (medium + slight angle)
-const CAM = {
-  IDLE:  { z: null, y: null, lookY: null, rotY: 0 },       // filled after VRM loads
-  SPEAK: { z: null, y: null, lookY: null, rotY: 0 },
-  THINK: { z: null, y: null, lookY: null, rotY: 0.04 },
+// ── 360° Camera System ───────────────────────────────────
+// The camera ALWAYS stays in front of Miss OG Tinz's face.
+// When she walks/turns anywhere in the room, the camera orbits
+// to stay facing her — you always see her front.
+//
+// Architecture:
+//   vrmFacing  = current world-space angle she faces (radians)
+//   camOffset  = distance in front of her face + height
+//   camPos     = vrmPos + rotate(camOffset, vrmFacing + Math.PI)
+//                  (Math.PI puts camera in FRONT, not behind)
+//
+// Three zoom modes (IDLE / SPEAK / THINK) control distance only.
+// ─────────────────────────────────────────────────────────
+
+const CAM_DIST = { IDLE: 2.2, SPEAK: 1.1, THINK: 1.7 };
+let camMode = 'IDLE';
+
+// Smooth camera state (world-space)
+const camSmooth = {
+  x: 0, y: 1.4, z: 2.2,        // current world position
+  lookX: 0, lookY: 1.1, lookZ: 0 // current look-at point
+};
+const CAM_LERP = 0.04;
+
+// What the camera wants to be
+const camWant = {
+  x: 0, y: 1.4, z: 2.2,
+  lookX: 0, lookY: 1.1, lookZ: 0
 };
 
-let camTarget   = { z: 4, y: 0.8, lookY: 0.8, rotY: 0 };
-let camCurrent  = { z: 4, y: 0.8, lookY: 0.8, rotY: 0 };
-const CAM_LERP  = 0.035; // smoothness — lower = slower/smoother
-
 function setCamMode(mode) {
-  const t = CAM[mode];
-  if (!t || t.z === null) return;
-  camTarget.z     = t.z;
-  camTarget.y     = t.y;
-  camTarget.lookY = t.lookY;
-  camTarget.rotY  = t.rotY;
+  if (CAM_DIST[mode] !== undefined) camMode = mode;
+}
+
+// ── VRM world position & facing ──────────────────────────
+// We track where she is in world space and which way she faces.
+const vrmWorld = { x: 0, y: 0, z: 0, facingY: 0 }; // facingY = world Y-rotation she faces
+
+function updateCamera(delta) {
+  if (!vrm) return;
+
+  // Read her actual world position
+  const wx = vrm.scene.position.x;
+  const wy = vrm.scene.position.y;
+  const wz = vrm.scene.position.z;
+
+  // Her facing direction in world space
+  // VRM_BASE_ROT_Y is set by rotateVRM0 (usually 0 after rotation).
+  // vrm.scene.rotation.y is the total world Y rotation.
+  const facing = vrm.scene.rotation.y; // radians — direction she faces
+
+  // Camera sits in front of her:
+  // "in front" = facing direction → offset by -distance along that direction
+  // i.e. camera is at: pos + (sin(facing), 0, cos(facing)) * dist
+  const dist = CAM_DIST[camMode] || CAM_DIST.IDLE;
+  const camOffX = Math.sin(facing) * dist;
+  const camOffZ = Math.cos(facing) * dist;
+
+  // Height: head-level + slight upward angle for cinematic framing
+  const modelHeight = vrm.scene.scale.y * 1.7; // approximate full height in world units
+  const headY   = wy + modelHeight * 0.88;
+  const camY    = wy + modelHeight * (camMode === 'SPEAK' ? 0.88 : camMode === 'THINK' ? 0.72 : 0.68);
+  const lookY   = wy + modelHeight * (camMode === 'SPEAK' ? 0.82 : 0.60);
+
+  // Target camera world position (in front of her face)
+  camWant.x    = wx + camOffX;
+  camWant.y    = camY;
+  camWant.z    = wz + camOffZ;
+  camWant.lookX = wx;
+  camWant.lookY = lookY;
+  camWant.lookZ = wz;
+
+  // Smooth lerp
+  const k = Math.min(1, CAM_LERP * (1 + delta * 30));
+  camSmooth.x    += (camWant.x    - camSmooth.x)    * k;
+  camSmooth.y    += (camWant.y    - camSmooth.y)    * k;
+  camSmooth.z    += (camWant.z    - camSmooth.z)    * k;
+  camSmooth.lookX += (camWant.lookX - camSmooth.lookX) * k * 1.2;
+  camSmooth.lookY += (camWant.lookY - camSmooth.lookY) * k * 1.2;
+  camSmooth.lookZ += (camWant.lookZ - camSmooth.lookZ) * k * 1.2;
+
+  camera.position.set(camSmooth.x, camSmooth.y, camSmooth.z);
+  camera.lookAt(camSmooth.lookX, camSmooth.lookY, camSmooth.lookZ);
+}
+
+// ── VRM Walking / Waypoint System ────────────────────────
+// She walks to named locations in the room. Her body rotates
+// to face the target. The camera orbits to stay in front.
+//
+// Waypoints are in world space (x, z). y is always floor level.
+// ─────────────────────────────────────────────────────────
+
+const WAYPOINTS = {
+  centre:     { x:  0.0, z:  0.0, label: 'Centre Stage' },
+  desk:       { x:  0.6, z: -1.2, label: 'Streaming Desk' },
+  dartboard:  { x: -4.5, z: -1.0, label: 'Dartboard' },
+  basketball: { x:  4.0, z: -0.8, label: 'Basketball Hoop' },
+  foosball:   { x: -4.5, z: -3.2, label: 'Foosball Table' },
+  trophy:     { x:  3.5, z: -4.5, label: 'Trophy Shelf' },
+  beans:      { x: -5.2, z:  0.5, label: 'Bean Bag Zone' },
+};
+
+const walk = {
+  active:    false,
+  fromX:     0, fromZ: 0,
+  toX:       0, toZ: 0,
+  progress:  0,     // 0→1
+  duration:  2.0,   // seconds to walk between points
+  targetFacing: 0,  // world Y rotation she faces at destination
+  onArrive:  null,  // callback when she arrives
+};
+
+// Current world position (separate from vrm.scene.position which is in model-space centre)
+const vrmPos = { x: 0, z: 0 };
+
+function walkTo(waypointName, onArrive = null) {
+  const wp = WAYPOINTS[waypointName];
+  if (!wp || !vrm) return;
+
+  walk.fromX    = vrmPos.x;
+  walk.fromZ    = vrmPos.z;
+  walk.toX      = wp.x;
+  walk.toZ      = wp.z;
+  walk.progress = 0;
+  walk.active   = true;
+  walk.onArrive = onArrive;
+
+  // Distance → walk speed
+  const dx = wp.x - vrmPos.x;
+  const dz = wp.z - vrmPos.z;
+  const dist = Math.sqrt(dx*dx + dz*dz);
+  walk.duration = Math.max(1.0, dist * 0.65);
+
+  // Face toward target — camera will swing to stay in front
+  walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // +PI so she faces the direction of travel
+}
+
+function updateWalk(delta) {
+  if (!walk.active || !vrm) return;
+
+  walk.progress += delta / walk.duration;
+  if (walk.progress >= 1) {
+    walk.progress = 1;
+    walk.active   = false;
+    vrmPos.x = walk.toX;
+    vrmPos.z = walk.toZ;
+    if (walk.onArrive) walk.onArrive();
+  }
+
+  // Smooth interpolation (ease in-out)
+  const t = walk.progress;
+  const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+
+  vrmPos.x = walk.fromX + (walk.toX - walk.fromX) * ease;
+  vrmPos.z = walk.fromZ + (walk.toZ - walk.fromZ) * ease;
+
+  // Apply to VRM scene (keeping Y for jumps etc.)
+  vrm.scene.position.x = vrmPos.x;
+  vrm.scene.position.z = vrmPos.z;
+
+  // Rotate VRM to face direction of travel
+  // Lerp facing rotation smoothly
+  const currentFacing = vrm.scene.rotation.y;
+  let diff = walk.targetFacing - currentFacing;
+  // Wrap to [-PI, PI]
+  while (diff >  Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  vrm.scene.rotation.y += diff * Math.min(1, delta * 5);
+}
+
+// ── Room Roaming — automatic waypoint patrol ──────────────
+// She wanders between locations based on her current activity.
+// Activity destinations map activities to preferred waypoints.
+const ACTIVITY_LOCATIONS = {
+  darts:      'dartboard',
+  basketball: 'basketball',
+  dance:      'centre',
+  stretch:    'centre',
+  hairflick:  'centre',
+  hiponhip:   'centre',
+  noseCover:  'centre',
+  typing:     'desk',
+  monitor:    'desk',
+  idle:       'centre',
+};
+
+let _lastWaypointActivity = '';
+
+function roamUpdate() {
+  if (walk.active) return; // already walking somewhere
+
+  const currentActivity = ACTIVITY.current;
+  const targetWP = ACTIVITY_LOCATIONS[currentActivity] || 'centre';
+
+  // If activity changed, walk to the right location
+  if (currentActivity !== _lastWaypointActivity) {
+    _lastWaypointActivity = currentActivity;
+    walkTo(targetWP);
+  }
 }
 
 // ── Load VRM ────────────────────────────────────────────
@@ -1289,20 +1469,17 @@ gltfLoader.load(
     }
     setRestPose();
 
-    // ── Auto-fit camera then set all cam presets relative to model ──
-    const fovRad  = camera.fov * (Math.PI / 180);
-    const fitZ    = (size.y / 2) / Math.tan(fovRad / 2) * 1.18;
-    const midY    = size.y * 0.5;
-    const headY   = size.y * 0.88;
-
-    CAM.IDLE  = { z: fitZ,        y: midY,       lookY: midY,       rotY: 0 };
-    CAM.SPEAK = { z: fitZ * 0.62, y: headY * 0.9, lookY: headY * 0.85, rotY: 0 };
-    CAM.THINK = { z: fitZ * 0.80, y: midY * 1.1, lookY: midY,       rotY: 0.04 };
-
-    camTarget  = { ...CAM.IDLE };
-    camCurrent = { ...CAM.IDLE };
-    camera.position.set(0, camCurrent.y, camCurrent.z);
-    camera.lookAt(0, camCurrent.lookY, 0);
+    // ── Bootstrap 360° camera system ─────────────────────
+    // Place her at centre stage facing camera (Z+) initially
+    vrmPos.x = 0; vrmPos.z = 0;
+    vrm.scene.position.set(0, vrm.scene.position.y, 0);
+    // VRM_BASE_ROT_Y is set by rotateVRM0 — she faces +Z (toward camera)
+    // Camera starts directly in front of her
+    const modelHeight = size.y;
+    camSmooth.x = 0; camSmooth.y = modelHeight * 0.68; camSmooth.z = CAM_DIST.IDLE;
+    camSmooth.lookX = 0; camSmooth.lookY = modelHeight * 0.55; camSmooth.lookZ = 0;
+    camera.position.set(camSmooth.x, camSmooth.y, camSmooth.z);
+    camera.lookAt(camSmooth.lookX, camSmooth.lookY, camSmooth.lookZ);
 
     // Activity system starts after a short idle
     ACTIVITY.current  = 'idle';
