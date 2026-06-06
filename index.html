@@ -872,128 +872,186 @@ function cacheBones() {
 //  pause, pick another. Leg/hip bones animate in sync.
 // ================================================================
 
-const PACE = {
-  xMax:        2.0,    // filled after VRM loads (model-relative)
-  x:           0,      // current world X position
-  targetX:     0,      // where she's heading
-  speed:       0.006,  // units per frame at 60fps
-  walkTime:    0,      // accumulator used for leg cycle
-  pauseTimer:  0,      // countdown until next move
-  pauseLen:    0,      // how long to pause (randomised)
-  state:       'pause',// 'walk' | 'pause'
-  dir:         1,      // +1 right, -1 left (facing direction)
-  facingAngle: 0,      // current Y rotation of scene (smooth)
-  targetFacingAngle: 0,
+// ================================================================
+//  ACTIVITY SYSTEM — replaces pacing
+//  She stays centred, facing camera, and cycles through fun
+//  idle activities: darts throw, basketball shot, shimmy/dance,
+//  and stretching. Each runs as an animation loop with a timer.
+// ================================================================
+
+const ACTIVITY = {
+  current:   'idle',   // current activity name
+  timer:     0,        // time spent in current activity
+  duration:  8,        // how long before picking next (seconds)
+  phase:     0,        // time accumulator within current activity
 };
 
-function pacePickTarget() {
-  // pick a new X between -xMax and +xMax, biased away from center
-  const halfMax   = PACE.xMax * 0.5;
-  const sign      = Math.random() > 0.5 ? 1 : -1;
-  const distance  = halfMax + Math.random() * halfMax;
-  PACE.targetX    = Math.max(-PACE.xMax, Math.min(PACE.xMax, sign * distance));
-  PACE.state      = 'walk';
-  PACE.dir        = PACE.targetX > PACE.x ? 1 : -1;
-  // Positive X = walking right → turn slightly right (negative offset from base)
-  // Negative X = walking left  → turn slightly left  (positive offset from base)
-  PACE.targetFacingAngle = PACE.dir === 1 ? -0.15 : 0.15;
+// Activities pool — picked randomly, no repeats back-to-back
+const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'idle'];
+let _lastActivity = 'idle';
+
+function activityPickNext() {
+  const choices = ACTIVITY_POOL.filter(a => a !== _lastActivity);
+  const next    = choices[Math.floor(Math.random() * choices.length)];
+  _lastActivity        = next;
+  ACTIVITY.current     = next;
+  ACTIVITY.timer       = 0;
+  ACTIVITY.phase       = 0;
+  ACTIVITY.duration    = 6 + Math.random() * 8; // 6–14s per activity
 }
 
-function paceUpdate(delta) {
-  if (!vrm) return;
+function activityUpdate(delta) {
+  if (!vrm || hyper.active || gesture) return;
 
-  if (PACE.state === 'pause') {
-    PACE.pauseTimer -= delta;
-    if (PACE.pauseTimer <= 0) pacePickTarget();
+  ACTIVITY.timer += delta;
+  ACTIVITY.phase += delta;
 
-    // idle leg micro-sway while paused
-    if (boneLUpperLeg) boneLUpperLeg.rotation.x = Math.sin(PACE.walkTime * 0.6) * 0.015;
-    if (boneRUpperLeg) boneRUpperLeg.rotation.x = Math.sin(PACE.walkTime * 0.6 + Math.PI) * 0.015;
+  if (ACTIVITY.timer > ACTIVITY.duration) activityPickNext();
 
-  } else {
-    // walking
-    PACE.walkTime += delta;
-    const step     = PACE.speed * (delta / 0.016); // normalise to ~60fps
-    const remaining = PACE.targetX - PACE.x;
+  const t = ACTIVITY.phase;
 
-    if (Math.abs(remaining) < 0.02) {
-      // arrived — start pause
-      PACE.x              = PACE.targetX;
-      PACE.state          = 'pause';
-      PACE.pauseLen       = 3 + Math.random() * 8; // 3–11s pause
-      PACE.pauseTimer     = PACE.pauseLen;
-      PACE.targetFacingAngle = 0; // face forward during pause
-      resetWalkPose();
-    } else {
-      PACE.x += Math.sign(remaining) * Math.min(step, Math.abs(remaining));
+  switch (ACTIVITY.current) {
 
-      // ── Leg animation ──────────────────────────────────
-      const freq  = 5.5;  // walk cycle frequency
-      const amp   = 0.32; // leg swing amplitude
-      const tilt  = 0.08; // lateral hip tilt amplitude
-
-      // Opposite legs swing together (natural walking gait)
-      if (boneLUpperLeg) {
-        boneLUpperLeg.rotation.x =  Math.sin(PACE.walkTime * freq) * amp;
-        boneLUpperLeg.rotation.z =  Math.sin(PACE.walkTime * freq) * tilt * 0.3;
+    // ── DARTS ─────────────────────────────────────────────────
+    // Wind-up → aim → throw → reset
+    case 'darts': {
+      const cycle = t % 3.2; // one throw every 3.2s
+      if (cycle < 0.8) {
+        // wind-up: right arm pulls back
+        const p = cycle / 0.8;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.1 - p * 0.8); boneRUpperArm.rotation.x = -p * 0.5; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.3 + p * 0.4); boneRLowerArm.rotation.x = p * 0.3; }
+        if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.0; boneLUpperArm.rotation.x = 0.15; }
+        if (boneSpine) boneSpine.rotation.y = p * 0.18;
+        if (boneHead)  boneHead.rotation.y  = -p * 0.1;
+      } else if (cycle < 1.1) {
+        // snap throw: arm flies forward fast
+        const p = (cycle - 0.8) / 0.3;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.3 - p * 0.1); boneRUpperArm.rotation.x = -0.5 + p * 1.0; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.7 - p * 0.5); boneRLowerArm.rotation.x = 0.3 - p * 0.2; }
+        if (boneSpine) boneSpine.rotation.y = 0.18 - p * 0.18;
+        if (boneHead)  boneHead.rotation.y  = 0.1 * (1 - p);
+        setExpression('excited');
+      } else if (cycle < 2.2) {
+        // follow-through hold — watch the dart fly
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.2; boneRUpperArm.rotation.x = 0.5; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.2; boneRLowerArm.rotation.x = 0.1; }
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0;
+        if (boneHead)      boneHead.rotation.x = 0.05;
+        setExpression('happy');
+      } else {
+        // reset: bring arm back to idle
+        const p = (cycle - 2.2) / 1.0;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.2 - p * 0.9; boneRUpperArm.rotation.x = 0.5 - p * 0.5; }
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.2 - p * 0.1;
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0 + p * 0.1;
+        setExpression('neutral');
       }
-      if (boneRUpperLeg) {
-        boneRUpperLeg.rotation.x = -Math.sin(PACE.walkTime * freq) * amp;
-        boneRUpperLeg.rotation.z = -Math.sin(PACE.walkTime * freq) * tilt * 0.3;
-      }
-      if (boneLLowerLeg) {
-        // knee bend — only bends backward (clamped), follows thigh with slight delay
-        boneLLowerLeg.rotation.x = Math.max(0, Math.sin(PACE.walkTime * freq + 0.8)) * amp * 0.55;
-      }
-      if (boneRLowerLeg) {
-        boneRLowerLeg.rotation.x = Math.max(0, -Math.sin(PACE.walkTime * freq + 0.8)) * amp * 0.55;
-      }
-
-      // ── Hip counter-rotation (natural sway) ─────────────
-      if (boneHips) {
-        boneHips.rotation.y = Math.sin(PACE.walkTime * freq) * tilt * 0.4;
-        boneHips.rotation.z = Math.sin(PACE.walkTime * freq * 0.5) * tilt;
-      }
-
-      // ── Arm counter-swing (opposite to legs) ─────────────
-      if (boneLUpperArm) {
-        boneLUpperArm.rotation.x = -Math.sin(PACE.walkTime * freq) * 0.12;
-        boneLUpperArm.rotation.z =  1.1 + Math.sin(PACE.walkTime * 1.3) * 0.04;
-      }
-      if (boneRUpperArm) {
-        boneRUpperArm.rotation.x =  Math.sin(PACE.walkTime * freq) * 0.12;
-        boneRUpperArm.rotation.z = -1.1 - Math.sin(PACE.walkTime * 1.3) * 0.04;
-      }
-
-      // ── Chest bob up/down while walking ─────────────────
-      if (boneChest) {
-        boneChest.rotation.x = Math.sin(PACE.walkTime * freq * 2) * 0.012;
-      }
+      break;
     }
+
+    // ── BASKETBALL ────────────────────────────────────────────
+    // Bounce ball → set up shot → jump + release
+    case 'basketball': {
+      const cycle = t % 4.0;
+      if (cycle < 1.5) {
+        // dribble: both arms bounce alternately at sides
+        const bounce = Math.abs(Math.sin(cycle * 8)) * 0.18;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.9 + bounce; boneLUpperArm.rotation.x = 0.3 + bounce * 0.5; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.9 + bounce); boneRUpperArm.rotation.x = 0.3 + bounce * 0.5; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.4 + bounce * 0.5;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + bounce * 0.5);
+        if (boneSpine) boneSpine.rotation.x = bounce * 0.2;
+        setExpression('neutral');
+      } else if (cycle < 2.2) {
+        // set shot: both hands come up, knees bend (lower hips)
+        const p = (cycle - 1.5) / 0.7;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.9 - p * 0.6; boneLUpperArm.rotation.x = p * 0.5; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.9 - p * 0.6); boneRUpperArm.rotation.x = p * 0.5; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.4 + p * 0.3;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + p * 0.3);
+        if (boneHips) boneHips.rotation.x = -p * 0.08;
+        if (boneLUpperLeg) boneLUpperLeg.rotation.x = p * 0.15;
+        if (boneRUpperLeg) boneRUpperLeg.rotation.x = p * 0.15;
+        setExpression('neutral');
+      } else if (cycle < 2.7) {
+        // RELEASE: arms shoot up, body jumps
+        const p = (cycle - 2.2) / 0.5;
+        const jumpY = Math.sin(p * Math.PI) * 0.12;
+        if (vrm) vrm.scene.position.y = jumpY;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.3 - p * 0.28; boneLUpperArm.rotation.x = 0.5 + p * 0.3; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.3 - p * 0.28); boneRUpperArm.rotation.x = 0.5 + p * 0.3; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.7 + p * 0.2;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.7 + p * 0.2);
+        if (boneHead) boneHead.rotation.x = p * 0.1;
+        setExpression('excited');
+      } else {
+        // land + watch: arms settle, head tilts up watching
+        if (vrm) vrm.scene.position.y = 0;
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.85;
+        if (boneRUpperArm) boneRUpperArm.rotation.z = -0.85;
+        if (boneHead) boneHead.rotation.x = 0.12;
+        setExpression('happy');
+      }
+      break;
+    }
+
+    // ── DANCE / SHIMMY ────────────────────────────────────────
+    case 'dance': {
+      const shimmy = Math.sin(t * 7);
+      const bob    = Math.abs(Math.sin(t * 7)) * 0.05;
+      if (boneHips)  { boneHips.rotation.z  = shimmy * 0.14; boneHips.rotation.y  = shimmy * 0.08; }
+      if (boneSpine) { boneSpine.rotation.z = -shimmy * 0.09; boneSpine.rotation.x = bob; }
+      if (boneChest) boneChest.rotation.z = shimmy * 0.06;
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.7 + Math.sin(t*7+1)*0.25; boneLUpperArm.rotation.x = 0.2 + bob; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.7 + Math.sin(t*7)*0.25); boneRUpperArm.rotation.x = 0.2 + bob; }
+      if (boneLUpperLeg) boneLUpperLeg.rotation.z = shimmy * 0.06;
+      if (boneRUpperLeg) boneRUpperLeg.rotation.z = -shimmy * 0.06;
+      if (boneHead) boneHead.rotation.z = Math.sin(t * 3.5) * 0.05;
+      setExpression('happy');
+      break;
+    }
+
+    // ── STRETCH ───────────────────────────────────────────────
+    case 'stretch': {
+      const cycle = t % 5.0;
+      if (cycle < 2.0) {
+        // arms stretch overhead
+        const p = Math.min(cycle / 1.0, 1);
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 1.1 - p * 1.0; boneLUpperArm.rotation.x = p * 0.2; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.1 - p * 1.0); boneRUpperArm.rotation.x = p * 0.2; }
+        if (boneSpine) boneSpine.rotation.x = -p * 0.06;
+        setExpression('relaxed' in GESTURES ? 'relaxed' : 'neutral');
+      } else if (cycle < 3.5) {
+        // hold the stretch + sway
+        const sway = Math.sin(t * 1.5) * 0.03;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.1 + sway; boneLUpperArm.rotation.x = 0.2; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.1 + sway); boneRUpperArm.rotation.x = 0.2; }
+        if (boneSpine) boneSpine.rotation.x = -0.06 + Math.sin(t * 0.8) * 0.02;
+      } else {
+        // arms come back down
+        const p = (cycle - 3.5) / 1.5;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.1 + p * 1.0; boneLUpperArm.rotation.x = 0.2 - p * 0.2; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.1 + p * 1.0); boneRUpperArm.rotation.x = 0.2 - p * 0.2; }
+        if (boneSpine) boneSpine.rotation.x = -0.06 + p * 0.06;
+        setExpression('neutral');
+      }
+      break;
+    }
+
+    // ── IDLE (default sway, handled by main render loop) ─────
+    default:
+      break;
   }
 
-  // ── Apply world X position ──────────────────────────────
-  vrm.scene.position.x += (PACE.x - vrm.scene.position.x) * 0.08;
-
-  // ── Smooth facing direction (offset from rotateVRM0 base) ──
-  PACE.facingAngle += (PACE.targetFacingAngle - PACE.facingAngle) * 0.06;
-  vrm.scene.rotation.y = VRM_BASE_ROT_Y + PACE.facingAngle;
+  // Always face forward — no rotation drift
+  if (vrm) vrm.scene.rotation.y = VRM_BASE_ROT_Y;
 }
 
-function resetWalkPose() {
-  // Smoothly return legs to neutral — handled by idle lerp in render loop
-  if (boneLUpperLeg) { boneLUpperLeg.rotation.x = 0; boneLUpperLeg.rotation.z = 0; }
-  if (boneRUpperLeg) { boneRUpperLeg.rotation.x = 0; boneRUpperLeg.rotation.z = 0; }
-  if (boneLLowerLeg) boneLLowerLeg.rotation.x = 0;
-  if (boneRLowerLeg) boneRLowerLeg.rotation.x = 0;
-  if (boneHips)      { boneHips.rotation.y = 0; boneHips.rotation.z = 0; }
-}
-
-// ── Initialise pacing with random first pause so she doesn't
-//    immediately march on load
-PACE.state      = 'pause';
-PACE.pauseLen   = 2 + Math.random() * 3;
-PACE.pauseTimer = PACE.pauseLen;
+// Start with a short idle then pick an activity
+ACTIVITY.current  = 'idle';
+ACTIVITY.timer    = 0;
+ACTIVITY.duration = 3;
 
 
 // ================================================================
