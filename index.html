@@ -1346,6 +1346,89 @@ function stopLipSync() {
   cancelAnimationFrame(lipRafId);
   MOUTH_BS.forEach(s => setBS(s, 0));
   if (boneJaw) boneJaw.rotation.x = 0;
+  if (teethNode) teethNode.position.y = 0; // reset teeth back up
+}
+
+// ── Finger pose helpers ──────────────────────────────────
+// curl=0 → straight fingers, curl=1 → fully curled fist
+function setLeftFingerCurl(curl, splay=0) {
+  const c = curl * 1.4; // max rotation
+  if (boneL_IndexPx) { boneL_IndexPx.rotation.x = c; boneL_IndexPx.rotation.z = splay * 0.08; }
+  if (boneL_IndexMd) boneL_IndexMd.rotation.x = c * 0.8;
+  if (boneL_IndexDt) boneL_IndexDt.rotation.x = c * 0.6;
+  if (boneL_MidPx)   { boneL_MidPx.rotation.x = c; }
+  if (boneL_MidMd)   boneL_MidMd.rotation.x = c * 0.8;
+  if (boneL_MidDt)   boneL_MidDt.rotation.x = c * 0.6;
+  if (boneL_RingPx)  { boneL_RingPx.rotation.x = c; boneL_RingPx.rotation.z = -splay * 0.06; }
+  if (boneL_RingMd)  boneL_RingMd.rotation.x = c * 0.8;
+  if (boneL_RingDt)  boneL_RingDt.rotation.x = c * 0.6;
+  if (boneL_PinkyPx) { boneL_PinkyPx.rotation.x = c; boneL_PinkyPx.rotation.z = -splay * 0.1; }
+  if (boneL_PinkyMd) boneL_PinkyMd.rotation.x = c * 0.8;
+  if (boneL_PinkyDt) boneL_PinkyDt.rotation.x = c * 0.6;
+  if (boneL_ThumbPx) { boneL_ThumbPx.rotation.x = curl * 0.4; boneL_ThumbPx.rotation.z = -curl * 0.3; }
+  if (boneL_ThumbMd) boneL_ThumbMd.rotation.x = curl * 0.5;
+  if (boneL_ThumbDt) boneL_ThumbDt.rotation.x = curl * 0.3;
+}
+function setRightFingerCurl(curl, splay=0) {
+  const c = curl * 1.4;
+  if (boneR_IndexPx) { boneR_IndexPx.rotation.x = c; boneR_IndexPx.rotation.z = -splay * 0.08; }
+  if (boneR_IndexMd) boneR_IndexMd.rotation.x = c * 0.8;
+  if (boneR_IndexDt) boneR_IndexDt.rotation.x = c * 0.6;
+  if (boneR_MidPx)   { boneR_MidPx.rotation.x = c; }
+  if (boneR_MidMd)   boneR_MidMd.rotation.x = c * 0.8;
+  if (boneR_MidDt)   boneR_MidDt.rotation.x = c * 0.6;
+  if (boneR_RingPx)  { boneR_RingPx.rotation.x = c; boneR_RingPx.rotation.z = splay * 0.06; }
+  if (boneR_RingMd)  boneR_RingMd.rotation.x = c * 0.8;
+  if (boneR_RingDt)  boneR_RingDt.rotation.x = c * 0.6;
+  if (boneR_PinkyPx) { boneR_PinkyPx.rotation.x = c; boneR_PinkyPx.rotation.z = splay * 0.1; }
+  if (boneR_PinkyMd) boneR_PinkyMd.rotation.x = c * 0.8;
+  if (boneR_PinkyDt) boneR_PinkyDt.rotation.x = c * 0.6;
+  if (boneR_ThumbPx) { boneR_ThumbPx.rotation.x = curl * 0.4; boneR_ThumbPx.rotation.z = curl * 0.3; }
+  if (boneR_ThumbMd) boneR_ThumbMd.rotation.x = curl * 0.5;
+  if (boneR_ThumbDt) boneR_ThumbDt.rotation.x = curl * 0.3;
+}
+// Relaxed feminine droop — fingers slightly separated, tips drooping
+function setLeftFingerRelax() {
+  setLeftFingerCurl(0.12, 0.4);
+  if (boneL_ThumbPx) { boneL_ThumbPx.rotation.z = 0.18; boneL_ThumbPx.rotation.y = 0.1; }
+}
+function setRightFingerRelax() {
+  setRightFingerCurl(0.12, 0.4);
+  if (boneR_ThumbPx) { boneR_ThumbPx.rotation.z = -0.18; boneR_ThumbPx.rotation.y = -0.1; }
+}
+// Point index finger (rest curl with index extended)
+function setRightIndexPoint() {
+  setRightFingerCurl(0.8);
+  if (boneR_IndexPx) boneR_IndexPx.rotation.x = 0;
+  if (boneR_IndexMd) boneR_IndexMd.rotation.x = 0;
+  if (boneR_IndexDt) boneR_IndexDt.rotation.x = 0;
+  if (boneR_ThumbPx) { boneR_ThumbPx.rotation.x = 0.2; boneR_ThumbPx.rotation.z = 0.3; }
+}
+// Splayed wave hand
+function setRightFingerWave(flutter) {
+  const f = Math.sin(flutter * 8) * 0.1;
+  if (boneR_IndexPx) { boneR_IndexPx.rotation.x = 0.05 + f; boneR_IndexPx.rotation.z = -0.1; }
+  if (boneR_MidPx)   { boneR_MidPx.rotation.x = 0.05; }
+  if (boneR_RingPx)  { boneR_RingPx.rotation.x = 0.05 - f; boneR_RingPx.rotation.z = 0.08; }
+  if (boneR_PinkyPx) { boneR_PinkyPx.rotation.x = 0.08 + f * 0.5; boneR_PinkyPx.rotation.z = 0.12; }
+  if (boneR_ThumbPx) { boneR_ThumbPx.rotation.z = -0.25; boneR_ThumbPx.rotation.y = -0.1; }
+}
+// Nose-cover hand — fingers lightly curled, palm facing inward toward face
+function setRightFingerCoverNose() {
+  if (boneR_IndexPx) { boneR_IndexPx.rotation.x = 0.55; boneR_IndexPx.rotation.z = -0.05; }
+  if (boneR_IndexMd) boneR_IndexMd.rotation.x = 0.45;
+  if (boneR_IndexDt) boneR_IndexDt.rotation.x = 0.3;
+  if (boneR_MidPx)   { boneR_MidPx.rotation.x = 0.5; }
+  if (boneR_MidMd)   boneR_MidMd.rotation.x = 0.4;
+  if (boneR_MidDt)   boneR_MidDt.rotation.x = 0.25;
+  if (boneR_RingPx)  { boneR_RingPx.rotation.x = 0.6; boneR_RingPx.rotation.z = 0.05; }
+  if (boneR_RingMd)  boneR_RingMd.rotation.x = 0.5;
+  if (boneR_RingDt)  boneR_RingDt.rotation.x = 0.35;
+  if (boneR_PinkyPx) { boneR_PinkyPx.rotation.x = 0.65; boneR_PinkyPx.rotation.z = 0.08; }
+  if (boneR_PinkyMd) boneR_PinkyMd.rotation.x = 0.55;
+  if (boneR_PinkyDt) boneR_PinkyDt.rotation.x = 0.4;
+  if (boneR_ThumbPx) { boneR_ThumbPx.rotation.x = 0.3; boneR_ThumbPx.rotation.z = 0.35; boneR_ThumbPx.rotation.y = -0.2; }
+  if (boneR_ThumbMd) boneR_ThumbMd.rotation.x = 0.2;
 }
 
 // ── Expression mapping ──────────────────────────────────
@@ -1375,6 +1458,23 @@ let boneLToes=null, boneRToes=null;
 let boneLUpperArm=null, boneRUpperArm=null;
 let boneLLowerArm=null, boneRLowerArm=null;
 let boneLHand=null, boneRHand=null;
+
+// ── Finger bones (full hand — all 5 fingers × 3 joints × 2 hands) ──
+// Left hand fingers
+let boneL_ThumbPx=null, boneL_ThumbMd=null, boneL_ThumbDt=null;
+let boneL_IndexPx=null, boneL_IndexMd=null, boneL_IndexDt=null;
+let boneL_MidPx=null,   boneL_MidMd=null,   boneL_MidDt=null;
+let boneL_RingPx=null,  boneL_RingMd=null,  boneL_RingDt=null;
+let boneL_PinkyPx=null, boneL_PinkyMd=null, boneL_PinkyDt=null;
+// Right hand fingers
+let boneR_ThumbPx=null, boneR_ThumbMd=null, boneR_ThumbDt=null;
+let boneR_IndexPx=null, boneR_IndexMd=null, boneR_IndexDt=null;
+let boneR_MidPx=null,   boneR_MidMd=null,   boneR_MidDt=null;
+let boneR_RingPx=null,  boneR_RingMd=null,  boneR_RingDt=null;
+let boneR_PinkyPx=null, boneR_PinkyMd=null, boneR_PinkyDt=null;
+
+// Teeth mesh node reference (for fake jaw-open via translation)
+let teethNode=null;
 
 function cacheBones() {
   if (!vrm || !vrm.humanoid) return;
@@ -1408,7 +1508,46 @@ function cacheBones() {
   boneRLowerArm   = h.getNormalizedBoneNode('rightLowerArm');
   boneLHand       = h.getNormalizedBoneNode('leftHand');
   boneRHand       = h.getNormalizedBoneNode('rightHand');
+
+  // ── Finger bones — VRM0 humanoid names ──
+  boneL_ThumbPx = h.getNormalizedBoneNode('leftThumbProximal');
+  boneL_ThumbMd = h.getNormalizedBoneNode('leftThumbIntermediate');
+  boneL_ThumbDt = h.getNormalizedBoneNode('leftThumbDistal');
+  boneL_IndexPx = h.getNormalizedBoneNode('leftIndexProximal');
+  boneL_IndexMd = h.getNormalizedBoneNode('leftIndexIntermediate');
+  boneL_IndexDt = h.getNormalizedBoneNode('leftIndexDistal');
+  boneL_MidPx   = h.getNormalizedBoneNode('leftMiddleProximal');
+  boneL_MidMd   = h.getNormalizedBoneNode('leftMiddleIntermediate');
+  boneL_MidDt   = h.getNormalizedBoneNode('leftMiddleDistal');
+  boneL_RingPx  = h.getNormalizedBoneNode('leftRingProximal');
+  boneL_RingMd  = h.getNormalizedBoneNode('leftRingIntermediate');
+  boneL_RingDt  = h.getNormalizedBoneNode('leftRingDistal');
+  boneL_PinkyPx = h.getNormalizedBoneNode('leftLittleProximal');
+  boneL_PinkyMd = h.getNormalizedBoneNode('leftLittleIntermediate');
+  boneL_PinkyDt = h.getNormalizedBoneNode('leftLittleDistal');
+
+  boneR_ThumbPx = h.getNormalizedBoneNode('rightThumbProximal');
+  boneR_ThumbMd = h.getNormalizedBoneNode('rightThumbIntermediate');
+  boneR_ThumbDt = h.getNormalizedBoneNode('rightThumbDistal');
+  boneR_IndexPx = h.getNormalizedBoneNode('rightIndexProximal');
+  boneR_IndexMd = h.getNormalizedBoneNode('rightIndexIntermediate');
+  boneR_IndexDt = h.getNormalizedBoneNode('rightIndexDistal');
+  boneR_MidPx   = h.getNormalizedBoneNode('rightMiddleProximal');
+  boneR_MidMd   = h.getNormalizedBoneNode('rightMiddleIntermediate');
+  boneR_MidDt   = h.getNormalizedBoneNode('rightMiddleDistal');
+  boneR_RingPx  = h.getNormalizedBoneNode('rightRingProximal');
+  boneR_RingMd  = h.getNormalizedBoneNode('rightRingIntermediate');
+  boneR_RingDt  = h.getNormalizedBoneNode('rightRingDistal');
+  boneR_PinkyPx = h.getNormalizedBoneNode('rightLittleProximal');
+  boneR_PinkyMd = h.getNormalizedBoneNode('rightLittleIntermediate');
+  boneR_PinkyDt = h.getNormalizedBoneNode('rightLittleDistal');
+
+  // Teeth mesh — fake mouth open by translating it down slightly
+  vrm.scene.traverse(n => { if (n.name === 'Teeth') teethNode = n; });
+
   console.log('Bones cached:', { boneHead, boneSpine, boneLHand, boneRHand, boneLFoot, boneRFoot });
+  console.log('Fingers:', { boneL_IndexPx, boneR_IndexPx, boneL_ThumbPx, boneR_ThumbPx });
+  console.log('Teeth node:', teethNode?.name);
 }
 
 // ================================================================
@@ -1433,7 +1572,7 @@ const ACTIVITY = {
 };
 
 // Activities pool — picked randomly, no repeats back-to-back
-const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor'];
+const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor', 'noseCover'];
 let _lastActivity = 'idle';
 
 function activityPickNext() {
@@ -1835,6 +1974,90 @@ function activityUpdate(delta) {
       break;
     }
 
+    // ── NOSE COVER TREND ─────────────────────────────────────
+    // The viral gesture: right hand cups over nose/mouth,
+    // then dramatically sweeps outward like "giving way" / dismissing.
+    // Body language: slight lean back, chin tilt up, confident slay energy.
+    case 'noseCover': {
+      const cycle = t % 5.5;
+      if (cycle < 0.5) {
+        // ── Phase 1: arm lifts, hand rises toward face ──
+        const p = cycle / 0.5;
+        const ep = 3*p*p - 2*p*p*p; // ease in-out
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + ep * 0.52; boneRUpperArm.rotation.x = ep * 0.55; boneRUpperArm.rotation.y = ep * 0.12; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - ep * 0.1); boneRLowerArm.rotation.x = ep * 0.35; }
+        if (boneRHand)     { boneRHand.rotation.x = -ep * 0.45; boneRHand.rotation.z = -(0.18 - ep*0.12); boneRHand.rotation.y = ep * 0.25; } // rotate palm inward toward face
+        setRightFingerCoverNose();
+        if (boneHips)  boneHips.rotation.z = ep * 0.06;
+        if (boneSpine) boneSpine.rotation.x = -ep * 0.04; // slight lean back
+        if (boneHead)  { boneHead.rotation.x = ep * 0.06; boneHead.rotation.z = -ep * 0.04; } // chin tips up slightly
+        setExpression('neutral');
+      } else if (cycle < 1.8) {
+        // ── Phase 2: HOLD — hand covers nose/mouth area ──
+        // Subtle breathing movement, eyes glance side
+        const hold = cycle - 0.5;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 + Math.sin(hold*2)*0.015; boneRUpperArm.rotation.x = 0.55; boneRUpperArm.rotation.y = 0.12; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.25; boneRLowerArm.rotation.x = 0.35 + Math.sin(hold*1.5)*0.01; }
+        if (boneRHand)     { boneRHand.rotation.x = -0.45; boneRHand.rotation.z = -0.06; boneRHand.rotation.y = 0.25; }
+        setRightFingerCoverNose();
+        if (boneHips)  boneHips.rotation.z = 0.06 + Math.sin(hold*1.2)*0.02;
+        if (boneSpine) boneSpine.rotation.x = -0.04;
+        if (boneHead)  { boneHead.rotation.x = 0.06; boneHead.rotation.y = Math.sin(hold*0.8)*0.05; boneHead.rotation.z = -0.04; }
+        setExpression('neutral');
+        setBS('I', 0.08); // slight smirk building
+      } else if (cycle < 2.4) {
+        // ── Phase 3: THE SWEEP — hand flicks dramatically outward ──
+        // Fast, snappy — this is the "giving way / presenting" move
+        const p = (cycle - 1.8) / 0.6;
+        const ep = p < 0.5 ? 4*p*p*p : 1 - Math.pow(-2*p+2,3)/2; // ease-in then fast out
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 - ep * 0.42; boneRUpperArm.rotation.x = 0.55 - ep * 0.1; boneRUpperArm.rotation.y = 0.12 - ep * 0.3; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.25 - ep * 0.1); boneRLowerArm.rotation.x = 0.35 - ep * 0.12; boneRLowerArm.rotation.y = ep * 0.15; }
+        // Wrist snaps open — fingers splay as hand sweeps
+        if (boneRHand)     { boneRHand.rotation.x = -0.45 + ep * 0.5; boneRHand.rotation.z = -0.06 - ep * 0.08; boneRHand.rotation.y = 0.25 - ep * 0.55; }
+        // Fingers open as they sweep — from cover to splay
+        const splayAmt = ep;
+        if (boneR_IndexPx) boneR_IndexPx.rotation.x = 0.55 - splayAmt * 0.55;
+        if (boneR_MidPx)   boneR_MidPx.rotation.x   = 0.5  - splayAmt * 0.5;
+        if (boneR_RingPx)  boneR_RingPx.rotation.x  = 0.6  - splayAmt * 0.6;
+        if (boneR_PinkyPx) boneR_PinkyPx.rotation.x = 0.65 - splayAmt * 0.65;
+        if (boneR_IndexMd) boneR_IndexMd.rotation.x = 0.45 - splayAmt * 0.45;
+        if (boneR_MidMd)   boneR_MidMd.rotation.x   = 0.4  - splayAmt * 0.4;
+        if (boneR_RingMd)  boneR_RingMd.rotation.x  = 0.5  - splayAmt * 0.5;
+        if (boneR_PinkyMd) boneR_PinkyMd.rotation.x = 0.55 - splayAmt * 0.55;
+        if (boneR_ThumbPx) { boneR_ThumbPx.rotation.z = 0.35 - splayAmt * 0.5; boneR_ThumbPx.rotation.y = -0.2 + splayAmt * 0.1; }
+        if (boneHips)  { boneHips.rotation.z = 0.06 + ep * 0.06; } // hip pops as she sweeps
+        if (boneSpine) { boneSpine.rotation.x = -0.04 + ep * 0.06; }
+        if (boneHead)  { boneHead.rotation.x = 0.06 - ep * 0.06; boneHead.rotation.z = -0.04; }
+        setExpression('excited');
+        setBS('I', 0.08 + ep * 0.14); // confident smirk widens
+      } else if (cycle < 3.8) {
+        // ── Phase 4: POSE — arm held out after sweep, she slays ──
+        const hold2 = cycle - 2.4;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.9 + Math.sin(hold2*1.5)*0.02; boneRUpperArm.rotation.x = 0.45; boneRUpperArm.rotation.y = -0.18; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.15; boneRLowerArm.rotation.x = 0.23; boneRLowerArm.rotation.y = 0.15; }
+        if (boneRHand)     { boneRHand.rotation.x = 0.05; boneRHand.rotation.z = -0.14; boneRHand.rotation.y = -0.3; }
+        setRightFingerWave(hold2);
+        if (boneHips)  boneHips.rotation.z = 0.12 + Math.sin(hold2*1.1)*0.03;
+        if (boneSpine) { boneSpine.rotation.z = -0.06; boneSpine.rotation.x = 0.02; }
+        if (boneHead)  { boneHead.rotation.z = Math.sin(hold2*0.9)*0.03; boneHead.rotation.y = -Math.sin(hold2*0.5)*0.04; }
+        setExpression('happy');
+        setBS('I', 0.18); // big confident smirk / side-smile
+      } else {
+        // ── Phase 5: settle back ──
+        const p = (cycle - 3.8) / 1.7;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.9 - ep * 0.1; boneRUpperArm.rotation.x = 0.45 - ep * 0.4; boneRUpperArm.rotation.y = -0.18 + ep * 0.23; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.15 - ep * 0.2; boneRLowerArm.rotation.x = 0.23 - ep * 0.28; }
+        if (boneRHand)     { boneRHand.rotation.x = 0.05 + ep * 0.07; boneRHand.rotation.z = -0.14 - ep * 0.04; boneRHand.rotation.y = -0.3 + ep * 0.12; }
+        setRightFingerRelax();
+        if (boneHips)  boneHips.rotation.z = 0.12 - ep * 0.06;
+        if (boneSpine) boneSpine.rotation.z = -0.06 + ep * 0.06;
+        setExpression('neutral');
+        setBS('I', 0.18 - ep * 0.18);
+      }
+      break;
+    }
+
     // ── IDLE (base sway handled by render loop) ───────────────
     default:
       break;
@@ -1899,8 +2122,10 @@ const GESTURES = {
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.18 + Math.sin(t*8+0.5)*0.22);
     // Wrist wave — fingers flapping
     if (boneRHand) { boneRHand.rotation.z = -(0.1 + Math.sin(t*10)*0.15); boneRHand.rotation.y = Math.sin(t*8)*0.1; }
+    setRightFingerWave(t); // individual finger flutter
     if (boneLUpperArm) boneLUpperArm.rotation.z = 1.0;
     if (boneLHand) { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.08; }
+    setLeftFingerRelax();
   },
   excited: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
@@ -1909,10 +2134,13 @@ const GESTURES = {
     boneLUpperArm.rotation.x =  0.22; boneRUpperArm.rotation.x = 0.22;
     if (boneSpine) boneSpine.rotation.y = Math.sin(t*7)*0.06;
     if (boneHips)  boneHips.rotation.z = Math.sin(t*7)*0.07;
-    // Hands flap with excitement
+    // Hands flap with excitement — splay fingers
     if (boneLHand) { boneLHand.rotation.z = 0.2 + Math.sin(t*9)*0.15; boneLHand.rotation.x = 0.08; }
     if (boneRHand) { boneRHand.rotation.z = -(0.2 + Math.sin(t*9+0.5)*0.15); boneRHand.rotation.x = 0.08; }
+    setLeftFingerCurl(0.05, 0.6);  // splayed excited fingers
+    setRightFingerCurl(0.05, 0.6);
     setBS('O', Math.abs(Math.sin(t*7))*0.25); // mouth opens with excitement
+    if (teethNode) teethNode.position.y = -Math.abs(Math.sin(t*7)) * 0.006;
   },
 };
 
@@ -2395,6 +2623,9 @@ function render() {
           boneRHand.rotation.x =  0.12 + Math.sin(idleTime * 2.6 + 1.0) * 0.05;
           boneRHand.rotation.y =  Math.sin(idleTime * 1.6 + 0.9) * 0.07;
         }
+        // Relaxed finger poses — natural droop, no T-pose stiffness
+        setLeftFingerRelax();
+        setRightFingerRelax();
       }
 
       // ── Idle mouth micro-expressions ──────────────────
@@ -2406,14 +2637,17 @@ function render() {
         const pout = Math.sin(p * Math.PI) * 0.18;
         setBS('O', pout);
         setBS('U', pout * 0.5);
+        if (teethNode) teethNode.position.y = -pout * 0.004;
       } else if (mouthCycle > 3.8 && mouthCycle < 4.4) {
         // lip press / hmm
         const p = Math.sin((mouthCycle - 3.8) / 0.6 * Math.PI);
         setBS('I', p * 0.12);
+        if (teethNode) teethNode.position.y = 0;
       } else {
         setBS('O', 0);
         setBS('U', 0);
         setBS('I', 0);
+        if (teethNode) teethNode.position.y = 0;
       }
     }
 
@@ -2560,6 +2794,8 @@ function runLipSync(text) {
       setBS('U', openness * round * 0.6);
       // Physical jaw bone — rotate down when mouth opens (fallback for VRM without blendshapes)
       if (boneJaw) boneJaw.rotation.x = openness * 0.22;
+      // Teeth mesh: translate downward to visually open mouth gap
+      if (teethNode) teethNode.position.y = -openness * 0.008;
     }
     tick();
   });
