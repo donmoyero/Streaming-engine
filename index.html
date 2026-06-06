@@ -655,8 +655,9 @@ function setCamMode(mode) {
 }
 
 // ── Load VRM ────────────────────────────────────────────
-let vrm   = null;
-let mixer = null;
+let vrm          = null;
+let mixer        = null;
+let VRM_BASE_ROT_Y = Math.PI; // default; overwritten after rotateVRM0
 
 const gltfLoader = new GLTFLoader();
 gltfLoader.register(parser => new VRMLoaderPlugin(parser));
@@ -742,6 +743,9 @@ gltfLoader.load(
     VRMUtils.rotateVRM0(vrm);
     vrm.scene.scale.set(1,1,1);
     vrm.scene.position.set(0,0,0);
+    // rotateVRM0 sets a base Y rotation so the model faces the camera.
+    // Store it so pacing can apply offsets on top rather than overwriting it.
+    VRM_BASE_ROT_Y = vrm.scene.rotation.y;
     scene.add(vrm.scene);
 
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
@@ -890,7 +894,9 @@ function pacePickTarget() {
   PACE.targetX    = Math.max(-PACE.xMax, Math.min(PACE.xMax, sign * distance));
   PACE.state      = 'walk';
   PACE.dir        = PACE.targetX > PACE.x ? 1 : -1;
-  PACE.targetFacingAngle = PACE.dir === 1 ? -0.12 : 0.12; // slight body turn toward travel dir
+  // Positive X = walking right → turn slightly right (negative offset from base)
+  // Negative X = walking left  → turn slightly left  (positive offset from base)
+  PACE.targetFacingAngle = PACE.dir === 1 ? -0.15 : 0.15;
 }
 
 function paceUpdate(delta) {
@@ -969,9 +975,9 @@ function paceUpdate(delta) {
   // ── Apply world X position ──────────────────────────────
   vrm.scene.position.x += (PACE.x - vrm.scene.position.x) * 0.08;
 
-  // ── Smooth facing direction ──────────────────────────────
+  // ── Smooth facing direction (offset from rotateVRM0 base) ──
   PACE.facingAngle += (PACE.targetFacingAngle - PACE.facingAngle) * 0.06;
-  vrm.scene.rotation.y = PACE.facingAngle;
+  vrm.scene.rotation.y = VRM_BASE_ROT_Y + PACE.facingAngle;
 }
 
 function resetWalkPose() {
