@@ -40,6 +40,24 @@
       linear-gradient(180deg, #080810 0%, #0d0d18 60%, #111118 100%);
   }
 
+  /* Dynamic stage light — changes color on events */
+  #stage-light {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse, rgba(255,184,48,0.08) 0%, transparent 70%);
+    filter: blur(20px);
+    transition: background 1.5s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #stage-light.raid   { background: radial-gradient(ellipse, rgba(255,40,40,0.18) 0%, transparent 70%); }
+  #stage-light.sub    { background: radial-gradient(ellipse, rgba(80,255,120,0.15) 0%, transparent 70%); }
+  #stage-light.bits   { background: radial-gradient(ellipse, rgba(130,80,255,0.18) 0%, transparent 70%); }
+  #stage-light.chill  { background: radial-gradient(ellipse, rgba(40,120,255,0.12) 0%, transparent 70%); }
+  #stage-light.speak  { background: radial-gradient(ellipse, rgba(255,200,60,0.14) 0%, transparent 70%); }
+
   /* floor glow */
   #studio-bg::after {
     content:'';
@@ -49,6 +67,18 @@
     width:900px; height:180px;
     background: radial-gradient(ellipse, rgba(255,160,30,0.18) 0%, transparent 70%);
     filter: blur(30px);
+  }
+
+  /* stage floor reflection line */
+  #stage-floor {
+    position: absolute;
+    bottom: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,184,48,0.25), transparent);
+    z-index: 2;
   }
 
   /* desk */
@@ -63,6 +93,7 @@
     border-top: 2px solid rgba(255,184,48,0.4);
     border-radius: 4px 4px 0 0;
     box-shadow: 0 -8px 40px rgba(255,160,30,0.2), 0 4px 20px #000;
+    z-index: 5;
   }
   #desk::before {
     content:'';
@@ -81,6 +112,7 @@
     height: 70px;
     background: linear-gradient(180deg, #333 0%, #1a1a1a 100%);
     border-radius: 6px;
+    z-index: 5;
   }
   #mic::before {
     content:'';
@@ -99,6 +131,7 @@
     position:absolute;
     inset:0;
     width:100%; height:100%;
+    z-index: 3;
   }
 
   /* ── Chat bubble ── */
@@ -206,12 +239,11 @@
     letter-spacing:0.05em;
     z-index:20;
   }
-  #status.ready { color: #60ff90; }
+  #status.ready   { color: #60ff90; }
   #status.thinking { color: var(--gold); }
-  #status.error { color: #ff6060; }
+  #status.error   { color: #ff6060; }
 
   /* ── Topic box ── */
-  /* Bottom-left corner of the screen, always visible when active */
   #topic-box {
     position: absolute;
     bottom: 110px;
@@ -224,10 +256,7 @@
                 transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
     pointer-events: none;
   }
-  #topic-box.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  #topic-box.visible { opacity: 1; transform: translateY(0); }
   #topic-box-inner {
     background: rgba(10,10,15,0.88);
     border: 1px solid rgba(255,184,48,0.25);
@@ -239,7 +268,6 @@
     overflow: hidden;
     position: relative;
   }
-  /* Shine sweep on topic change */
   #topic-box-inner::after {
     content: '';
     position: absolute;
@@ -476,6 +504,8 @@
 </div>
 
 <div id="studio-bg"></div>
+<div id="stage-light"></div>
+<div id="stage-floor"></div>
 <div id="desk"></div>
 <div id="mic"></div>
 
@@ -488,7 +518,6 @@
 
 <div id="status">Initialising...</div>
 
-<!-- ── Topic box (bottom-left, auto-managed by backend) ── -->
 <div id="topic-box">
   <div id="topic-box-inner">
     <div id="topic-label">
@@ -536,23 +565,24 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 // ── Config ─────────────────────────────────────────────
-const VRM_PATH    = '/Streaming-engine/MissOgTinz_Master.vrm';
-const API_URL     = 'https://impactgrid-dijo.onrender.com/chat/message';
+const VRM_PATH      = '/Streaming-engine/MissOgTinz_Master.vrm';
+const API_URL       = 'https://impactgrid-dijo.onrender.com/chat/message';
 const PROACTIVE_URL = 'https://impactgrid-dijo.onrender.com/chat/proactive';
-const TOPIC_URL   = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
-const USER_ID     = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
-const TTS_URL     = 'https://impactgrid-dijo.onrender.com/tts';
+const TOPIC_URL     = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
+const USER_ID       = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
+const TTS_URL       = 'https://impactgrid-dijo.onrender.com/tts';
 const TWITCH_CHANNEL = 'Miss_ogtinz';
 
 // ── Elements ────────────────────────────────────────────
-const canvas    = document.getElementById('canvas');
-const loader_el = document.getElementById('loader');
-const bar_fill  = document.getElementById('bar-fill');
-const status_el = document.getElementById('status');
-const bubble    = document.getElementById('chat-bubble');
-const bubbleTxt = document.getElementById('bubble-text');
-const chatInput = document.getElementById('chat-input');
-const sendBtn   = document.getElementById('send-btn');
+const canvas      = document.getElementById('canvas');
+const loader_el   = document.getElementById('loader');
+const bar_fill    = document.getElementById('bar-fill');
+const status_el   = document.getElementById('status');
+const bubble      = document.getElementById('chat-bubble');
+const bubbleTxt   = document.getElementById('bubble-text');
+const chatInput   = document.getElementById('chat-input');
+const sendBtn     = document.getElementById('send-btn');
+const stageLight  = document.getElementById('stage-light');
 
 // ── Topic box elements ───────────────────────────────────
 const topicBox      = document.getElementById('topic-box');
@@ -564,9 +594,14 @@ function setStatus(msg, cls='') {
   status_el.textContent = msg;
   status_el.className = cls;
 }
+function setProgress(p) { bar_fill.style.width = p + '%'; }
 
-function setProgress(p) {
-  bar_fill.style.width = p + '%';
+// ── Stage light control ──────────────────────────────────
+function setStageLight(mood, durationMs = 4000) {
+  stageLight.className = mood;
+  if (mood !== '') {
+    setTimeout(() => { stageLight.className = ''; }, durationMs);
+  }
 }
 
 // ── Three.js Scene ──────────────────────────────────────
@@ -586,23 +621,41 @@ camera.position.set(0, 0.8, 4);
 camera.lookAt(0, 0.8, 0);
 
 // Lighting
-const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+const ambient   = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambient);
-
-const keyLight = new THREE.DirectionalLight(0xfff5e0, 2.5);
+const keyLight  = new THREE.DirectionalLight(0xfff5e0, 2.5);
 keyLight.position.set(1.5, 3, 2);
 scene.add(keyLight);
-
 const fillLight = new THREE.DirectionalLight(0xffe0b0, 1.2);
 fillLight.position.set(-2, 1, 1);
 scene.add(fillLight);
-
-const rimLight = new THREE.DirectionalLight(0xffb830, 0.4);
+const rimLight  = new THREE.DirectionalLight(0xffb830, 0.4);
 rimLight.position.set(0, 2, -3);
 scene.add(rimLight);
 
+// ── Camera state machine ─────────────────────────────────
+// Three modes: IDLE (wide), SPEAK (close), THINK (medium + slight angle)
+const CAM = {
+  IDLE:  { z: null, y: null, lookY: null, rotY: 0 },       // filled after VRM loads
+  SPEAK: { z: null, y: null, lookY: null, rotY: 0 },
+  THINK: { z: null, y: null, lookY: null, rotY: 0.04 },
+};
+
+let camTarget   = { z: 4, y: 0.8, lookY: 0.8, rotY: 0 };
+let camCurrent  = { z: 4, y: 0.8, lookY: 0.8, rotY: 0 };
+const CAM_LERP  = 0.035; // smoothness — lower = slower/smoother
+
+function setCamMode(mode) {
+  const t = CAM[mode];
+  if (!t || t.z === null) return;
+  camTarget.z     = t.z;
+  camTarget.y     = t.y;
+  camTarget.lookY = t.lookY;
+  camTarget.rotY  = t.rotY;
+}
+
 // ── Load VRM ────────────────────────────────────────────
-let vrm = null;
+let vrm   = null;
 let mixer = null;
 
 const gltfLoader = new GLTFLoader();
@@ -618,7 +671,6 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-    // Colour map — solid colours per mesh (no textures in VRM export)
     const MESH_COLOURS = {
       Julie_Figure: 0xc68642,
       Brow:         0x1a0a00,
@@ -639,7 +691,7 @@ gltfLoader.load(
     vrm.scene.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.frustumCulled = false;
-      const name = obj.name;
+      const name      = obj.name;
       const isMetallic = name.includes('Jewel') || name.includes('Necklece');
       const isSkin     = name === 'Julie_Figure' || name === 'Teargum';
       const isEye      = name === 'Eye_R' || name === 'Eyes_L';
@@ -651,41 +703,25 @@ gltfLoader.load(
         eyeCanvas.width  = 128;
         eyeCanvas.height = 128;
         const ctx = eyeCanvas.getContext('2d');
-
-        ctx.fillStyle = '#f5f0e8';
-        ctx.fillRect(0, 0, 128, 128);
-
+        ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
         const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
-        grad.addColorStop(0,   '#1a0a00');
-        grad.addColorStop(0.4, '#3b1f0a');
-        grad.addColorStop(0.8, '#5c3010');
-        grad.addColorStop(1,   '#2a1205');
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
-
-        ctx.fillStyle = '#050202';
-        ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
-
+        grad.addColorStop(0,'#1a0a00'); grad.addColorStop(0.4,'#3b1f0a');
+        grad.addColorStop(0.8,'#5c3010'); grad.addColorStop(1,'#2a1205');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#050202'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
-
-        ctx.strokeStyle = '#0d0500';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
-
         const eyeTex = new THREE.CanvasTexture(eyeCanvas);
         obj.material = new THREE.MeshStandardMaterial({
-          map:       eyeTex,
-          roughness: 0.05,
-          metalness: 0.0,
-          side:      THREE.FrontSide,
+          map: eyeTex, roughness: 0.05, metalness: 0.0, side: THREE.FrontSide,
         });
       } else if (isLash) {
         obj.material = new THREE.MeshStandardMaterial({
-          color: 0x050202, roughness: 0.9, metalness: 0,
-          side: THREE.DoubleSide,
+          color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
         });
       } else if (isTooth) {
         obj.material = new THREE.MeshStandardMaterial({
@@ -704,18 +740,14 @@ gltfLoader.load(
     });
 
     VRMUtils.rotateVRM0(vrm);
-
-    vrm.scene.scale.set(1, 1, 1);
-    vrm.scene.position.set(0, 0, 0);
+    vrm.scene.scale.set(1,1,1);
+    vrm.scene.position.set(0,0,0);
     scene.add(vrm.scene);
 
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
-    console.log("VRM loaded! Children:", vrm.scene.children.length);
-    console.log("VRM raw center:", centerRaw, "size:", sizeRaw);
-
-    const scaleVal = 1.7 / sizeRaw.y;
+    const scaleVal  = 1.7 / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
     vrm.scene.position.set(
       -centerRaw.x * scaleVal,
@@ -729,25 +761,31 @@ gltfLoader.load(
 
     cacheBones();
 
-    const fovRad = camera.fov * (Math.PI / 180);
-    const camZ   = (size.y / 2) / Math.tan(fovRad / 2) * 1.18;
-    const camY   = size.y * 0.5;
-    camera.position.set(0, camY, camZ);
-    camera.lookAt(0, camY, 0);
-    console.log("Camera auto-fit done, camZ:", camZ.toFixed(2), "camY:", camY.toFixed(2));
+    // ── Auto-fit camera then set all cam presets relative to model ──
+    const fovRad  = camera.fov * (Math.PI / 180);
+    const fitZ    = (size.y / 2) / Math.tan(fovRad / 2) * 1.18;
+    const midY    = size.y * 0.5;
+    const headY   = size.y * 0.88;
+
+    CAM.IDLE  = { z: fitZ,        y: midY,       lookY: midY,       rotY: 0 };
+    CAM.SPEAK = { z: fitZ * 0.62, y: headY * 0.9, lookY: headY * 0.85, rotY: 0 };
+    CAM.THINK = { z: fitZ * 0.80, y: midY * 1.1, lookY: midY,       rotY: 0.04 };
+
+    camTarget  = { ...CAM.IDLE };
+    camCurrent = { ...CAM.IDLE };
+    camera.position.set(0, camCurrent.y, camCurrent.z);
+    camera.lookAt(0, camCurrent.lookY, 0);
+
+    // ── Pacing extents — she walks within ±40% of half the model height ──
+    PACE.xMax = size.x * 1.8;
 
     setProgress(100);
     setTimeout(() => {
       loader_el.classList.add('hidden');
       setStatus('Ready ✦', 'ready');
       showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
-      startIdleAnimation();
-
-      // ── Start topic polling and dead air timer after load ──
       startTopicPolling();
       deadAir.start();
-
-      // ── Connect to Twitch chat ──
       initTwitchChat();
     }, 400);
   },
@@ -765,18 +803,13 @@ gltfLoader.load(
 // ── Blendshape helpers ──────────────────────────────────
 function setBS(name, value) {
   if (!vrm) return;
-  try {
-    vrm.expressionManager?.setValue(name, Math.max(0, Math.min(1, value)));
-  } catch(e) {}
+  try { vrm.expressionManager?.setValue(name, Math.max(0, Math.min(1, value))); } catch(e) {}
 }
 
 // ── Lip Sync ────────────────────────────────────────────
 let lipSyncActive = false;
 let lipRafId      = null;
-
-const MOUTH_BS = ['A', 'I', 'U', 'E', 'O'];
-
-
+const MOUTH_BS    = ['A','I','U','E','O'];
 
 function stopLipSync() {
   lipSyncActive = false;
@@ -784,34 +817,183 @@ function stopLipSync() {
   MOUTH_BS.forEach(s => setBS(s, 0));
 }
 
-
 // ── Expression mapping ──────────────────────────────────
 function setExpression(mood) {
   ['happy','angry','sad','relaxed','surprised'].forEach(e => setBS(e, 0));
   ['joy','angry','sorrow','fun','neutral'].forEach(e => setBS(e, 0));
-
   const map = {
-    happy:     () => { setBS('joy', 0.8); setBS('happy', 0.8); },
-    excited:   () => { setBS('joy', 1.0); setBS('fun', 0.6); },
-    angry:     () => { setBS('angry', 0.7); },
-    sad:       () => { setBS('sorrow', 0.7); setBS('sad', 0.6); },
-    neutral:   () => { setBS('neutral', 0.3); },
-    surprised: () => { setBS('surprised', 0.8); }
+    happy:     () => { setBS('joy',0.8); setBS('happy',0.8); },
+    excited:   () => { setBS('joy',1.0); setBS('fun',0.6); },
+    angry:     () => { setBS('angry',0.7); },
+    sad:       () => { setBS('sorrow',0.7); setBS('sad',0.6); },
+    neutral:   () => { setBS('neutral',0.3); },
+    surprised: () => { setBS('surprised',0.8); }
   };
-
   (map[mood] || map.neutral)();
 }
 
-// ── Idle animation ──────────────────────────────────────
-let idleTime = 0;
-let blinkTimer = 0;
-let nextBlink = 3;
+// ── Bone cache ───────────────────────────────────────────
+let boneHead=null, boneSpine=null, boneChest=null;
+let boneHips=null;
+let boneHipL=null, boneHipR=null;
+let boneLUpperLeg=null, boneRUpperLeg=null;
+let boneLLowerLeg=null, boneRLowerLeg=null;
+let boneLUpperArm=null, boneRUpperArm=null;
+let boneLLowerArm=null, boneRLowerArm=null;
 
-function startIdleAnimation() {
-  // Handled in render loop
+function cacheBones() {
+  if (!vrm || !vrm.humanoid) return;
+  const h         = vrm.humanoid;
+  boneHead        = h.getNormalizedBoneNode('head');
+  boneSpine       = h.getNormalizedBoneNode('spine');
+  boneChest       = h.getNormalizedBoneNode('chest');
+  boneHips        = h.getNormalizedBoneNode('hips');
+  boneHipL        = h.getNormalizedBoneNode('leftUpperLeg');
+  boneHipR        = h.getNormalizedBoneNode('rightUpperLeg');
+  boneLUpperLeg   = h.getNormalizedBoneNode('leftUpperLeg');
+  boneRUpperLeg   = h.getNormalizedBoneNode('rightUpperLeg');
+  boneLLowerLeg   = h.getNormalizedBoneNode('leftLowerLeg');
+  boneRLowerLeg   = h.getNormalizedBoneNode('rightLowerLeg');
+  boneLUpperArm   = h.getNormalizedBoneNode('leftUpperArm');
+  boneRUpperArm   = h.getNormalizedBoneNode('rightUpperArm');
+  boneLLowerArm   = h.getNormalizedBoneNode('leftLowerArm');
+  boneRLowerArm   = h.getNormalizedBoneNode('rightLowerArm');
+  console.log('Bones cached:', { boneHead, boneSpine, boneLUpperLeg, boneRUpperLeg });
 }
 
-// ── Gesture system ───────────────────────────────────────
+// ================================================================
+//  PHASE 1A — IDLE PACING SYSTEM
+//  She walks left/right across the stage naturally.
+//  Uses a simple waypoint system: pick a target X, walk to it,
+//  pause, pick another. Leg/hip bones animate in sync.
+// ================================================================
+
+const PACE = {
+  xMax:        2.0,    // filled after VRM loads (model-relative)
+  x:           0,      // current world X position
+  targetX:     0,      // where she's heading
+  speed:       0.006,  // units per frame at 60fps
+  walkTime:    0,      // accumulator used for leg cycle
+  pauseTimer:  0,      // countdown until next move
+  pauseLen:    0,      // how long to pause (randomised)
+  state:       'pause',// 'walk' | 'pause'
+  dir:         1,      // +1 right, -1 left (facing direction)
+  facingAngle: 0,      // current Y rotation of scene (smooth)
+  targetFacingAngle: 0,
+};
+
+function pacePickTarget() {
+  // pick a new X between -xMax and +xMax, biased away from center
+  const halfMax   = PACE.xMax * 0.5;
+  const sign      = Math.random() > 0.5 ? 1 : -1;
+  const distance  = halfMax + Math.random() * halfMax;
+  PACE.targetX    = Math.max(-PACE.xMax, Math.min(PACE.xMax, sign * distance));
+  PACE.state      = 'walk';
+  PACE.dir        = PACE.targetX > PACE.x ? 1 : -1;
+  PACE.targetFacingAngle = PACE.dir === 1 ? -0.12 : 0.12; // slight body turn toward travel dir
+}
+
+function paceUpdate(delta) {
+  if (!vrm) return;
+
+  if (PACE.state === 'pause') {
+    PACE.pauseTimer -= delta;
+    if (PACE.pauseTimer <= 0) pacePickTarget();
+
+    // idle leg micro-sway while paused
+    if (boneLUpperLeg) boneLUpperLeg.rotation.x = Math.sin(PACE.walkTime * 0.6) * 0.015;
+    if (boneRUpperLeg) boneRUpperLeg.rotation.x = Math.sin(PACE.walkTime * 0.6 + Math.PI) * 0.015;
+
+  } else {
+    // walking
+    PACE.walkTime += delta;
+    const step     = PACE.speed * (delta / 0.016); // normalise to ~60fps
+    const remaining = PACE.targetX - PACE.x;
+
+    if (Math.abs(remaining) < 0.02) {
+      // arrived — start pause
+      PACE.x              = PACE.targetX;
+      PACE.state          = 'pause';
+      PACE.pauseLen       = 3 + Math.random() * 8; // 3–11s pause
+      PACE.pauseTimer     = PACE.pauseLen;
+      PACE.targetFacingAngle = 0; // face forward during pause
+      resetWalkPose();
+    } else {
+      PACE.x += Math.sign(remaining) * Math.min(step, Math.abs(remaining));
+
+      // ── Leg animation ──────────────────────────────────
+      const freq  = 5.5;  // walk cycle frequency
+      const amp   = 0.32; // leg swing amplitude
+      const tilt  = 0.08; // lateral hip tilt amplitude
+
+      // Opposite legs swing together (natural walking gait)
+      if (boneLUpperLeg) {
+        boneLUpperLeg.rotation.x =  Math.sin(PACE.walkTime * freq) * amp;
+        boneLUpperLeg.rotation.z =  Math.sin(PACE.walkTime * freq) * tilt * 0.3;
+      }
+      if (boneRUpperLeg) {
+        boneRUpperLeg.rotation.x = -Math.sin(PACE.walkTime * freq) * amp;
+        boneRUpperLeg.rotation.z = -Math.sin(PACE.walkTime * freq) * tilt * 0.3;
+      }
+      if (boneLLowerLeg) {
+        // knee bend — only bends backward (clamped), follows thigh with slight delay
+        boneLLowerLeg.rotation.x = Math.max(0, Math.sin(PACE.walkTime * freq + 0.8)) * amp * 0.55;
+      }
+      if (boneRLowerLeg) {
+        boneRLowerLeg.rotation.x = Math.max(0, -Math.sin(PACE.walkTime * freq + 0.8)) * amp * 0.55;
+      }
+
+      // ── Hip counter-rotation (natural sway) ─────────────
+      if (boneHips) {
+        boneHips.rotation.y = Math.sin(PACE.walkTime * freq) * tilt * 0.4;
+        boneHips.rotation.z = Math.sin(PACE.walkTime * freq * 0.5) * tilt;
+      }
+
+      // ── Arm counter-swing (opposite to legs) ─────────────
+      if (boneLUpperArm) {
+        boneLUpperArm.rotation.x = -Math.sin(PACE.walkTime * freq) * 0.12;
+        boneLUpperArm.rotation.z =  1.1 + Math.sin(PACE.walkTime * 1.3) * 0.04;
+      }
+      if (boneRUpperArm) {
+        boneRUpperArm.rotation.x =  Math.sin(PACE.walkTime * freq) * 0.12;
+        boneRUpperArm.rotation.z = -1.1 - Math.sin(PACE.walkTime * 1.3) * 0.04;
+      }
+
+      // ── Chest bob up/down while walking ─────────────────
+      if (boneChest) {
+        boneChest.rotation.x = Math.sin(PACE.walkTime * freq * 2) * 0.012;
+      }
+    }
+  }
+
+  // ── Apply world X position ──────────────────────────────
+  vrm.scene.position.x += (PACE.x - vrm.scene.position.x) * 0.08;
+
+  // ── Smooth facing direction ──────────────────────────────
+  PACE.facingAngle += (PACE.targetFacingAngle - PACE.facingAngle) * 0.06;
+  vrm.scene.rotation.y = PACE.facingAngle;
+}
+
+function resetWalkPose() {
+  // Smoothly return legs to neutral — handled by idle lerp in render loop
+  if (boneLUpperLeg) { boneLUpperLeg.rotation.x = 0; boneLUpperLeg.rotation.z = 0; }
+  if (boneRUpperLeg) { boneRUpperLeg.rotation.x = 0; boneRUpperLeg.rotation.z = 0; }
+  if (boneLLowerLeg) boneLLowerLeg.rotation.x = 0;
+  if (boneRLowerLeg) boneRLowerLeg.rotation.x = 0;
+  if (boneHips)      { boneHips.rotation.y = 0; boneHips.rotation.z = 0; }
+}
+
+// ── Initialise pacing with random first pause so she doesn't
+//    immediately march on load
+PACE.state      = 'pause';
+PACE.pauseLen   = 2 + Math.random() * 3;
+PACE.pauseTimer = PACE.pauseLen;
+
+
+// ================================================================
+//  PHASE 1B — GESTURE SYSTEM (expanded)
+// ================================================================
+
 let gesture = null;
 let gestureTime = 0;
 let gestureDuration = 0;
@@ -819,9 +1001,9 @@ let gestureDuration = 0;
 const GESTURES = {
   think: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
-    boneLUpperArm.rotation.z = 1.1 + Math.sin(t*0.8)*0.03;
+    boneLUpperArm.rotation.z =  1.1 + Math.sin(t*0.8)*0.03;
     boneRUpperArm.rotation.z = -(0.5 + Math.sin(t*0.6)*0.04);
-    boneRUpperArm.rotation.x = 0.6 + Math.sin(t*0.4)*0.02;
+    boneRUpperArm.rotation.x =  0.6 + Math.sin(t*0.4)*0.02;
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.9 + Math.sin(t*0.5)*0.02);
   },
   talk: (t) => {
@@ -847,14 +1029,53 @@ const GESTURES = {
     boneRUpperArm.rotation.z = -(0.4 + Math.sin(t*7+0.3)*0.15);
     boneLUpperArm.rotation.x =  0.2;
     boneRUpperArm.rotation.x =  0.2;
-  }
+    // add a body bounce
+    if (boneSpine) boneSpine.rotation.y = Math.sin(t*7)*0.06;
+  },
+  // NEW: walk-toward-camera — used on sub events
+  stepForward: (t) => {
+    if (!vrm) return;
+    const pushZ = Math.sin(t * 3) * 0.08;
+    vrm.scene.position.z = pushZ;
+    if (boneLUpperArm && boneRUpperArm) {
+      boneLUpperArm.rotation.z =  0.6 + Math.sin(t*5)*0.1;
+      boneRUpperArm.rotation.z = -(0.6 + Math.sin(t*5+0.3)*0.1);
+    }
+  },
 };
 
 function doGesture(name, durationMs = 3000) {
-  gesture = name;
-  gestureTime = 0;
+  gesture         = name;
+  gestureTime     = 0;
   gestureDuration = durationMs / 1000;
+  // pull pacing arms back while a gesture is running
+  // (the gesture overrides arm bones directly)
 }
+
+function gestureActive() { return gesture !== null; }
+
+
+// ================================================================
+//  PHASE 1C — CAMERA WORK
+//  Smooth lerp between IDLE / SPEAK / THINK camera states.
+// ================================================================
+
+function updateCamera(delta) {
+  // Lerp current → target for all camera params
+  camCurrent.z     += (camTarget.z     - camCurrent.z)     * CAM_LERP;
+  camCurrent.y     += (camTarget.y     - camCurrent.y)     * CAM_LERP;
+  camCurrent.lookY += (camTarget.lookY - camCurrent.lookY) * CAM_LERP;
+  camCurrent.rotY  += (camTarget.rotY  - camCurrent.rotY)  * CAM_LERP;
+
+  // Track her X position so camera pans with her (subtle, not 1:1)
+  const targetCamX  = vrm ? vrm.scene.position.x * 0.25 : 0;
+  camCurrent.x      = (camCurrent.x || 0) + (targetCamX - (camCurrent.x || 0)) * 0.04;
+
+  camera.position.set(camCurrent.x || 0, camCurrent.y, camCurrent.z);
+  camera.lookAt(camCurrent.x || 0, camCurrent.lookY, 0);
+  camera.rotation.z = camCurrent.rotY;
+}
+
 
 // ── Chat bubble ─────────────────────────────────────────
 let bubbleTimeout = null;
@@ -868,28 +1089,12 @@ function showBubble(text, speaker='Miss OG Tinz') {
   bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
 }
 
+
 // ── Render loop ─────────────────────────────────────────
 const clock = new THREE.Clock();
-
-let boneHead = null, boneSpine = null, boneChest = null;
-let boneHipL = null, boneHipR = null;
-let boneLUpperArm = null, boneRUpperArm = null;
-let boneLLowerArm = null, boneRLowerArm = null;
-
-function cacheBones() {
-  if (!vrm || !vrm.humanoid) return;
-  const h = vrm.humanoid;
-  boneHead      = h.getNormalizedBoneNode('head');
-  boneSpine     = h.getNormalizedBoneNode('spine');
-  boneChest     = h.getNormalizedBoneNode('chest');
-  boneHipL      = h.getNormalizedBoneNode('leftUpperLeg');
-  boneHipR      = h.getNormalizedBoneNode('rightUpperLeg');
-  boneLUpperArm = h.getNormalizedBoneNode('leftUpperArm');
-  boneRUpperArm = h.getNormalizedBoneNode('rightUpperArm');
-  boneLLowerArm = h.getNormalizedBoneNode('leftLowerArm');
-  boneRLowerArm = h.getNormalizedBoneNode('rightLowerArm');
-  console.log('Bones cached:', {boneHead, boneSpine, boneLUpperArm, boneRUpperArm});
-}
+let idleTime   = 0;
+let blinkTimer = 0;
+let nextBlink  = 3;
 
 function render() {
   requestAnimationFrame(render);
@@ -899,54 +1104,68 @@ function render() {
     idleTime   += delta;
     blinkTimer += delta;
 
-    if (boneSpine) {
-      boneSpine.rotation.x = Math.sin(idleTime * 1.3) * 0.018;
-      boneSpine.rotation.z = Math.sin(idleTime * 0.7) * 0.012;
-    }
-    if (boneChest) {
-      boneChest.rotation.x = Math.sin(idleTime * 1.3 + 0.3) * 0.01;
-    }
-    if (boneHead) {
-      boneHead.rotation.x = Math.sin(idleTime * 0.9)  * 0.025;
-      boneHead.rotation.y = Math.sin(idleTime * 0.4)  * 0.06;
-      boneHead.rotation.z = Math.sin(idleTime * 0.55) * 0.022;
-    }
-    if (boneLUpperArm) {
-      boneLUpperArm.rotation.z =  1.1 + Math.sin(idleTime * 1.3) * 0.04;
-      boneLUpperArm.rotation.x = Math.sin(idleTime * 0.6) * 0.03;
-    }
-    if (boneRUpperArm) {
-      boneRUpperArm.rotation.z = -1.1 - Math.sin(idleTime * 1.3) * 0.04;
-      boneRUpperArm.rotation.x = Math.sin(idleTime * 0.6 + 0.5) * 0.03;
-    }
-    if (boneLLowerArm) boneLLowerArm.rotation.z =  0.3 + Math.sin(idleTime * 1.1) * 0.02;
-    if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3 - Math.sin(idleTime * 1.1) * 0.02;
+    // ── Pacing system ──────────────────────────────────
+    paceUpdate(delta);
 
-    if (boneHipL) boneHipL.rotation.z =  Math.sin(idleTime * 0.8) * 0.04;
-    if (boneHipR) boneHipR.rotation.z = -Math.sin(idleTime * 0.8) * 0.04;
+    // ── Idle body sway (only when not mid-gesture) ────
+    if (!gestureActive()) {
+      if (boneSpine) {
+        boneSpine.rotation.x = Math.sin(idleTime * 1.3) * 0.018;
+        boneSpine.rotation.z = Math.sin(idleTime * 0.7) * 0.012;
+      }
+      if (boneChest) {
+        boneChest.rotation.x = Math.sin(idleTime * 1.3 + 0.3) * 0.01;
+      }
+      if (boneHead) {
+        boneHead.rotation.x = Math.sin(idleTime * 0.9)  * 0.025;
+        boneHead.rotation.y = Math.sin(idleTime * 0.4)  * 0.06;
+        boneHead.rotation.z = Math.sin(idleTime * 0.55) * 0.022;
+      }
+      // Only override arms if NOT pacing (pacing handles arms itself)
+      if (PACE.state === 'pause') {
+        if (boneLUpperArm) {
+          boneLUpperArm.rotation.z =  1.1 + Math.sin(idleTime * 1.3) * 0.04;
+          boneLUpperArm.rotation.x = Math.sin(idleTime * 0.6) * 0.03;
+        }
+        if (boneRUpperArm) {
+          boneRUpperArm.rotation.z = -1.1 - Math.sin(idleTime * 1.3) * 0.04;
+          boneRUpperArm.rotation.x = Math.sin(idleTime * 0.6 + 0.5) * 0.03;
+        }
+        if (boneLLowerArm) boneLLowerArm.rotation.z =  0.3 + Math.sin(idleTime * 1.1) * 0.02;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3 - Math.sin(idleTime * 1.1) * 0.02;
+      }
+    }
 
+    // ── Gesture override ──────────────────────────────
     if (gesture) {
       gestureTime += delta;
       if (gestureTime < gestureDuration && GESTURES[gesture]) {
         GESTURES[gesture](gestureTime);
       } else {
         gesture = null;
+        // Reset z-position if stepForward was used
+        if (vrm) vrm.scene.position.z = 0;
       }
     }
 
     vrm.update(delta);
 
+    // ── Eye look-at wander ────────────────────────────
     if (vrm.lookAt) {
       vrm.lookAt.yaw   = Math.sin(idleTime * 0.28) * 12;
       vrm.lookAt.pitch = Math.sin(idleTime * 0.19) * 6 - 2;
     }
 
+    // ── Blink ─────────────────────────────────────────
     if (blinkTimer > nextBlink) {
       blinkTimer = 0;
       nextBlink  = 2.5 + Math.random() * 3;
       doBlink();
     }
   }
+
+  // ── Camera lerp ───────────────────────────────────────
+  updateCamera(delta);
 
   renderer.render(scene, camera);
 }
@@ -958,20 +1177,20 @@ function doBlink() {
 
 render();
 
-// ── TTS — Edge TTS via backend, text lip sync as fallback ──────
+
+// ── TTS ─────────────────────────────────────────────────
 async function speak(text, mood='neutral') {
   setExpression(mood);
+  setStageLight('speak', text.length * 65 + 2000);
 
-  // Try Edge TTS with a short timeout so we don't wait too long
   try {
     const controller = new AbortController();
     const ttsTimeout = setTimeout(() => controller.abort(), 6000);
-
     const res = await fetch(TTS_URL, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ text }),
-      signal:  controller.signal,
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
     });
     clearTimeout(ttsTimeout);
 
@@ -979,10 +1198,7 @@ async function speak(text, mood='neutral') {
       const blob  = await res.blob();
       const url   = URL.createObjectURL(blob);
       const audio = new Audio(url);
-
-      // Run lip sync alongside real audio
       runLipSync(text);
-
       await new Promise((resolve) => {
         audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
         audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
@@ -992,14 +1208,12 @@ async function speak(text, mood='neutral') {
       setExpression('neutral');
       return;
     }
-  } catch(_) { /* TTS unavailable or timed out — use lip sync only */ }
+  } catch(_) {}
 
-  // Fallback: text-driven lip sync only (still looks alive)
   await runLipSync(text);
   setExpression('neutral');
 }
 
-// ── Text-driven lip sync ─────────────────────────────────────────
 function runLipSync(text) {
   return new Promise((resolve) => {
     stopLipSync();
@@ -1015,7 +1229,6 @@ function runLipSync(text) {
       lipRafId = requestAnimationFrame(tick);
       const elapsed = Date.now() - startTime;
       if (elapsed >= totalMs) { stopLipSync(); setExpression('neutral'); resolve(); return; }
-
       const wordIndex = Math.floor(elapsed / msPerWord);
       const word      = (words[wordIndex] || '').toLowerCase();
       const charPos   = Math.floor((elapsed % msPerWord) / msPerWord * word.length);
@@ -1027,7 +1240,6 @@ function runLipSync(text) {
       const openness  = Math.min(1, base);
       const spread    = isVowel && (char==='i'||char==='e') ? 0.6 : 0.1;
       const round     = isVowel && (char==='o'||char==='u') ? 0.5 : 0.1;
-
       setBS('A', openness * 0.9);
       setBS('O', openness * round);
       setBS('I', openness * spread);
@@ -1038,28 +1250,22 @@ function runLipSync(text) {
   });
 }
 
-// ── Topic box ────────────────────────────────────────────
-// Polls /chat/topic/current every 6s, shows animated card
-// when she switches topic. She manages herself — we just display.
 
+// ── Topic box ────────────────────────────────────────────
 function updateTopicBox(data) {
   if (!data.active) {
     topicBox.classList.remove('visible');
     lastTopicTitle = null;
     return;
   }
-
   const isNew = data.title !== lastTopicTitle;
-
   topicTitleEl.textContent  = data.title  || '';
   topicSourceEl.textContent = data.source || '';
   topicBox.classList.add('visible');
-
   if (isNew) {
     lastTopicTitle = data.title;
-    // Trigger shine animation
     topicBox.classList.remove('new-topic');
-    void topicBox.offsetWidth; // reflow
+    void topicBox.offsetWidth;
     topicBox.classList.add('new-topic');
     setTimeout(() => topicBox.classList.remove('new-topic'), 900);
   }
@@ -1071,30 +1277,22 @@ function startTopicPolling() {
       const res  = await fetch(TOPIC_URL);
       const data = await res.json();
       updateTopicBox(data);
-    } catch (_) { /* network blip, keep showing last state */ }
+    } catch (_) {}
   }
-  poll(); // immediate first call
+  poll();
   setInterval(poll, 6000);
 }
 
-// ── Dead air timer ───────────────────────────────────────
-// After 30s of silence, she speaks unprompted via /chat/proactive.
-// Resets every time she or the viewer sends a message / TTS plays.
 
+// ── Dead air timer ───────────────────────────────────────
 let _deadAirTimer  = null;
 let _deadAirActive = false;
-const DEAD_AIR_MS  = 30000; // 30 seconds
+const DEAD_AIR_MS  = 30000;
 
 const deadAir = {
-  start() {
-    _deadAirActive = true;
-    this.reset();
-  },
-  stop() {
-    _deadAirActive = false;
-    clearTimeout(_deadAirTimer);
-  },
-  reset() {
+  start()  { _deadAirActive = true; this.reset(); },
+  stop()   { _deadAirActive = false; clearTimeout(_deadAirTimer); },
+  reset()  {
     clearTimeout(_deadAirTimer);
     if (!_deadAirActive) return;
     _deadAirTimer = setTimeout(() => _triggerProactive(), DEAD_AIR_MS);
@@ -1104,35 +1302,37 @@ const deadAir = {
 async function _triggerProactive() {
   try {
     setStatus('Thinking...', 'thinking');
+    setCamMode('THINK');
     const res  = await fetch(PROACTIVE_URL, { method: 'POST' });
     const data = await res.json();
     const text = data?.response || '';
     if (!text) return;
-
-    const mood = 'neutral';
+    setCamMode('SPEAK');
     showBubble(text, 'Miss OG Tinz');
     setStatus('Live ✦', 'ready');
     doGesture('talk', text.length * 65);
-    await speak(text, mood);
+    await speak(text, 'neutral');
+    setCamMode('IDLE');
   } catch(err) {
     console.error('[DeadAir]', err);
     setStatus('Ready ✦', 'ready');
+    setCamMode('IDLE');
   }
-  // Restart timer after she speaks
   setTimeout(() => deadAir.reset(), 8000);
 }
+
 
 // ── API call ─────────────────────────────────────────────
 const chatHistory = [];
 
 async function sendMessage(message, displayName='Viewer') {
   if (!message.trim()) return;
-
-  // Reset dead air timer — conversation is active
   deadAir.reset();
-
   setStatus('Thinking...', 'thinking');
   sendBtn.disabled = true;
+
+  // Camera: go to THINK while processing
+  setCamMode('THINK');
   doGesture('think', 4000);
 
   chatHistory.push({ role:'user', content: message });
@@ -1149,30 +1349,38 @@ async function sendMessage(message, displayName='Viewer') {
         system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.'
       })
     });
-
     if (!res.ok) throw new Error('API error ' + res.status);
 
     const data = await res.json();
     let reply = data.reply || "Ehn ehn, I heard you!";
     const sentences = reply.match(/[^.!?]+[.!?]+/g) || [reply];
-    if (sentences.length > 2) reply = sentences.slice(0, 2).join(' ').trim();
-    const mood  = data.viewer?.mood || 'neutral';
+    if (sentences.length > 2) reply = sentences.slice(0,2).join(' ').trim();
+    const mood = data.viewer?.mood || 'neutral';
 
     chatHistory.push({ role:'assistant', content: reply });
-    if (chatHistory.length > 20) chatHistory.splice(0, 2);
+    if (chatHistory.length > 20) chatHistory.splice(0,2);
 
+    // Camera: zoom in for speaking
+    setCamMode('SPEAK');
     showBubble(reply, 'Miss OG Tinz');
     setStatus('Live ✦', 'ready');
 
     const moodGesture = {
-      happy: 'excited', excited: 'excited', surprised: 'excited',
-      neutral: 'talk', sad: 'think', angry: 'talk'
+      happy:'excited', excited:'excited', surprised:'excited',
+      neutral:'talk', sad:'think', angry:'talk'
     };
     doGesture(moodGesture[mood] || 'talk', reply.length * 65);
 
+    // Light follows mood
+    const moodLight = {
+      happy:'speak', excited:'sub', sad:'chill', angry:'raid', neutral:'speak'
+    };
+    setStageLight(moodLight[mood] || 'speak', reply.length * 65 + 2000);
+
     await speak(reply, mood);
 
-    // Reset dead air timer after she finishes speaking
+    // Camera: back to idle after speaking
+    setCamMode('IDLE');
     deadAir.reset();
 
   } catch(err) {
@@ -1181,10 +1389,12 @@ async function sendMessage(message, displayName='Viewer') {
     showBubble(fallback, 'Miss OG Tinz');
     await speak(fallback, 'neutral');
     setStatus('Ready ✦', 'ready');
+    setCamMode('IDLE');
   }
 
   sendBtn.disabled = false;
 }
+
 
 // ── UI events ────────────────────────────────────────────
 sendBtn.addEventListener('click', () => {
@@ -1193,89 +1403,73 @@ sendBtn.addEventListener('click', () => {
   chatInput.value = '';
   sendMessage(msg, 'You');
 });
-
-chatInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendBtn.click();
-});
-
+chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
 
 // ── Twitch Chat Integration ──────────────────────────────
-// Connects to Twitch IRC via tmi.js (loaded below)
-// Handles: chat messages, subs, resubs, bits, raids, gift subs
-
 function initTwitchChat() {
   if (typeof tmi === 'undefined') {
     console.warn('[Twitch] tmi.js not loaded');
     return;
   }
-
-  const client = new tmi.Client({
-    channels: [TWITCH_CHANNEL],
-  });
-
+  const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
   client.connect().then(() => {
     console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`);
     setStatus('Live ✦', 'ready');
-  }).catch(err => {
-    console.warn('[Twitch] Chat connect failed:', err);
-  });
+  }).catch(err => console.warn('[Twitch] Chat connect failed:', err));
 
-  // ── Regular chat message ──
   client.on('message', (channel, tags, message, self) => {
-    if (self) return; // ignore bot's own messages
+    if (self) return;
     const username = tags['display-name'] || tags.username || 'Someone';
-    // Don't respond to every single message — queue them
     queueTwitchMessage(username, message);
   });
 
-  // ── New subscriber ──
-  client.on('subscription', (channel, username, method, message, tags) => {
+  client.on('subscription', (channel, username) => {
+    setStageLight('sub', 6000);
+    doGesture('excited', 5000);
     const event = `${username} just subscribed! Omo thank you so much! Welcome to the family!`;
     sendMessage(event, 'StreamEvent');
   });
 
-  // ── Resubscriber ──
-  client.on('resub', (channel, username, months, message, tags, methods) => {
+  client.on('resub', (channel, username, months) => {
+    setStageLight('sub', 5000);
     const event = `${username} has been here for ${months} months! ${months >= 6 ? 'A real OG!' : 'Thank you!'} We see you!`;
     sendMessage(event, 'StreamEvent');
   });
 
-  // ── Bits/Cheer ──
   client.on('cheer', (channel, tags, message) => {
     const username = tags['display-name'] || 'Someone';
     const bits     = tags.bits || '?';
-    const event    = `${username} just sent ${bits} bits! Ayyyy thank you! The support is real!`;
+    setStageLight('bits', 5000);
+    const event = `${username} just sent ${bits} bits! Ayyyy thank you! The support is real!`;
     sendMessage(event, 'StreamEvent');
   });
 
-  // ── Raid ──
   client.on('raided', (channel, username, viewers) => {
+    setStageLight('raid', 8000);
+    doGesture('excited', 6000);
     const event = `We are being raided by ${username} with ${viewers} viewers! Welcome welcome welcome! Come in, come in!`;
     sendMessage(event, 'StreamEvent');
-    doGesture('excited', 4000);
   });
 
-  // ── Gift sub ──
-  client.on('subgift', (channel, username, streakMonths, recipient, methods, tags) => {
+  client.on('subgift', (channel, username, streakMonths, recipient) => {
+    setStageLight('sub', 4000);
+    doGesture('wave', 2500);
     const event = `${username} just gifted a sub to ${recipient}! Omo that is so generous! Big love!`;
     sendMessage(event, 'StreamEvent');
   });
 }
 
-// ── Message queue — so she doesn't get spammed ───────────
-// She responds to one chat message every ~15s max
-let _msgQueue   = [];
-let _msgBusy    = false;
+// ── Message queue ────────────────────────────────────────
+let _msgQueue = [];
+let _msgBusy  = false;
 
 function queueTwitchMessage(username, message) {
-  // Only queue messages that seem worth responding to (>3 words or a question)
-  const words = message.trim().split(' ').length;
+  const words      = message.trim().split(' ').length;
   const isQuestion = message.includes('?');
-  if (words < 2 && !isQuestion) return; // skip one-word spam
-
+  if (words < 2 && !isQuestion) return;
   _msgQueue.push({ username, message });
-  if (_msgQueue.length > 5) _msgQueue.shift(); // cap queue at 5
+  if (_msgQueue.length > 5) _msgQueue.shift();
   if (!_msgBusy) processNextMessage();
 }
 
@@ -1284,27 +1478,28 @@ async function processNextMessage() {
   _msgBusy = true;
   const { username, message } = _msgQueue.shift();
   await sendMessage(message, username);
-  // Wait before processing next to avoid rapid-fire responses
   setTimeout(processNextMessage, 15000);
 }
 
-// ── Expose for Twitch bot integration ───────────────────
-// Call window.missOgTinz.receive(username, message) from your Twitch bot
+// ── Public API ───────────────────────────────────────────
 window.missOgTinz = {
-  receive:  (username, message) => sendMessage(message, username),
-  express:  setExpression,
-  gesture:  doGesture,
+  receive:     (username, message) => sendMessage(message, username),
+  express:     setExpression,
+  gesture:     doGesture,
   speak,
   showBubble,
-  wave:     () => doGesture('wave', 2500),
+  wave:        () => doGesture('wave', 2500),
+  camMode:     setCamMode,
+  stageLight:  setStageLight,
+  pausePacing: () => { PACE.state = 'pause'; PACE.pauseTimer = 9999; },
+  resumePacing:() => { PACE.state = 'pause'; PACE.pauseTimer = 0; },
 };
 
-console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
+console.log('Miss OG Tinz ready. Phase 1 active: pacing ✓  camera ✓  body turn ✓');
 
 // ── Control Panel toggle ─────────────────────────────────
 const panelToggle  = document.getElementById('panel-toggle');
 const controlPanel = document.getElementById('control-panel');
-
 panelToggle.addEventListener('click', () => {
   const isOpen = !controlPanel.classList.contains('hidden');
   controlPanel.classList.toggle('hidden', isOpen);
@@ -1325,7 +1520,7 @@ function bindSlider(id, onChange) {
 bindSlider('posX',  v => { if (vrm) vrm.scene.position.x = v; });
 bindSlider('posY',  v => { if (vrm) vrm.scene.position.y = v; });
 bindSlider('posZ',  v => { if (vrm) vrm.scene.position.z = v; });
-bindSlider('scale', v => { if (vrm) vrm.scene.scale.set(v, v, v); });
+bindSlider('scale', v => { if (vrm) vrm.scene.scale.set(v,v,v); });
 bindSlider('camY',  v => { camera.position.y = v; camera.lookAt(0, parseFloat(document.getElementById('lookY').value), 0); });
 bindSlider('camZ',  v => { camera.position.z = v; });
 bindSlider('lookY', v => { camera.lookAt(0, v, 0); });
@@ -1346,11 +1541,11 @@ function bindColour(id, meshNames) {
   });
 }
 
-bindColour('col-skin',   ['Julie_Figure', 'Teargum']);
-bindColour('col-hair',   ['Hair_Block', 'Brow', 'Lashes']);
+bindColour('col-skin',   ['Julie_Figure','Teargum']);
+bindColour('col-hair',   ['Hair_Block','Brow','Lashes']);
 bindColour('col-top',    ['Top']);
 bindColour('col-bottom', ['Bottom']);
-bindColour('col-gold',   ['Ear_Jewel', 'Necklece']);
+bindColour('col-gold',   ['Ear_Jewel','Necklece']);
 
 document.getElementById('btn-log')?.addEventListener('click', () => {
   if (!vrm) return;
@@ -1358,7 +1553,6 @@ document.getElementById('btn-log')?.addEventListener('click', () => {
   console.log(`vrm pos (${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)})  scale ${s.x.toFixed(3)}`);
   console.log(`camera pos (${camera.position.x.toFixed(3)}, ${camera.position.y.toFixed(3)}, ${camera.position.z.toFixed(3)})`);
 });
-
 document.getElementById('btn-reset')?.addEventListener('click', () => location.reload());
 </script>
 
