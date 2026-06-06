@@ -23,8 +23,8 @@
     background: var(--deep);
     font-family: 'DM Sans', sans-serif;
     color: var(--text);
-    width: 1280px;
-    height: 720px;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
     position: relative;
   }
@@ -375,12 +375,17 @@ function setProgress(p) {
 
 // ── Three.js Scene ──────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setSize(1280, 720);
+renderer.setSize(window.innerWidth, window.innerHeight);
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(35, 1280/720, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
 camera.position.set(0, 0.8, 4);
 camera.lookAt(0, 0.8, 0);
 
@@ -399,14 +404,6 @@ scene.add(fillLight);
 const rimLight = new THREE.DirectionalLight(0xffb830, 0.4);
 rimLight.position.set(0, 2, -3);
 scene.add(rimLight);
-
-// DEBUG: test box — remove after avatar works
-const testBox = new THREE.Mesh(
-  new THREE.BoxGeometry(0.5, 0.5, 0.5),
-  new THREE.MeshStandardMaterial({ color: 0xff00ff })
-);
-testBox.position.set(0, 0.8, 0);
-scene.add(testBox);
 
 // ── Load VRM ────────────────────────────────────────────
 let vrm = null;
