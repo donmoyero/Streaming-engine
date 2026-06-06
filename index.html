@@ -784,41 +784,6 @@ function stopLipSync() {
   MOUTH_BS.forEach(s => setBS(s, 0));
 }
 
-// runLipSyncLoop removed() {
-  if (!lipSyncActive) return;
-  lipRafId = requestAnimationFrame(runLipSyncLoop);
-
-  analyser.getByteFrequencyData(freqData);
-
-  const bins   = freqData.length;
-  const lowEnd = Math.floor(bins * 0.05);
-  const midEnd = Math.floor(bins * 0.15);
-  const hiEnd  = Math.floor(bins * 0.35);
-
-  let lowVol = 0, midVol = 0, hiVol = 0;
-  for (let i = 0;      i < lowEnd; i++) lowVol += freqData[i];
-  for (let i = lowEnd; i < midEnd; i++) midVol += freqData[i];
-  for (let i = midEnd; i < hiEnd;  i++) hiVol  += freqData[i];
-
-  lowVol /= (lowEnd * 255);
-  midVol /= ((midEnd - lowEnd) * 255);
-  hiVol  /= ((hiEnd  - midEnd) * 255);
-
-  const loudness = (lowVol * 0.5 + midVol * 0.3 + hiVol * 0.2);
-  const gate     = loudness > 0.04 ? 1 : 0;
-
-  const aVal = Math.min(1, lowVol * 3.5) * gate;
-  const oVal = Math.min(1, midVol * 2.8) * gate * 0.7;
-  const iVal = Math.min(1, hiVol  * 2.2) * gate * 0.6;
-  const eVal = Math.min(1, hiVol  * 1.8) * gate * 0.5;
-  const uVal = Math.min(1, midVol * 2.0) * gate * 0.5;
-
-  setBS('A', aVal);
-  setBS('O', oVal);
-  setBS('I', iVal);
-  setBS('E', eVal);
-  setBS('U', uVal);
-}
 
 // ── Expression mapping ──────────────────────────────────
 function setExpression(mood) {
