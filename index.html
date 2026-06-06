@@ -462,8 +462,9 @@ gltfLoader.load(
       }
     });
 
-    vrm.scene.scale.set(100, 100, 100);
-    vrm.scene.position.set(0, -1.6, 0);
+    // Natural height 0.016, target 1.7 → scale ~106
+    vrm.scene.scale.set(106, 106, 106);
+    vrm.scene.position.set(0, 0, 0);
     scene.add(vrm.scene);
 
     // Debug: find where she actually is
@@ -475,9 +476,14 @@ gltfLoader.load(
     console.log("VRM size:", size);
     console.log("VRM min:", box.min, "max:", box.max);
     
-    // Frame her — bust/waist shot
-    camera.position.set(0, 1.2, 2.5);
-    camera.lookAt(0, 1.4, 0);
+    // Auto-frame camera based on actual size
+    const box2 = new THREE.Box3().setFromObject(vrm.scene);
+    const c2 = box2.getCenter(new THREE.Vector3());
+    const s2 = box2.getSize(new THREE.Vector3());
+    const dist = s2.y * 1.2;
+    camera.position.set(c2.x, c2.y + s2.y * 0.1, c2.z + dist);
+    camera.lookAt(c2.x, c2.y, c2.z);
+    console.log("Camera positioned at dist:", dist, "center:", c2);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
