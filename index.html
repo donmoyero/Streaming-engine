@@ -81,50 +81,7 @@
     z-index: 2;
   }
 
-  /* desk */
-  #desk {
-    position:absolute;
-    bottom: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 620px;
-    height: 28px;
-    background: linear-gradient(180deg, #2a1f0e 0%, #1a1208 100%);
-    border-top: 2px solid rgba(255,184,48,0.4);
-    border-radius: 4px 4px 0 0;
-    box-shadow: 0 -8px 40px rgba(255,160,30,0.2), 0 4px 20px #000;
-    z-index: 5;
-  }
-  #desk::before {
-    content:'';
-    position:absolute;
-    top:-1px; left:0; right:0; height:1px;
-    background: linear-gradient(90deg, transparent, var(--gold), transparent);
-    opacity:0.6;
-  }
-
-  /* mic prop */
-  #mic {
-    position:absolute;
-    bottom: 88px;
-    left: calc(50% + 140px);
-    width: 12px;
-    height: 70px;
-    background: linear-gradient(180deg, #333 0%, #1a1a1a 100%);
-    border-radius: 6px;
-    z-index: 5;
-  }
-  #mic::before {
-    content:'';
-    position:absolute;
-    top:-18px; left:50%;
-    transform:translateX(-50%);
-    width:22px; height:22px;
-    border-radius:50%;
-    background: radial-gradient(circle, #444, #222);
-    border:1px solid #555;
-    box-shadow: 0 0 10px rgba(255,184,48,0.3);
-  }
+  /* desk and mic are now 3D objects in Three.js — no CSS needed */
 
   /* ── Canvas ── */
   #canvas {
@@ -645,7 +602,13 @@ const floorGlow  = new THREE.PointLight(0xff6a00, 1.5, 8);
 floorGlow.position.set(0, 0.1, 0);
 scene.add(floorGlow);
 
-// ── Game Room Builder ────────────────────────────────────
+// ── Streaming Studio Builder ──────────────────────────────
+// Global refs so animation can nudge them (e.g. monitor glow on speak)
+let monitorMesh = null;
+let monitorGlowLight = null;
+let keyboardMesh = null;
+let chairMesh = null;
+
 function buildGameRoom() {
   const woodTex = (() => {
     const c = document.createElement('canvas');
@@ -928,6 +891,196 @@ function buildGameRoom() {
   }
   buildFoosball(-4.5, 0.7, -4);
 
+  // ── Streaming Desk (centre-right, angled slightly) ─────
+  // She stands in front of it; camera is behind her shoulder
+  function buildStreamingSetup() {
+    const g = new THREE.Group();
+
+    // ── Desk surface ──
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x1a1005, roughness: 0.55, metalness: 0.05 });
+    const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.07, 1.0), deskMat);
+    deskTop.position.set(0, 0, 0);
+    g.add(deskTop);
+
+    // Gold trim on front edge
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0xFFB830, metalness: 0.9, roughness: 0.15, emissive: 0xffb830, emissiveIntensity: 0.4 });
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(2.82, 0.012, 0.012), trimMat);
+    trim.position.set(0, 0.041, 0.506);
+    g.add(trim);
+
+    // Desk legs
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7, roughness: 0.3 });
+    [[-1.25, -0.42], [1.25, -0.42], [-1.25, 0.42], [1.25, 0.42]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), legMat);
+      leg.position.set(lx, -0.46, lz);
+      g.add(leg);
+    });
+
+    // ── RGB LED strip under desk edge ──
+    const ledMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 2.5, roughness: 1 });
+    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.018, 0.018), ledMat);
+    ledStrip.position.set(0, -0.048, 0.492);
+    g.add(ledStrip);
+
+    // ── Dual Monitors ──
+    const monitorBodyMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.6, metalness: 0.5 });
+    const screenMat = new THREE.MeshStandardMaterial({
+      color: 0x0a1a2e, emissive: 0x0a3a6e, emissiveIntensity: 1.2, roughness: 0.1, metalness: 0
+    });
+    monitorMesh = screenMat; // store ref for glow updates
+
+    // Main monitor (centre)
+    function buildMonitor(xOff, rotY) {
+      const mg = new THREE.Group();
+      const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.56, 0.04), monitorBodyMat);
+      mg.add(bezel);
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.49, 0.041), screenMat);
+      mg.add(screen);
+
+      // Screen content — pink/purple gradient overlay
+      const contentMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 0.25, transparent: true, opacity: 0.18, roughness: 1 });
+      const contentPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.47), contentMat);
+      contentPlane.position.z = 0.022;
+      mg.add(contentPlane);
+
+      // Monitor stand
+      const standPole = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), monitorBodyMat);
+      standPole.position.set(0, -0.39, 0);
+      mg.add(standPole);
+      const standBase = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.14), monitorBodyMat);
+      standBase.position.set(0, -0.5, 0);
+      mg.add(standBase);
+
+      mg.position.set(xOff, 0.62, -0.32);
+      mg.rotation.y = rotY;
+      g.add(mg);
+    }
+    buildMonitor(-0.35, 0.08);  // main monitor, slight angle
+    buildMonitor( 0.72, -0.35); // side monitor, more angled
+
+    // Glow from monitors onto scene
+    monitorGlowLight = new THREE.PointLight(0x0a3aff, 0.8, 3);
+    monitorGlowLight.position.set(0, 1.1, 0.1);
+    g.add(monitorGlowLight);
+
+    // ── Gaming Keyboard ──
+    const kbMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.7, metalness: 0.3 });
+    keyboardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.025, 0.2), kbMat);
+    keyboardMesh.position.set(-0.3, 0.05, 0.18);
+    g.add(keyboardMesh);
+    // RGB backlight on keyboard
+    const kbLedMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 1.5, roughness: 1, transparent: true, opacity: 0.7 });
+    const kbLed = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.003, 0.17), kbLedMat);
+    kbLed.position.set(-0.3, 0.064, 0.18);
+    g.add(kbLed);
+
+    // ── Mouse ──
+    const mouseMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.4 });
+    const mouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.028, 0.12), mouseMat);
+    mouse.position.set(0.2, 0.05, 0.2);
+    g.add(mouse);
+
+    // ── Stream Mic on arm ──
+    const micArmMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.6 });
+    // Boom arm
+    const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), micArmMat);
+    arm1.rotation.z = Math.PI / 2;
+    arm1.position.set(0.85, 0.28, -0.1);
+    g.add(arm1);
+    const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 8), micArmMat);
+    arm2.rotation.z = Math.PI / 6;
+    arm2.position.set(0.62, 0.44, -0.1);
+    g.add(arm2);
+    // Mic capsule
+    const micBodyMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
+    const micCap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.16, 12), micBodyMat);
+    micCap.position.set(0.52, 0.6, -0.1);
+    micCap.rotation.z = 0.3;
+    g.add(micCap);
+    // Pop filter
+    const popMat = new THREE.MeshStandardMaterial({ color: 0x222222, transparent: true, opacity: 0.55, roughness: 0.9, wireframe: true });
+    const pop = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.01, 16), popMat);
+    pop.position.set(0.46, 0.6, -0.1);
+    pop.rotation.z = Math.PI / 2;
+    g.add(pop);
+
+    // ── Stream light (ring light suggestion) ──
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff5e0, emissiveIntensity: 2.0, roughness: 1 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.018, 8, 24), ringMat);
+    ring.position.set(-1.1, 1.55, 0.3);
+    g.add(ring);
+    const ringLight = new THREE.PointLight(0xfff5e0, 2.5, 3.5);
+    ringLight.position.set(-1.1, 1.55, 0.3);
+    g.add(ringLight);
+
+    // ── Water bottle ──
+    const bottleMat = new THREE.MeshStandardMaterial({ color: 0x1a3a5c, transparent: true, opacity: 0.7, roughness: 0.1, metalness: 0.2 });
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.034, 0.22, 12), bottleMat);
+    bottle.position.set(0.85, 0.15, 0.28);
+    g.add(bottle);
+
+    // ── Headphones resting on desk ──
+    const hpMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0.5 });
+    const hpBand = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 18, Math.PI), hpMat);
+    hpBand.position.set(-0.85, 0.12, 0.15);
+    hpBand.rotation.x = -0.2;
+    g.add(hpBand);
+
+    // ── Chair (behind and below desk position) ──
+    const chairBodyMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.7 });
+    const chairAccMat  = new THREE.MeshStandardMaterial({ color: 0xff2d78, roughness: 0.5, emissive: 0xff1060, emissiveIntensity: 0.3 });
+    const cg = new THREE.Group();
+
+    // Seat
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.52), chairBodyMat);
+    cg.add(seat);
+    // Back rest
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.08), chairBodyMat);
+    back.position.set(0, 0.39, -0.22);
+    cg.add(back);
+    // Lumbar stripe (pink accent)
+    const lumbar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.09), chairAccMat);
+    lumbar.position.set(0, 0.1, -0.22);
+    cg.add(lumbar);
+    // Head rest
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.22, 0.08), chairBodyMat);
+    head.position.set(0, 0.82, -0.22);
+    cg.add(head);
+    // Arm rests
+    [-0.28, 0.28].forEach(ax => {
+      const ar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.3), chairBodyMat);
+      ar.position.set(ax, 0.15, -0.05);
+      cg.add(ar);
+    });
+    // Gas cylinder
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.38, 8), new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7 }));
+    cyl.position.set(0, -0.23, 0);
+    cg.add(cyl);
+    // Wheel base (star)
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2;
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.025, 0.04), chairBodyMat);
+      spoke.position.set(Math.cos(ang)*0.12, -0.44, Math.sin(ang)*0.12);
+      spoke.rotation.y = ang;
+      cg.add(spoke);
+    }
+
+    cg.position.set(0, 0.49, 0.62);
+    chairMesh = cg;
+    g.add(cg);
+
+    // Position whole setup: slightly right of centre, pushed back
+    g.position.set(0.6, 0.9, -1.6);
+    g.rotation.y = -0.12; // slight angle so it reads well in 3/4 view
+    scene.add(g);
+
+    // Point light from desk LED strip
+    const deskGlow = new THREE.PointLight(0xff2d78, 1.2, 4);
+    deskGlow.position.set(0.6, 0.88, -1.2);
+    scene.add(deskGlow);
+  }
+  buildStreamingSetup();
+
   // ── Bean bags / seating ────────────────────────────────
   function buildBeanBag(px, py, pz, color) {
     const bag = new THREE.Mesh(
@@ -973,6 +1126,10 @@ function animateRoomLights(delta) {
   roomLights.neonPink.intensity   = 3.2 + Math.sin(_roomTime * 1.7) * 0.8;
   roomLights.neonBlue.intensity   = 2.8 + Math.sin(_roomTime * 1.3 + 1) * 0.7;
   roomLights.neonPurple.intensity = 2.3 + Math.sin(_roomTime * 0.9 + 2) * 0.5;
+  // Monitor glow gentle pulse (only when not overridden by activity)
+  if (monitorGlowLight && ACTIVITY.current !== 'monitor') {
+    monitorGlowLight.intensity = 0.7 + Math.sin(_roomTime * 0.8) * 0.15;
+  }
 }
 
 // ── Camera state machine ─────────────────────────────────
@@ -1188,6 +1345,7 @@ function stopLipSync() {
   lipSyncActive = false;
   cancelAnimationFrame(lipRafId);
   MOUTH_BS.forEach(s => setBS(s, 0));
+  if (boneJaw) boneJaw.rotation.x = 0;
 }
 
 // ── Expression mapping ──────────────────────────────────
@@ -1207,6 +1365,7 @@ function setExpression(mood) {
 
 // ── Bone cache ───────────────────────────────────────────
 let boneHead=null, boneNeck=null, boneSpine=null, boneChest=null;
+let boneJaw=null;   // for mouth open/close
 let boneHips=null;
 let boneHipL=null, boneHipR=null;
 let boneLUpperLeg=null, boneRUpperLeg=null;
@@ -1225,6 +1384,14 @@ function cacheBones() {
   boneSpine       = h.getNormalizedBoneNode('spine');
   boneChest       = h.getNormalizedBoneNode('chest');
   boneHips        = h.getNormalizedBoneNode('hips');
+  // jaw bone — VRM humanoid may or may not expose this, try both names
+  boneJaw         = h.getNormalizedBoneNode('jaw') || h.getNormalizedBoneNode('lowerJaw') || null;
+  // Fallback: search by name in scene
+  if (!boneJaw) {
+    vrm.scene.traverse(n => {
+      if (!boneJaw && n.isBone && /jaw|lower.?jaw/i.test(n.name)) boneJaw = n;
+    });
+  }
   boneHipL        = h.getNormalizedBoneNode('leftUpperLeg');
   boneHipR        = h.getNormalizedBoneNode('rightUpperLeg');
   boneLUpperLeg   = h.getNormalizedBoneNode('leftUpperLeg');
@@ -1266,7 +1433,7 @@ const ACTIVITY = {
 };
 
 // Activities pool — picked randomly, no repeats back-to-back
-const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle'];
+const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor'];
 let _lastActivity = 'idle';
 
 function activityPickNext() {
@@ -1577,6 +1744,94 @@ function activityUpdate(delta) {
       // Periodic little lip pout
       const pout = Math.sin(t * 0.8) * 0.5 + 0.5;
       setBS('U', pout * 0.1);
+      break;
+    }
+
+    // ── TYPING ────────────────────────────────────────────────
+    // She leans slightly toward the desk and types — head tilted down at keyboard
+    case 'typing': {
+      const cycle = t % 1.2;
+      // Fingers tap in alternating rhythm
+      const tapL = Math.sin(t * 12.5) > 0 ? Math.abs(Math.sin(t * 12.5)) * 0.08 : 0;
+      const tapR = Math.sin(t * 12.5 + Math.PI) > 0 ? Math.abs(Math.sin(t * 12.5 + Math.PI)) * 0.08 : 0;
+
+      // Lean forward, arms extended toward desk
+      if (boneSpine) { boneSpine.rotation.x = 0.12 + Math.sin(t*0.6)*0.02; boneSpine.rotation.z = Math.sin(t*0.4)*0.02; }
+      if (boneChest) boneChest.rotation.x = 0.08;
+      if (boneHead)  { boneHead.rotation.x = 0.18; boneHead.rotation.z = Math.sin(t*0.5)*0.03; } // looking down at keyboard
+      if (boneHips)  boneHips.rotation.z = Math.sin(t*0.9)*0.04;
+
+      // Arms reach forward/down toward keyboard position
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.72; boneLUpperArm.rotation.x = 0.35 + Math.sin(t*0.7)*0.03; boneLUpperArm.rotation.y = -0.15; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.72; boneRUpperArm.rotation.x = 0.35 + Math.sin(t*0.7+0.5)*0.03; boneRUpperArm.rotation.y = 0.15; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.4; boneLLowerArm.rotation.x = 0.35; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.4; boneRLowerArm.rotation.x = 0.35; }
+
+      // Hands hover with typing motion — wrists flat, fingers tap
+      if (boneLHand) { boneLHand.rotation.z = 0.08 + tapL; boneLHand.rotation.x = -0.12 + tapL * 0.5; }
+      if (boneRHand) { boneRHand.rotation.z = -(0.08 + tapR); boneRHand.rotation.x = -0.12 + tapR * 0.5; }
+
+      // Brief glance up at monitor every few seconds
+      if (t % 4.5 < 0.8) {
+        const glance = Math.min(t % 4.5 / 0.4, 1) * (1 - Math.max(0, (t % 4.5 - 0.5) / 0.3));
+        if (boneHead) boneHead.rotation.x = 0.18 - glance * 0.2;
+        setExpression('neutral');
+      } else {
+        setExpression('neutral');
+      }
+
+      setBS('I', Math.sin(t * 0.4) * 0.06 + 0.04); // slight lip press concentration face
+      // Keyboard LED pulse when typing
+      if (keyboardMesh) {
+        const glowMat = keyboardMesh.children ? null : null; // skip if no children
+      }
+      break;
+    }
+
+    // ── MONITOR LOOK ─────────────────────────────────────────
+    // She tilts toward the monitor — head turns, leans in, reacts with expression
+    case 'monitor': {
+      const cycle = t % 7.0;
+      if (cycle < 1.0) {
+        // Turn and lean toward monitor
+        const p = cycle / 1.0;
+        if (boneSpine) { boneSpine.rotation.y = -p * 0.12; boneSpine.rotation.x = p * 0.06; }
+        if (boneHead)  { boneHead.rotation.y = -p * 0.2; boneHead.rotation.x = p * 0.08; }
+        if (boneHips)  boneHips.rotation.z = p * 0.07;
+        // Left arm points/gestures at screen
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.8 - p * 0.35; boneLUpperArm.rotation.x = p * 0.2; boneLUpperArm.rotation.y = -p * 0.18; }
+        if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.5 - p * 0.1; }
+        if (boneLHand)     { boneLHand.rotation.z = 0.25; boneLHand.rotation.x = 0.08; }
+        setExpression('neutral');
+      } else if (cycle < 5.0) {
+        // Reading the screen — subtle head movement, occasional reaction
+        const reading = cycle - 1.0;
+        if (boneSpine) { boneSpine.rotation.y = -0.12; boneSpine.rotation.x = 0.06 + Math.sin(reading * 0.4) * 0.01; }
+        if (boneHead)  { boneHead.rotation.y = -0.2 + Math.sin(reading * 0.35) * 0.04; boneHead.rotation.x = 0.08 + Math.sin(reading * 0.6) * 0.02; }
+        if (boneHips)  boneHips.rotation.z = 0.07 + Math.sin(reading * 0.5) * 0.02;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.45; boneLUpperArm.rotation.x = 0.2; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.4;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.85 + Math.sin(reading*0.8)*0.05; boneRUpperArm.rotation.x = 0.08; }
+        // React to something on screen
+        if (reading > 2.5 && reading < 3.2) {
+          setExpression('surprised');
+          setBS('O', Math.sin((reading - 2.5) / 0.7 * Math.PI) * 0.3);
+        } else {
+          setExpression('neutral');
+          setBS('O', 0);
+        }
+        // Monitor glow intensifies
+        if (monitorGlowLight) monitorGlowLight.intensity = 1.2 + Math.sin(reading * 2) * 0.3;
+      } else {
+        // Turn back to face camera
+        const p = (cycle - 5.0) / 2.0;
+        if (boneSpine) { boneSpine.rotation.y = -0.12 + p * 0.12; boneSpine.rotation.x = 0.06 - p * 0.06; }
+        if (boneHead)  { boneHead.rotation.y = -0.2 + p * 0.2; boneHead.rotation.x = 0.08 - p * 0.08; }
+        if (boneHips)  boneHips.rotation.z = 0.07 - p * 0.07;
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.45 + p * 0.45; boneLUpperArm.rotation.x = 0.2 - p * 0.12; }
+        if (monitorGlowLight) monitorGlowLight.intensity = 1.2 - p * 0.4;
+        setExpression('happy');
+      }
       break;
     }
 
@@ -2041,24 +2296,27 @@ function render() {
     if (!gestureActive()) {
 
       // ── GIRLY IDLE BASE — always running ──────────────
-      // Weight shift: hips gently rock side to side, one leg bearing weight
-      const hipSway    = Math.sin(idleTime * 1.1) * 0.07;
-      const hipBob     = Math.abs(Math.sin(idleTime * 1.1)) * 0.03;
-      const breathe    = Math.sin(idleTime * 0.8) * 0.012;
+      // S-curve weight shift: hips sway, spine counter, chest independent
+      const hipSway    = Math.sin(idleTime * 1.05) * 0.09;    // slightly slower, wider arc
+      const hipBob     = Math.abs(Math.sin(idleTime * 1.05)) * 0.035;
+      const breathe    = Math.sin(idleTime * 0.72) * 0.014;
+      const chestOpp   = Math.sin(idleTime * 1.05 + 0.6) * 0.04; // chest lags behind hips
+      const shoulderRoll = Math.sin(idleTime * 0.52) * 0.022;    // slow shoulder roll
 
       if (boneHips) {
         boneHips.rotation.z = hipSway;
         boneHips.rotation.x = hipBob * 0.5;
-        boneHips.rotation.y = Math.sin(idleTime * 0.55) * 0.04;
+        boneHips.rotation.y = Math.sin(idleTime * 0.5) * 0.05;
       }
       if (boneSpine) {
-        boneSpine.rotation.z = -hipSway * 0.6;
-        boneSpine.rotation.x = breathe + Math.sin(idleTime * 1.3) * 0.012;
-        boneSpine.rotation.y = Math.sin(idleTime * 0.55) * 0.02;
+        boneSpine.rotation.z = -hipSway * 0.65;  // tighter counter for S-curve
+        boneSpine.rotation.x = breathe + Math.sin(idleTime * 1.2) * 0.01;
+        boneSpine.rotation.y = Math.sin(idleTime * 0.5) * 0.025;
       }
       if (boneChest) {
-        boneChest.rotation.z = -hipSway * 0.3;
-        boneChest.rotation.x = breathe * 0.7;
+        boneChest.rotation.z = chestOpp;                    // chest has own delayed sway
+        boneChest.rotation.x = breathe * 0.9;
+        boneChest.rotation.y = shoulderRoll;
       }
 
       // Head — gentle tilt, nod, side glance
@@ -2106,36 +2364,36 @@ function render() {
 
       // Arms & hands — only idle pose when no activity animating them
       if (ACTIVITY.current === 'idle') {
-        // Left arm: slightly bent, hand on hip vibe
+        // Left arm: slightly bent, hand on hip vibe — shoulder follows chest sway
         if (boneLUpperArm) {
-          boneLUpperArm.rotation.z =  0.88 + Math.sin(idleTime * 0.9) * 0.06;
-          boneLUpperArm.rotation.x =  0.08 + Math.sin(idleTime * 0.6) * 0.03;
-          boneLUpperArm.rotation.y =  0.05;
+          boneLUpperArm.rotation.z =  0.9 + Math.sin(idleTime * 0.85) * 0.07 + chestOpp * 0.4;
+          boneLUpperArm.rotation.x =  0.07 + Math.sin(idleTime * 0.55) * 0.04;
+          boneLUpperArm.rotation.y =  0.04 + shoulderRoll * 0.5;
         }
         if (boneLLowerArm) {
-          boneLLowerArm.rotation.z =  0.55 + Math.sin(idleTime * 1.1) * 0.04;
-          boneLLowerArm.rotation.x = -0.05;
+          boneLLowerArm.rotation.z =  0.52 + Math.sin(idleTime * 1.0) * 0.045;
+          boneLLowerArm.rotation.x = -0.04;
         }
         // Right arm: loose at side with gentle sway
         if (boneRUpperArm) {
-          boneRUpperArm.rotation.z = -0.88 - Math.sin(idleTime * 0.9 + 0.5) * 0.06;
-          boneRUpperArm.rotation.x =  0.08 + Math.sin(idleTime * 0.6 + 0.5) * 0.03;
-          boneRUpperArm.rotation.y = -0.05;
+          boneRUpperArm.rotation.z = -0.9 - Math.sin(idleTime * 0.85 + 0.5) * 0.07 - chestOpp * 0.4;
+          boneRUpperArm.rotation.x =  0.07 + Math.sin(idleTime * 0.55 + 0.5) * 0.04;
+          boneRUpperArm.rotation.y = -0.04 - shoulderRoll * 0.5;
         }
         if (boneRLowerArm) {
-          boneRLowerArm.rotation.z = -0.55 - Math.sin(idleTime * 1.1 + 0.5) * 0.04;
-          boneRLowerArm.rotation.x = -0.05;
+          boneRLowerArm.rotation.z = -0.52 - Math.sin(idleTime * 1.0 + 0.5) * 0.045;
+          boneRLowerArm.rotation.x = -0.04;
         }
-        // Wrists / hands — soft limp feminine droop + flutter
+        // Wrists — more pronounced limp droop + fast feminine flutter
         if (boneLHand) {
-          boneLHand.rotation.z =  0.22 + Math.sin(idleTime * 1.8) * 0.06;
-          boneLHand.rotation.x =  0.10 + Math.sin(idleTime * 2.2) * 0.04;
-          boneLHand.rotation.y =  Math.sin(idleTime * 1.4) * 0.05;
+          boneLHand.rotation.z =  0.26 + Math.sin(idleTime * 2.1) * 0.08;   // flutter
+          boneLHand.rotation.x =  0.12 + Math.sin(idleTime * 2.6) * 0.05;
+          boneLHand.rotation.y =  Math.sin(idleTime * 1.6) * 0.07;          // twist
         }
         if (boneRHand) {
-          boneRHand.rotation.z = -0.22 - Math.sin(idleTime * 1.8 + 1) * 0.06;
-          boneRHand.rotation.x =  0.10 + Math.sin(idleTime * 2.2 + 1) * 0.04;
-          boneRHand.rotation.y =  Math.sin(idleTime * 1.4 + 0.8) * 0.05;
+          boneRHand.rotation.z = -0.26 - Math.sin(idleTime * 2.1 + 1.0) * 0.08;
+          boneRHand.rotation.x =  0.12 + Math.sin(idleTime * 2.6 + 1.0) * 0.05;
+          boneRHand.rotation.y =  Math.sin(idleTime * 1.6 + 0.9) * 0.07;
         }
       }
 
@@ -2300,6 +2558,8 @@ function runLipSync(text) {
       setBS('I', openness * spread);
       setBS('E', openness * spread * 0.7);
       setBS('U', openness * round * 0.6);
+      // Physical jaw bone — rotate down when mouth opens (fallback for VRM without blendshapes)
+      if (boneJaw) boneJaw.rotation.x = openness * 0.22;
     }
     tick();
   });
