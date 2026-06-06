@@ -210,7 +210,92 @@
   #status.thinking { color: var(--gold); }
   #status.error { color: #ff6060; }
 
-  /* ── Chat input (for testing) ── */
+  /* ── Topic box ── */
+  /* Bottom-left corner of the screen, always visible when active */
+  #topic-box {
+    position: absolute;
+    bottom: 110px;
+    left: 24px;
+    max-width: 320px;
+    z-index: 25;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.5s cubic-bezier(0.34,1.56,0.64,1),
+                transform 0.5s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none;
+  }
+  #topic-box.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #topic-box-inner {
+    background: rgba(10,10,15,0.88);
+    border: 1px solid rgba(255,184,48,0.25);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 12px 12px 0;
+    padding: 10px 14px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 0 24px rgba(255,184,48,0.08), 0 6px 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+    position: relative;
+  }
+  /* Shine sweep on topic change */
+  #topic-box-inner::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -60%;
+    width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    transform: skewX(-15deg);
+    transition: none;
+  }
+  #topic-box.new-topic #topic-box-inner::after {
+    animation: topicShine 0.7s ease forwards;
+  }
+  @keyframes topicShine {
+    from { left: -60%; }
+    to   { left: 140%; }
+  }
+  #topic-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Syne', sans-serif;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 5px;
+  }
+  #topic-label .tdot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 6px var(--gold);
+    animation: pulse 1.6s infinite;
+    flex-shrink: 0;
+  }
+  #topic-source-tag {
+    font-size: 8px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 1px 5px;
+    letter-spacing: 0.04em;
+    font-family: 'DM Sans', sans-serif;
+    text-transform: none;
+  }
+  #topic-title-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.35;
+  }
+
+  /* ── Chat input ── */
   #chat-input-area {
     position:absolute;
     bottom:16px;
@@ -403,6 +488,18 @@
 
 <div id="status">Initialising...</div>
 
+<!-- ── Topic box (bottom-left, auto-managed by backend) ── -->
+<div id="topic-box">
+  <div id="topic-box-inner">
+    <div id="topic-label">
+      <div class="tdot"></div>
+      Talking About
+      <span id="topic-source-tag"></span>
+    </div>
+    <div id="topic-title-text"></div>
+  </div>
+</div>
+
 <div id="chat-bubble">
   <div class="speaker">Miss OG Tinz</div>
   <div id="bubble-text">Heyyy! Welcome to the stream!</div>
@@ -436,9 +533,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 // ── Config ─────────────────────────────────────────────
-const VRM_PATH   = '/Streaming-engine/MissOgTinz_Master.vrm';
-const API_URL    = 'https://impactgrid-dijo.onrender.com/chat/message';
-const USER_ID    = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
+const VRM_PATH    = '/Streaming-engine/MissOgTinz_Master.vrm';
+const API_URL     = 'https://impactgrid-dijo.onrender.com/chat/message';
+const PROACTIVE_URL = 'https://impactgrid-dijo.onrender.com/chat/proactive';
+const TOPIC_URL   = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
+const USER_ID     = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
 
 // ── Elements ────────────────────────────────────────────
 const canvas    = document.getElementById('canvas');
@@ -449,6 +548,12 @@ const bubble    = document.getElementById('chat-bubble');
 const bubbleTxt = document.getElementById('bubble-text');
 const chatInput = document.getElementById('chat-input');
 const sendBtn   = document.getElementById('send-btn');
+
+// ── Topic box elements ───────────────────────────────────
+const topicBox      = document.getElementById('topic-box');
+const topicTitleEl  = document.getElementById('topic-title-text');
+const topicSourceEl = document.getElementById('topic-source-tag');
+let   lastTopicTitle = null;
 
 function setStatus(msg, cls='') {
   status_el.textContent = msg;
@@ -537,17 +642,14 @@ gltfLoader.load(
       const isTooth    = name === 'Teeth';
 
       if (isEye) {
-        // Build a realistic eye: white sclera base + dark iris canvas texture
         const eyeCanvas  = document.createElement('canvas');
         eyeCanvas.width  = 128;
         eyeCanvas.height = 128;
         const ctx = eyeCanvas.getContext('2d');
 
-        // Sclera (white)
         ctx.fillStyle = '#f5f0e8';
         ctx.fillRect(0, 0, 128, 128);
 
-        // Iris — warm dark brown
         const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
         grad.addColorStop(0,   '#1a0a00');
         grad.addColorStop(0.4, '#3b1f0a');
@@ -556,17 +658,14 @@ gltfLoader.load(
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
 
-        // Pupil
         ctx.fillStyle = '#050202';
         ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
 
-        // Catchlight — makes eyes look alive
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
 
-        // Limbal ring (dark edge of iris)
         ctx.strokeStyle = '#0d0500';
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
@@ -599,12 +698,8 @@ gltfLoader.load(
       }
     });
 
-    // Face camera FIRST, then measure
     VRMUtils.rotateVRM0(vrm);
 
-    // Arms are controlled by the render loop after cacheBones()
-
-    // Add at scale 1, measure, then auto-scale to 1.7m
     vrm.scene.scale.set(1, 1, 1);
     vrm.scene.position.set(0, 0, 0);
     scene.add(vrm.scene);
@@ -627,10 +722,8 @@ gltfLoader.load(
     const size = box.getSize(new THREE.Vector3());
     console.log("VRM final size:", size);
 
-    // Cache bone refs for animation loop
     cacheBones();
 
-    // Camera: show full body with slight headroom
     const fovRad = camera.fov * (Math.PI / 180);
     const camZ   = (size.y / 2) / Math.tan(fovRad / 2) * 1.18;
     const camY   = size.y * 0.5;
@@ -639,11 +732,30 @@ gltfLoader.load(
     console.log("Camera auto-fit done, camZ:", camZ.toFixed(2), "camY:", camY.toFixed(2));
 
     setProgress(100);
-    setTimeout(() => {
+    setTimeout(async () => {
       loader_el.classList.add('hidden');
-      setStatus('Ready ✦', 'ready');
-      showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
+      setStatus('Live ✦', 'ready');
       startIdleAnimation();
+
+      // ── Start topic polling immediately ──
+      startTopicPolling();
+
+      // ── Fetch a real welcome line from the backend ──
+      try {
+        const res  = await fetch(PROACTIVE_URL, { method: 'POST' });
+        const data = await res.json();
+        const text = data?.response || "Heyyy! Welcome to the stream! What's good?";
+        showBubble(text, 'Miss OG Tinz');
+        doGesture('wave', 2500);
+        await speak(text, 'happy');
+      } catch(_) {
+        showBubble("Heyyy! Welcome to the stream! What's good?", 'Miss OG Tinz');
+        doGesture('wave', 2500);
+        await speak("Heyyy! Welcome to the stream! What's good?", 'happy');
+      }
+
+      // ── Dead air timer starts after welcome finishes ──
+      deadAir.start();
     }, 400);
   },
   (progress) => {
@@ -666,31 +778,12 @@ function setBS(name, value) {
 }
 
 // ── Lip Sync ────────────────────────────────────────────
-// Drives mouth shapes in real-time from TTS audio analysis
-// Without audio: drives from text length as a fallback
-
-// ── Real-time Audio Lip Sync ────────────────────────────
-// Uses Web Audio API analyser to read actual TTS volume/frequency
-// and drive mouth blendshapes from the real audio signal.
-
-let audioCtx      = null;
-let analyser      = null;
-let freqData      = null;
 let lipSyncActive = false;
 let lipRafId      = null;
 
-// Mouth blendshape targets (VRM0 names)
 const MOUTH_BS = ['A', 'I', 'U', 'E', 'O'];
 
-function initAudio() {
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize        = 256;
-  analyser.smoothingTimeConstant = 0.6;
-  freqData = new Uint8Array(analyser.frequencyBinCount);
-  console.log('Web Audio analyser ready');
-}
+
 
 function stopLipSync() {
   lipSyncActive = false;
@@ -698,52 +791,10 @@ function stopLipSync() {
   MOUTH_BS.forEach(s => setBS(s, 0));
 }
 
-// Drive mouth from analyser each animation frame
-function runLipSyncLoop() {
-  if (!lipSyncActive) return;
-  lipRafId = requestAnimationFrame(runLipSyncLoop);
 
-  analyser.getByteFrequencyData(freqData);
-
-  // Split frequency bins into vowel bands
-  // Low  (80-300Hz)   → A (open jaw)
-  // Mid  (300-800Hz)  → O (round lips)
-  // High (800-2kHz)   → I/E (spread lips)
-  const bins   = freqData.length;
-  const lowEnd = Math.floor(bins * 0.05);   // ~0-300Hz
-  const midEnd = Math.floor(bins * 0.15);   // ~300-800Hz
-  const hiEnd  = Math.floor(bins * 0.35);   // ~800-2kHz
-
-  let lowVol = 0, midVol = 0, hiVol = 0;
-  for (let i = 0;      i < lowEnd; i++) lowVol += freqData[i];
-  for (let i = lowEnd; i < midEnd; i++) midVol += freqData[i];
-  for (let i = midEnd; i < hiEnd;  i++) hiVol  += freqData[i];
-
-  lowVol /= (lowEnd * 255);
-  midVol /= ((midEnd - lowEnd) * 255);
-  hiVol  /= ((hiEnd  - midEnd) * 255);
-
-  // Overall loudness gate — mouth stays closed in silence
-  const loudness = (lowVol * 0.5 + midVol * 0.3 + hiVol * 0.2);
-  const gate     = loudness > 0.04 ? 1 : 0;
-
-  // Map bands to vowel blendshapes with some smoothing
-  const aVal = Math.min(1, lowVol * 3.5) * gate;        // jaw open
-  const oVal = Math.min(1, midVol * 2.8) * gate * 0.7;  // round
-  const iVal = Math.min(1, hiVol  * 2.2) * gate * 0.6;  // spread
-  const eVal = Math.min(1, hiVol  * 1.8) * gate * 0.5;
-  const uVal = Math.min(1, midVol * 2.0) * gate * 0.5;
-
-  setBS('A', aVal);
-  setBS('O', oVal);
-  setBS('I', iVal);
-  setBS('E', eVal);
-  setBS('U', uVal);
-}
 
 // ── Expression mapping ──────────────────────────────────
 function setExpression(mood) {
-  // Reset all
   ['happy','angry','sad','relaxed','surprised'].forEach(e => setBS(e, 0));
   ['joy','angry','sorrow','fun','neutral'].forEach(e => setBS(e, 0));
 
@@ -769,13 +820,11 @@ function startIdleAnimation() {
 }
 
 // ── Gesture system ───────────────────────────────────────
-// Layered on top of idle — temporary pose overrides
 let gesture = null;
 let gestureTime = 0;
 let gestureDuration = 0;
 
 const GESTURES = {
-  // Thinking: one hand raised to chin
   think: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
     boneLUpperArm.rotation.z = 1.1 + Math.sin(t*0.8)*0.03;
@@ -783,7 +832,6 @@ const GESTURES = {
     boneRUpperArm.rotation.x = 0.6 + Math.sin(t*0.4)*0.02;
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.9 + Math.sin(t*0.5)*0.02);
   },
-  // Talking: both hands slightly up and gesturing
   talk: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
     const wave = Math.sin(t * 6) * 0.12;
@@ -794,7 +842,6 @@ const GESTURES = {
     if (boneLLowerArm) boneLLowerArm.rotation.z =  0.5 + Math.sin(t*5)*0.1;
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.5 + Math.sin(t*5+0.5)*0.1);
   },
-  // Wave hello: right arm waves
   wave: (t) => {
     if (!boneRUpperArm) return;
     boneRUpperArm.rotation.z = -(0.3 + Math.sin(t*8)*0.25);
@@ -802,7 +849,6 @@ const GESTURES = {
     if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.2 + Math.sin(t*8+0.5)*0.2);
     if (boneLUpperArm) boneLUpperArm.rotation.z =  1.1;
   },
-  // Excited: both arms up
   excited: (t) => {
     if (!boneLUpperArm || !boneRUpperArm) return;
     boneLUpperArm.rotation.z =  0.4 + Math.sin(t*7)*0.15;
@@ -833,7 +879,6 @@ function showBubble(text, speaker='Miss OG Tinz') {
 // ── Render loop ─────────────────────────────────────────
 const clock = new THREE.Clock();
 
-// Cache bone refs after VRM loads (set in onLoad)
 let boneHead = null, boneSpine = null, boneChest = null;
 let boneHipL = null, boneHipR = null;
 let boneLUpperArm = null, boneRUpperArm = null;
@@ -862,9 +907,7 @@ function render() {
     idleTime   += delta;
     blinkTimer += delta;
 
-    // ── Apply idle BEFORE vrm.update so normalized pose is set ──
     if (boneSpine) {
-      // Breathing: chest rises and falls
       boneSpine.rotation.x = Math.sin(idleTime * 1.3) * 0.018;
       boneSpine.rotation.z = Math.sin(idleTime * 0.7) * 0.012;
     }
@@ -872,12 +915,10 @@ function render() {
       boneChest.rotation.x = Math.sin(idleTime * 1.3 + 0.3) * 0.01;
     }
     if (boneHead) {
-      // Subtle head nod and tilt
       boneHead.rotation.x = Math.sin(idleTime * 0.9)  * 0.025;
       boneHead.rotation.y = Math.sin(idleTime * 0.4)  * 0.06;
       boneHead.rotation.z = Math.sin(idleTime * 0.55) * 0.022;
     }
-    // Arms sway gently with breathing
     if (boneLUpperArm) {
       boneLUpperArm.rotation.z =  1.1 + Math.sin(idleTime * 1.3) * 0.04;
       boneLUpperArm.rotation.x = Math.sin(idleTime * 0.6) * 0.03;
@@ -889,30 +930,25 @@ function render() {
     if (boneLLowerArm) boneLLowerArm.rotation.z =  0.3 + Math.sin(idleTime * 1.1) * 0.02;
     if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3 - Math.sin(idleTime * 1.1) * 0.02;
 
-    // Weight shift — hips rock side to side
     if (boneHipL) boneHipL.rotation.z =  Math.sin(idleTime * 0.8) * 0.04;
     if (boneHipR) boneHipR.rotation.z = -Math.sin(idleTime * 0.8) * 0.04;
 
-    // Overlay active gesture on top of idle
     if (gesture) {
       gestureTime += delta;
       if (gestureTime < gestureDuration && GESTURES[gesture]) {
         GESTURES[gesture](gestureTime);
       } else {
-        gesture = null; // gesture finished, return to idle
+        gesture = null;
       }
     }
 
-    // vrm.update processes expressions/lookAt AFTER we set bones
     vrm.update(delta);
 
-    // Eye look-around (applied via lookAt API, not bones)
     if (vrm.lookAt) {
-      vrm.lookAt.yaw   = Math.sin(idleTime * 0.28) * 12;  // degrees
+      vrm.lookAt.yaw   = Math.sin(idleTime * 0.28) * 12;
       vrm.lookAt.pitch = Math.sin(idleTime * 0.19) * 6 - 2;
     }
 
-    // Auto blink
     if (blinkTimer > nextBlink) {
       blinkTimer = 0;
       nextBlink  = 2.5 + Math.random() * 3;
@@ -930,92 +966,47 @@ function doBlink() {
 
 render();
 
-// ── TTS via Web Speech API ──────────────────────────────
+// ── Text-driven mouth animation (no audio/TTS needed) ────
 async function speak(text, mood='neutral') {
-  // Init AudioContext on first speak (requires user gesture — already satisfied by Send click)
-  initAudio();
-  if (audioCtx.state === 'suspended') await audioCtx.resume();
-
   setExpression(mood);
 
-  // Web Speech API doesn't expose an audio node directly.
-  // Workaround: use SpeechSynthesis to generate audio, capture it via
-  // MediaStreamDestination, then pipe through our analyser.
   return new Promise((resolve) => {
-    if (!window.speechSynthesis) { resolve(); return; }
-    window.speechSynthesis.cancel();
-
-    const utter   = new SpeechSynthesisUtterance(text);
-    utter.rate    = 1.05;
-    utter.pitch   = 1.1;
-    utter.volume  = 1.0;
-
-    const voices  = window.speechSynthesis.getVoices();
-    const female  = voices.find(v =>
-      v.name.toLowerCase().includes('female') ||
-      v.name.includes('Zira') || v.name.includes('Hazel') ||
-      v.name.includes('Susan') || v.name.includes('Google UK English Female')
-    );
-    if (female) utter.voice = female;
-
-    // Try to hook audio through analyser via MediaStreamDestination
-    let mediaNode = null;
-    let streamDest = null;
-    let audioEl = null;
-    let analyserConnected = false;
-
-    try {
-      // Create a silent oscillator at 0 gain — this primes the AudioContext
-      // Some browsers allow MediaStreamDestination routing
-      streamDest = audioCtx.createMediaStreamDestination();
-      analyser.connect(audioCtx.destination);
-
-      // Create hidden audio element that plays TTS output
-      // Chrome: speechSynthesis speaks through system audio, not Web Audio graph
-      // We capture system output via getDisplayMedia audio or use volume-polling fallback
-      analyserConnected = false;
-    } catch(e) {
-      console.log('Direct audio routing not available, using volume estimation');
-    }
-
-    // ── Volume estimation fallback ──
-    // Since browsers isolate speechSynthesis audio from Web Audio graph,
-    // we simulate the analyser data from text characteristics.
-    // This gives realistic mouth movement synced to speech rhythm.
+    stopLipSync();
 
     lipSyncActive = true;
     const startTime = Date.now();
     const words     = text.split(' ');
-    let wordIndex   = 0;
-    const msPerWord = (text.length * 65) / words.length;
+    const msPerWord = (text.length * 62) / Math.max(words.length, 1);
+    const totalMs   = words.length * msPerWord;
 
-    // Build a phoneme-like amplitude envelope from the text
-    // Vowels = open mouth, consonants = less open
     const VOWELS = new Set(['a','e','i','o','u']);
 
     function simulateAnalyser() {
       if (!lipSyncActive) return;
       lipRafId = requestAnimationFrame(simulateAnalyser);
 
-      const elapsed  = Date.now() - startTime;
-      wordIndex       = Math.floor(elapsed / msPerWord);
-      if (wordIndex >= words.length) { stopLipSync(); return; }
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= totalMs) {
+        stopLipSync();
+        setExpression('neutral');
+        resolve();
+        return;
+      }
 
+      const wordIndex = Math.floor(elapsed / msPerWord);
       const word      = (words[wordIndex] || '').toLowerCase();
       const charPos   = Math.floor((elapsed % msPerWord) / msPerWord * word.length);
       const char      = word[charPos] || '';
       const isVowel   = VOWELS.has(char);
       const isSilence = char === '' || char === ' ';
 
-      // Natural speech rhythm — oscillate within the word
-      const rhythm    = Math.abs(Math.sin(elapsed * 0.018)) * 0.4 + 0.3;
-      const vowelBoost= isVowel ? 0.5 : 0.0;
-      const base      = isSilence ? 0 : rhythm + vowelBoost;
+      const rhythm     = Math.abs(Math.sin(elapsed * 0.018)) * 0.4 + 0.3;
+      const vowelBoost = isVowel ? 0.5 : 0.0;
+      const base       = isSilence ? 0 : rhythm + vowelBoost;
 
-      // Distribute across vowel blendshapes naturally
-      const openness  = Math.min(1, base);
-      const spread    = isVowel && (char === 'i' || char === 'e') ? 0.6 : 0.1;
-      const round     = isVowel && (char === 'o' || char === 'u') ? 0.5 : 0.1;
+      const openness = Math.min(1, base);
+      const spread   = isVowel && (char === 'i' || char === 'e') ? 0.6 : 0.1;
+      const round    = isVowel && (char === 'o' || char === 'u') ? 0.5 : 0.1;
 
       setBS('A', openness * 0.9);
       setBS('O', openness * round);
@@ -1025,12 +1016,91 @@ async function speak(text, mood='neutral') {
     }
 
     simulateAnalyser();
-
-    utter.onend   = () => { stopLipSync(); setExpression('neutral'); resolve(); };
-    utter.onerror = () => { stopLipSync(); setExpression('neutral'); resolve(); };
-
-    window.speechSynthesis.speak(utter);
   });
+}
+
+// ── Topic box ────────────────────────────────────────────
+// Polls /chat/topic/current every 6s, shows animated card
+// when she switches topic. She manages herself — we just display.
+
+function updateTopicBox(data) {
+  if (!data.active) {
+    topicBox.classList.remove('visible');
+    lastTopicTitle = null;
+    return;
+  }
+
+  const isNew = data.title !== lastTopicTitle;
+
+  topicTitleEl.textContent  = data.title  || '';
+  topicSourceEl.textContent = data.source || '';
+  topicBox.classList.add('visible');
+
+  if (isNew) {
+    lastTopicTitle = data.title;
+    // Trigger shine animation
+    topicBox.classList.remove('new-topic');
+    void topicBox.offsetWidth; // reflow
+    topicBox.classList.add('new-topic');
+    setTimeout(() => topicBox.classList.remove('new-topic'), 900);
+  }
+}
+
+function startTopicPolling() {
+  async function poll() {
+    try {
+      const res  = await fetch(TOPIC_URL);
+      const data = await res.json();
+      updateTopicBox(data);
+    } catch (_) { /* network blip, keep showing last state */ }
+  }
+  poll(); // immediate first call
+  setInterval(poll, 6000);
+}
+
+// ── Dead air timer ───────────────────────────────────────
+// After 30s of silence, she speaks unprompted via /chat/proactive.
+// Resets every time she or the viewer sends a message / TTS plays.
+
+let _deadAirTimer  = null;
+let _deadAirActive = false;
+const DEAD_AIR_MS  = 30000; // 30 seconds
+
+const deadAir = {
+  start() {
+    _deadAirActive = true;
+    this.reset();
+  },
+  stop() {
+    _deadAirActive = false;
+    clearTimeout(_deadAirTimer);
+  },
+  reset() {
+    clearTimeout(_deadAirTimer);
+    if (!_deadAirActive) return;
+    _deadAirTimer = setTimeout(() => _triggerProactive(), DEAD_AIR_MS);
+  }
+};
+
+async function _triggerProactive() {
+  try {
+    setStatus('Thinking...', 'thinking');
+    const res  = await fetch(PROACTIVE_URL, { method: 'POST' });
+    const data = await res.json();
+    const text = data?.response || '';
+    if (!text) return;
+
+    const mood = 'neutral';
+    showBubble(text, 'Miss OG Tinz');
+    setStatus('Live ✦', 'ready');
+    doGesture('talk', text.length * 65);
+    await speak(text, mood);
+  } catch(err) {
+    console.error('[DeadAir]', err);
+    setStatus('Ready ✦', 'ready');
+  }
+  // Restart timer after she speaks
+  setTimeout(() => deadAir.reset(), 8000);
 }
 
 // ── API call ─────────────────────────────────────────────
@@ -1038,6 +1108,9 @@ const chatHistory = [];
 
 async function sendMessage(message, displayName='Viewer') {
   if (!message.trim()) return;
+
+  // Reset dead air timer — conversation is active
+  deadAir.reset();
 
   setStatus('Thinking...', 'thinking');
   sendBtn.disabled = true;
@@ -1062,7 +1135,6 @@ async function sendMessage(message, displayName='Viewer') {
 
     const data = await res.json();
     let reply = data.reply || "Ehn ehn, I heard you!";
-    // Trim to max 2 sentences client-side as safety net
     const sentences = reply.match(/[^.!?]+[.!?]+/g) || [reply];
     if (sentences.length > 2) reply = sentences.slice(0, 2).join(' ').trim();
     const mood  = data.viewer?.mood || 'neutral';
@@ -1073,7 +1145,6 @@ async function sendMessage(message, displayName='Viewer') {
     showBubble(reply, 'Miss OG Tinz');
     setStatus('Live ✦', 'ready');
 
-    // Pick gesture based on mood
     const moodGesture = {
       happy: 'excited', excited: 'excited', surprised: 'excited',
       neutral: 'talk', sad: 'think', angry: 'talk'
@@ -1082,9 +1153,11 @@ async function sendMessage(message, displayName='Viewer') {
 
     await speak(reply, mood);
 
+    // Reset dead air timer after she finishes speaking
+    deadAir.reset();
+
   } catch(err) {
     console.error(err);
-    // Fallback if no backend
     const fallback = "Oya wait, my brain is loading... try again!";
     showBubble(fallback, 'Miss OG Tinz');
     await speak(fallback, 'neutral');
@@ -1106,8 +1179,7 @@ chatInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') sendBtn.click();
 });
 
-// Load voices on user interaction (browser requirement)
-window.speechSynthesis.onvoiceschanged = () => {};
+
 
 // ── Expose for Twitch bot integration ───────────────────
 // Call window.missOgTinz.receive(username, message) from your Twitch bot
