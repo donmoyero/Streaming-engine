@@ -546,17 +546,7 @@ gltfLoader.load(
     // Face camera FIRST, then measure
     VRMUtils.rotateVRM0(vrm);
 
-    // Fold arms down from T-pose
-    if (vrm.humanoid) {
-      const lShoulder = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
-      const rShoulder = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
-      const lElbow    = vrm.humanoid.getNormalizedBoneNode('leftLowerArm');
-      const rElbow    = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
-      if (lShoulder) lShoulder.rotation.z =  1.1;
-      if (rShoulder) rShoulder.rotation.z = -1.1;
-      if (lElbow)    lElbow.rotation.z    =  0.3;
-      if (rElbow)    rElbow.rotation.z    = -0.3;
-    }
+    // Arms are controlled by the render loop after cacheBones()
 
     // Add at scale 1, measure, then auto-scale to 1.7m
     vrm.scene.scale.set(1, 1, 1);
@@ -580,6 +570,9 @@ gltfLoader.load(
     const box  = new THREE.Box3().setFromObject(vrm.scene);
     const size = box.getSize(new THREE.Vector3());
     console.log("VRM final size:", size);
+
+    // Cache bone refs for animation loop
+    cacheBones();
 
     // Camera: show full body with slight headroom
     const fovRad = camera.fov * (Math.PI / 180);
@@ -695,44 +688,79 @@ function showBubble(text, speaker='Miss OG Tinz') {
 // ── Render loop ─────────────────────────────────────────
 const clock = new THREE.Clock();
 
+// Cache bone refs after VRM loads (set in onLoad)
+let boneHead = null, boneSpine = null, boneChest = null;
+let boneHipL = null, boneHipR = null;
+let boneLUpperArm = null, boneRUpperArm = null;
+let boneLLowerArm = null, boneRLowerArm = null;
+
+function cacheBones() {
+  if (!vrm || !vrm.humanoid) return;
+  const h = vrm.humanoid;
+  boneHead      = h.getNormalizedBoneNode('head');
+  boneSpine     = h.getNormalizedBoneNode('spine');
+  boneChest     = h.getNormalizedBoneNode('chest');
+  boneHipL      = h.getNormalizedBoneNode('leftUpperLeg');
+  boneHipR      = h.getNormalizedBoneNode('rightUpperLeg');
+  boneLUpperArm = h.getNormalizedBoneNode('leftUpperArm');
+  boneRUpperArm = h.getNormalizedBoneNode('rightUpperArm');
+  boneLLowerArm = h.getNormalizedBoneNode('leftLowerArm');
+  boneRLowerArm = h.getNormalizedBoneNode('rightLowerArm');
+  console.log('Bones cached:', {boneHead, boneSpine, boneLUpperArm, boneRUpperArm});
+}
+
 function render() {
   requestAnimationFrame(render);
   const delta = clock.getDelta();
 
   if (vrm) {
-    vrm.update(delta);
-
-    idleTime += delta;
+    idleTime   += delta;
     blinkTimer += delta;
 
-    // Breathing — subtle head bob
-    if (vrm.humanoid) {
-      const breathe = Math.sin(idleTime * 1.2) * 0.004;
-      const sway    = Math.sin(idleTime * 0.5) * 0.003;
-      const head = vrm.humanoid.getNormalizedBoneNode('head');
-      if (head) {
-        head.rotation.z = sway;
-        head.rotation.x = breathe;
-      }
-      const spine = vrm.humanoid.getNormalizedBoneNode('spine');
-      if (spine) {
-        spine.rotation.z = Math.sin(idleTime * 1.2) * 0.008;
-      }
+    // ── Apply idle BEFORE vrm.update so normalized pose is set ──
+    if (boneSpine) {
+      // Breathing: chest rises and falls
+      boneSpine.rotation.x = Math.sin(idleTime * 1.3) * 0.018;
+      boneSpine.rotation.z = Math.sin(idleTime * 0.7) * 0.012;
     }
+    if (boneChest) {
+      boneChest.rotation.x = Math.sin(idleTime * 1.3 + 0.3) * 0.01;
+    }
+    if (boneHead) {
+      // Subtle head nod and tilt
+      boneHead.rotation.x = Math.sin(idleTime * 0.9)  * 0.025;
+      boneHead.rotation.y = Math.sin(idleTime * 0.4)  * 0.06;
+      boneHead.rotation.z = Math.sin(idleTime * 0.55) * 0.022;
+    }
+    // Arms sway gently with breathing
+    if (boneLUpperArm) {
+      boneLUpperArm.rotation.z =  1.1 + Math.sin(idleTime * 1.3) * 0.04;
+      boneLUpperArm.rotation.x = Math.sin(idleTime * 0.6) * 0.03;
+    }
+    if (boneRUpperArm) {
+      boneRUpperArm.rotation.z = -1.1 - Math.sin(idleTime * 1.3) * 0.04;
+      boneRUpperArm.rotation.x = Math.sin(idleTime * 0.6 + 0.5) * 0.03;
+    }
+    if (boneLLowerArm) boneLLowerArm.rotation.z =  0.3 + Math.sin(idleTime * 1.1) * 0.02;
+    if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3 - Math.sin(idleTime * 1.1) * 0.02;
 
-    // Natural eye look around
+    // Weight shift — hips rock side to side
+    if (boneHipL) boneHipL.rotation.z =  Math.sin(idleTime * 0.8) * 0.04;
+    if (boneHipR) boneHipR.rotation.z = -Math.sin(idleTime * 0.8) * 0.04;
+
+    // vrm.update processes expressions/lookAt AFTER we set bones
+    vrm.update(delta);
+
+    // Eye look-around (applied via lookAt API, not bones)
     if (vrm.lookAt) {
-      const eyeX = Math.sin(idleTime * 0.3) * 0.15;
-      const eyeY = Math.sin(idleTime * 0.2) * 0.08 + 0.05;
-      vrm.lookAt.target = null;
-      vrm.lookAt.yaw   = eyeX;
-      vrm.lookAt.pitch = eyeY;
+      vrm.lookAt.yaw   = Math.sin(idleTime * 0.28) * 12;  // degrees
+      vrm.lookAt.pitch = Math.sin(idleTime * 0.19) * 6 - 2;
     }
 
     // Auto blink
     if (blinkTimer > nextBlink) {
       blinkTimer = 0;
-      nextBlink = 2.5 + Math.random() * 3;
+      nextBlink  = 2.5 + Math.random() * 3;
       doBlink();
     }
   }
