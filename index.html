@@ -557,15 +557,10 @@ gltfLoader.load(
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    console.log("VRM loaded! Children:", vrm.scene.children.length);
-    console.log("VRM center:", center);
-    console.log("VRM size:", size);
-    console.log("VRM min:", box.min, "max:", box.max);
     
-    // Fixed camera — worked when she was visible
-    camera.position.set(0, 84, 180);
-    camera.lookAt(0, 84, 0);
-    console.log("Camera set to fixed position");
+    // Point camera at her exact center
+    camera.position.set(0, 92, 260);
+    camera.lookAt(0, 92, 0);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
