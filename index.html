@@ -424,19 +424,19 @@ gltfLoader.load(
 
     // Colour map — solid colours per mesh until textures are baked
     const MESH_COLOURS = {
-      Julie_Figure: 0xb5743a,  // medium brown skin
-      Brow:         0x1a1a1a,  // dark eyebrows
-      Teargum:      0xb5743a,  // skin
+      Julie_Figure: 0xc68642,  // medium brown skin
+      Brow:         0x1a0a00,  // dark brows
+      Teargum:      0xc68642,  // skin
       Ear_Jewel:    0xFFD700,  // gold earring
-      Eye_R:        0x2c1810,  // dark brown eye
-      Eyes_L:       0x2c1810,  // dark brown eye
-      Lashes:       0x0a0a0a,  // black lashes
-      Teeth:        0xf5f0e8,  // off-white teeth
-      Hair_Block:   0x0a0a0a,  // black hair
-      Top:          0xff69b4,  // pink top
+      Eye_R:        0x1a0a00,  // dark eye
+      Eyes_L:       0x1a0a00,  // dark eye
+      Lashes:       0x050505,  // black lashes
+      Teeth:        0xfffaf0,  // white teeth
+      Hair_Block:   0x0d0d0d,  // black hair
+      Top:          0xff69b4,  // hot pink top
       Bottom:       0xff1493,  // deep pink bottom
-      Shoe_R:       0x1a1a1a,  // black shoes
-      Shoe_L:       0x1a1a1a,  // black shoes
+      Shoe_R:       0x111111,  // black shoes
+      Shoe_L:       0x111111,  // black shoes
       Necklece:     0xFFD700,  // gold necklace
     };
 
@@ -453,17 +453,17 @@ gltfLoader.load(
             mat.opacity = 1;
             mat.depthWrite = true;
             mat.side = THREE.FrontSide;
-            mat.roughness = 0.7;
-            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.8 : 0.0;
+            mat.roughness = obj.name === "Julie_Figure" || obj.name === "Teargum" ? 0.5 : 0.7;
+            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.9 : 0.0;
+            mat.envMapIntensity = 0.5;
             mat.needsUpdate = true;
           }
         });
       }
     });
 
-    // Scale her up — she exported at 0.015 units, needs to be ~1.7 units tall
     vrm.scene.scale.set(100, 100, 100);
-    vrm.scene.position.set(0, -1.0, 0);
+    vrm.scene.position.set(0, -1.6, 0);
     scene.add(vrm.scene);
 
     // Debug: find where she actually is
@@ -475,9 +475,9 @@ gltfLoader.load(
     console.log("VRM size:", size);
     console.log("VRM min:", box.min, "max:", box.max);
     
-    // Point camera at her
-    camera.position.set(0, 0.8, 4);
-    camera.lookAt(0, 0.8, 0);
+    // Frame her — bust/waist shot
+    camera.position.set(0, 1.2, 2.5);
+    camera.lookAt(0, 1.4, 0);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
