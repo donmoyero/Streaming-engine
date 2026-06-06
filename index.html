@@ -312,7 +312,7 @@
     font-size:12px;
     transition: transform 0.3s;
   }
-  #control-panel.hidden { transform: translateY(-50%) translateX(220px); }
+  #control-panel.hidden { transform: translateY(-50%) translateX(225px); }
   #panel-toggle {
     position:fixed;
     top:50%;
@@ -332,7 +332,7 @@
     z-index:51;
     transition: right 0.3s;
   }
-  #panel-toggle.open { right: 220px; }
+  #panel-toggle.open { right: 221px; }
   .ctrl-label {
     color:var(--gold);
     font-family:'Syne',sans-serif;
@@ -562,14 +562,10 @@ gltfLoader.load(
     console.log("VRM size:", size);
     console.log("VRM min:", box.min, "max:", box.max);
     
-    // Auto-frame camera based on actual size
-    const box2 = new THREE.Box3().setFromObject(vrm.scene);
-    const c2 = box2.getCenter(new THREE.Vector3());
-    const s2 = box2.getSize(new THREE.Vector3());
-    const dist = s2.y * 1.2;
-    camera.position.set(c2.x, c2.y + s2.y * 0.1, c2.z + dist);
-    camera.lookAt(c2.x, c2.y, c2.z);
-    console.log("Camera positioned at dist:", dist, "center:", c2);
+    // Fixed camera — worked when she was visible
+    camera.position.set(0, 84, 180);
+    camera.lookAt(0, 84, 0);
+    console.log("Camera set to fixed position");
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
@@ -848,16 +844,16 @@ console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to fe
 <div id="control-panel" class="hidden">
   <div class="ctrl-label">Position</div>
   <div class="ctrl-row"><label>X</label><input type="range" id="posX" min="-5" max="5" step="0.05" value="0"><span id="posX-val">0</span></div>
-  <div class="ctrl-row"><label>Y</label><input type="range" id="posY" min="-5" max="5" step="0.05" value="0"><span id="posY-val">0</span></div>
+  <div class="ctrl-row"><label>Y</label><input type="range" id="posY" min="-200" max="200" step="1" value="0"><span id="posY-val">0</span></div>
   <div class="ctrl-row"><label>Z</label><input type="range" id="posZ" min="-5" max="5" step="0.05" value="0"><span id="posZ-val">0</span></div>
 
   <div class="ctrl-label">Scale</div>
   <div class="ctrl-row"><label>S</label><input type="range" id="scale" min="10" max="300" step="1" value="106"><span id="scale-val">106</span></div>
 
   <div class="ctrl-label">Camera</div>
-  <div class="ctrl-row"><label>Y</label><input type="range" id="camY" min="-5" max="10" step="0.05" value="1.2"><span id="camY-val">1.2</span></div>
-  <div class="ctrl-row"><label>Z</label><input type="range" id="camZ" min="0.5" max="20" step="0.1" value="4"><span id="camZ-val">4</span></div>
-  <div class="ctrl-row"><label>LY</label><input type="range" id="lookY" min="-5" max="10" step="0.05" value="1.4"><span id="lookY-val">1.4</span></div>
+  <div class="ctrl-row"><label>Y</label><input type="range" id="camY" min="-200" max="200" step="1" value="84"><span id="camY-val">84</span></div>
+  <div class="ctrl-row"><label>Z</label><input type="range" id="camZ" min="10" max="500" step="1" value="180"><span id="camZ-val">180</span></div>
+  <div class="ctrl-row"><label>LY</label><input type="range" id="lookY" min="-200" max="200" step="1" value="84"><span id="lookY-val">84</span></div>
 
   <hr class="ctrl-sep">
   <div class="ctrl-label">Colours</div>
