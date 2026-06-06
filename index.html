@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Miss OG Tinz — Live</title>
+<link rel="icon" href="data:,">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -1169,53 +1170,6 @@ function setCamMode(mode) {
 // ── VRM world position & facing ──────────────────────────
 // We track where she is in world space and which way she faces.
 const vrmWorld = { x: 0, y: 0, z: 0, facingY: 0 }; // facingY = world Y-rotation she faces
-
-function updateCamera(delta) {
-  if (!vrm) return;
-
-  // Read her actual world position
-  const wx = vrm.scene.position.x;
-  const wy = vrm.scene.position.y;
-  const wz = vrm.scene.position.z;
-
-  // Her facing direction in world space
-  // VRM_BASE_ROT_Y is set by rotateVRM0 (usually 0 after rotation).
-  // vrm.scene.rotation.y is the total world Y rotation.
-  const facing = vrm.scene.rotation.y; // radians — direction she faces
-
-  // Camera sits in front of her:
-  // "in front" = facing direction → offset by -distance along that direction
-  // i.e. camera is at: pos + (sin(facing), 0, cos(facing)) * dist
-  const dist = CAM_DIST[camMode] || CAM_DIST.IDLE;
-  const camOffX = Math.sin(facing) * dist;
-  const camOffZ = Math.cos(facing) * dist;
-
-  // Height: head-level + slight upward angle for cinematic framing
-  const modelHeight = vrm.scene.scale.y * 1.7; // approximate full height in world units
-  const headY   = wy + modelHeight * 0.88;
-  const camY    = wy + modelHeight * (camMode === 'SPEAK' ? 0.88 : camMode === 'THINK' ? 0.72 : 0.68);
-  const lookY   = wy + modelHeight * (camMode === 'SPEAK' ? 0.82 : 0.60);
-
-  // Target camera world position (in front of her face)
-  camWant.x    = wx + camOffX;
-  camWant.y    = camY;
-  camWant.z    = wz + camOffZ;
-  camWant.lookX = wx;
-  camWant.lookY = lookY;
-  camWant.lookZ = wz;
-
-  // Smooth lerp
-  const k = Math.min(1, CAM_LERP * (1 + delta * 30));
-  camSmooth.x    += (camWant.x    - camSmooth.x)    * k;
-  camSmooth.y    += (camWant.y    - camSmooth.y)    * k;
-  camSmooth.z    += (camWant.z    - camSmooth.z)    * k;
-  camSmooth.lookX += (camWant.lookX - camSmooth.lookX) * k * 1.2;
-  camSmooth.lookY += (camWant.lookY - camSmooth.lookY) * k * 1.2;
-  camSmooth.lookZ += (camWant.lookZ - camSmooth.lookZ) * k * 1.2;
-
-  camera.position.set(camSmooth.x, camSmooth.y, camSmooth.z);
-  camera.lookAt(camSmooth.lookX, camSmooth.lookY, camSmooth.lookZ);
-}
 
 // ── VRM Walking / Waypoint System ────────────────────────
 // She walks to named locations in the room. Her body rotates
