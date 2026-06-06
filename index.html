@@ -294,92 +294,6 @@
     transition:width 0.3s;
     border-radius:2px;
   }
-
-  /* ── Control Panel ── */
-  #control-panel {
-    position:fixed;
-    top:50%;
-    right:0;
-    transform:translateY(-50%);
-    background:rgba(10,10,15,0.92);
-    border:1px solid var(--border);
-    border-right:none;
-    border-radius:12px 0 0 12px;
-    padding:14px;
-    width:220px;
-    z-index:50;
-    backdrop-filter:blur(12px);
-    font-size:12px;
-    transition: transform 0.3s;
-  }
-  #control-panel.hidden { transform: translateY(-50%) translateX(225px); }
-  #panel-toggle {
-    position:fixed;
-    top:50%;
-    right:0;
-    transform:translateY(-50%);
-    background:var(--gold);
-    color:#000;
-    border:none;
-    border-radius:8px 0 0 8px;
-    padding:10px 6px;
-    cursor:pointer;
-    font-family:'Syne',sans-serif;
-    font-size:10px;
-    font-weight:700;
-    writing-mode:vertical-rl;
-    letter-spacing:0.1em;
-    z-index:51;
-    transition: right 0.3s;
-  }
-  #panel-toggle.open { right: 221px; }
-  .ctrl-label {
-    color:var(--gold);
-    font-family:'Syne',sans-serif;
-    font-weight:700;
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    margin:10px 0 4px;
-    font-size:10px;
-  }
-  .ctrl-label:first-child { margin-top:0; }
-  .ctrl-row {
-    display:flex;
-    align-items:center;
-    gap:8px;
-    margin-bottom:6px;
-  }
-  .ctrl-row label { color:var(--muted); width:20px; font-size:11px; }
-  .ctrl-row input[type=range] {
-    flex:1;
-    accent-color:var(--gold);
-    height:3px;
-  }
-  .ctrl-row span { color:var(--text); width:36px; font-size:10px; text-align:right; }
-  .ctrl-row input[type=color] {
-    width:32px; height:22px;
-    border:1px solid var(--border);
-    border-radius:4px;
-    background:none;
-    cursor:pointer;
-    padding:1px;
-  }
-  .ctrl-sep { border:none; border-top:1px solid var(--border); margin:10px 0; }
-  .ctrl-btn {
-    width:100%;
-    background:rgba(255,184,48,0.12);
-    border:1px solid var(--border);
-    border-radius:6px;
-    color:var(--gold);
-    font-family:'Syne',sans-serif;
-    font-size:10px;
-    font-weight:700;
-    letter-spacing:0.08em;
-    padding:6px;
-    cursor:pointer;
-    margin-top:4px;
-  }
-  .ctrl-btn:hover { background:rgba(255,184,48,0.25); }
 </style>
 </head>
 <body>
@@ -510,19 +424,19 @@ gltfLoader.load(
 
     // Colour map — solid colours per mesh until textures are baked
     const MESH_COLOURS = {
-      Julie_Figure: 0xc68642,  // medium brown skin
-      Brow:         0x1a0a00,  // dark brows
-      Teargum:      0xc68642,  // skin
+      Julie_Figure: 0xb5743a,  // medium brown skin
+      Brow:         0x1a1a1a,  // dark eyebrows
+      Teargum:      0xb5743a,  // skin
       Ear_Jewel:    0xFFD700,  // gold earring
-      Eye_R:        0x1a0a00,  // dark eye
-      Eyes_L:       0x1a0a00,  // dark eye
-      Lashes:       0x050505,  // black lashes
-      Teeth:        0xfffaf0,  // white teeth
-      Hair_Block:   0x0d0d0d,  // black hair
-      Top:          0xff69b4,  // hot pink top
+      Eye_R:        0x2c1810,  // dark brown eye
+      Eyes_L:       0x2c1810,  // dark brown eye
+      Lashes:       0x0a0a0a,  // black lashes
+      Teeth:        0xf5f0e8,  // off-white teeth
+      Hair_Block:   0x0a0a0a,  // black hair
+      Top:          0xff69b4,  // pink top
       Bottom:       0xff1493,  // deep pink bottom
-      Shoe_R:       0x111111,  // black shoes
-      Shoe_L:       0x111111,  // black shoes
+      Shoe_R:       0x1a1a1a,  // black shoes
+      Shoe_L:       0x1a1a1a,  // black shoes
       Necklece:     0xFFD700,  // gold necklace
     };
 
@@ -539,28 +453,30 @@ gltfLoader.load(
             mat.opacity = 1;
             mat.depthWrite = true;
             mat.side = THREE.FrontSide;
-            mat.roughness = obj.name === "Julie_Figure" || obj.name === "Teargum" ? 0.5 : 0.7;
-            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.9 : 0.0;
-            mat.envMapIntensity = 0.5;
+            mat.roughness = 0.7;
+            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.8 : 0.0;
             mat.needsUpdate = true;
           }
         });
       }
     });
 
-    // Natural height 0.016, target 1.7 → scale ~106
-    vrm.scene.scale.set(106, 106, 106);
-    vrm.scene.position.set(0, 0, 0);
+    vrm.scene.position.set(0, -1.0, 0);
+    vrm.scene.scale.set(1, 1, 1);
     scene.add(vrm.scene);
 
     // Debug: find where she actually is
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    console.log("VRM loaded! Children:", vrm.scene.children.length);
+    console.log("VRM center:", center);
+    console.log("VRM size:", size);
+    console.log("VRM min:", box.min, "max:", box.max);
     
-    // Point camera at her exact center
-    camera.position.set(0, 92, 260);
-    camera.lookAt(0, 92, 0);
+    // Point camera directly at her center
+    camera.position.set(center.x, center.y, center.z + 3);
+    camera.lookAt(center);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
@@ -834,34 +750,5 @@ window.missOgTinz = {
 
 console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
 </script>
-
-<button id="panel-toggle">CONTROLS</button>
-<div id="control-panel" class="hidden">
-  <div class="ctrl-label">Position</div>
-  <div class="ctrl-row"><label>X</label><input type="range" id="posX" min="-5" max="5" step="0.05" value="0"><span id="posX-val">0</span></div>
-  <div class="ctrl-row"><label>Y</label><input type="range" id="posY" min="-200" max="200" step="1" value="0"><span id="posY-val">0</span></div>
-  <div class="ctrl-row"><label>Z</label><input type="range" id="posZ" min="-5" max="5" step="0.05" value="0"><span id="posZ-val">0</span></div>
-
-  <div class="ctrl-label">Scale</div>
-  <div class="ctrl-row"><label>S</label><input type="range" id="scale" min="10" max="300" step="1" value="106"><span id="scale-val">106</span></div>
-
-  <div class="ctrl-label">Camera</div>
-  <div class="ctrl-row"><label>Y</label><input type="range" id="camY" min="-200" max="200" step="1" value="84"><span id="camY-val">84</span></div>
-  <div class="ctrl-row"><label>Z</label><input type="range" id="camZ" min="10" max="500" step="1" value="180"><span id="camZ-val">180</span></div>
-  <div class="ctrl-row"><label>LY</label><input type="range" id="lookY" min="-200" max="200" step="1" value="84"><span id="lookY-val">84</span></div>
-
-  <hr class="ctrl-sep">
-  <div class="ctrl-label">Colours</div>
-  <div class="ctrl-row"><label>Skin</label><input type="color" id="col-skin" value="#c68642"></div>
-  <div class="ctrl-row"><label>Hair</label><input type="color" id="col-hair" value="#0d0d0d"></div>
-  <div class="ctrl-row"><label>Top</label><input type="color" id="col-top" value="#ff69b4"></div>
-  <div class="ctrl-row"><label>Bot</label><input type="color" id="col-bottom" value="#ff1493"></div>
-  <div class="ctrl-row"><label>Gold</label><input type="color" id="col-gold" value="#FFD700"></div>
-
-  <hr class="ctrl-sep">
-  <button class="ctrl-btn" id="btn-log">📋 Log Current Values</button>
-  <button class="ctrl-btn" id="btn-reset">↺ Reset All</button>
-</div>
-
 </body>
 </html>
