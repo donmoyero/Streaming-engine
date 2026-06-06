@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Miss OG Tinz — Live</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --gold: #FFB830;
+    --deep: #0a0a0f;
+    --panel: rgba(255,255,255,0.04);
+    --border: rgba(255,184,48,0.2);
+    --glow: rgba(255,184,48,0.15);
+    --text: #f0ece0;
+    --muted: rgba(240,236,224,0.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--deep);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text);
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Studio background ── */
+  #studio-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 100%, rgba(255,140,20,0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 20% 50%, rgba(255,184,48,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 80% 50%, rgba(255,100,10,0.06) 0%, transparent 60%),
+      linear-gradient(180deg, #080810 0%, #0d0d18 60%, #111118 100%);
+  }
+
+  /* floor glow */
+  #studio-bg::after {
+    content:'';
+    position:absolute;
+    bottom:0; left:50%;
+    transform:translateX(-50%);
+    width:900px; height:180px;
+    background: radial-gradient(ellipse, rgba(255,160,30,0.18) 0%, transparent 70%);
+    filter: blur(30px);
+  }
+
+  /* desk */
+  #desk {
+    position:absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 620px;
+    height: 28px;
+    background: linear-gradient(180deg, #2a1f0e 0%, #1a1208 100%);
+    border-top: 2px solid rgba(255,184,48,0.4);
+    border-radius: 4px 4px 0 0;
+    box-shadow: 0 -8px 40px rgba(255,160,30,0.2), 0 4px 20px #000;
+  }
+  #desk::before {
+    content:'';
+    position:absolute;
+    top:-1px; left:0; right:0; height:1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    opacity:0.6;
+  }
+
+  /* mic prop */
+  #mic {
+    position:absolute;
+    bottom: 88px;
+    left: calc(50% + 140px);
+    width: 12px;
+    height: 70px;
+    background: linear-gradient(180deg, #333 0%, #1a1a1a 100%);
+    border-radius: 6px;
+  }
+  #mic::before {
+    content:'';
+    position:absolute;
+    top:-18px; left:50%;
+    transform:translateX(-50%);
+    width:22px; height:22px;
+    border-radius:50%;
+    background: radial-gradient(circle, #444, #222);
+    border:1px solid #555;
+    box-shadow: 0 0 10px rgba(255,184,48,0.3);
+  }
+
+  /* ── Canvas ── */
+  #canvas {
+    position:absolute;
+    inset:0;
+    width:100%; height:100%;
+  }
+
+  /* ── Chat bubble ── */
+  #chat-bubble {
+    position:absolute;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(10,10,15,0.85);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 22px;
+    max-width: 600px;
+    min-width: 200px;
+    text-align:center;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 30px rgba(255,184,48,0.1), 0 8px 32px rgba(0,0,0,0.5);
+    opacity:0;
+    transition: opacity 0.4s, transform 0.4s;
+    z-index:20;
+  }
+  #chat-bubble.visible {
+    opacity:1;
+    transform: translateX(-50%) translateY(0);
+  }
+  #chat-bubble .speaker {
+    font-size:11px;
+    color: var(--gold);
+    font-weight:500;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:4px;
+  }
+
+  /* ── Name plate ── */
+  #nameplate {
+    position:absolute;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    z-index:15;
+  }
+  #nameplate .dot {
+    width:8px; height:8px;
+    border-radius:50%;
+    background:var(--gold);
+    box-shadow: 0 0 8px var(--gold);
+    animation: pulse 2s infinite;
+  }
+  #nameplate .name {
+    font-family:'Syne', sans-serif;
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--gold);
+  }
+  #nameplate .tag {
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.05em;
+  }
+
+  /* ── Live badge ── */
+  #live-badge {
+    position:absolute;
+    top:24px; right:24px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    background:rgba(255,30,30,0.15);
+    border:1px solid rgba(255,60,60,0.3);
+    border-radius:20px;
+    padding:6px 14px;
+    z-index:20;
+  }
+  #live-badge .dot {
+    width:7px; height:7px;
+    border-radius:50%;
+    background:#ff3030;
+    box-shadow:0 0 8px #ff3030;
+    animation: pulse 1.5s infinite;
+  }
+  #live-badge span {
+    font-family:'Syne',sans-serif;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.15em;
+    color:#ff6060;
+  }
+
+  /* ── Status ── */
+  #status {
+    position:absolute;
+    top:24px; left:24px;
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.05em;
+    z-index:20;
+  }
+  #status.ready { color: #60ff90; }
+  #status.thinking { color: var(--gold); }
+  #status.error { color: #ff6060; }
+
+  /* ── Chat input (for testing) ── */
+  #chat-input-area {
+    position:absolute;
+    bottom:16px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:8px;
+    z-index:30;
+    width:580px;
+  }
+  #chat-input {
+    flex:1;
+    background:rgba(255,255,255,0.06);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 16px;
+    color:var(--text);
+    font-family:'DM Sans',sans-serif;
+    font-size:13px;
+    outline:none;
+  }
+  #chat-input::placeholder { color:var(--muted); }
+  #chat-input:focus { border-color:rgba(255,184,48,0.5); }
+  #send-btn {
+    background:var(--gold);
+    color:#0a0a0f;
+    border:none;
+    border-radius:10px;
+    padding:10px 20px;
+    font-family:'Syne',sans-serif;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.08em;
+    cursor:pointer;
+    transition:opacity 0.2s;
+  }
+  #send-btn:hover { opacity:0.85; }
+  #send-btn:disabled { opacity:0.4; cursor:default; }
+
+  @keyframes pulse {
+    0%,100%{ opacity:1; }
+    50%{ opacity:0.4; }
+  }
+
+  /* loading overlay */
+  #loader {
+    position:absolute;
+    inset:0;
+    background:var(--deep);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    z-index:100;
+    transition:opacity 0.6s;
+  }
+  #loader.hidden { opacity:0; pointer-events:none; }
+  #loader .logo {
+    font-family:'Syne',sans-serif;
+    font-size:28px;
+    font-weight:800;
+    color:var(--gold);
+    letter-spacing:0.1em;
+  }
+  #loader .sub {
+    font-size:12px;
+    color:var(--muted);
+    letter-spacing:0.1em;
+  }
+  #loader .bar {
+    width:200px; height:2px;
+    background:rgba(255,255,255,0.08);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  #loader .bar-fill {
+    height:100%;
+    background:var(--gold);
+    width:0%;
+    transition:width 0.3s;
+    border-radius:2px;
+  }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="logo">MISS OG TINZ</div>
+  <div class="sub">Loading avatar...</div>
+  <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+</div>
+
+<div id="studio-bg"></div>
+<div id="desk"></div>
+<div id="mic"></div>
+
+<canvas id="canvas"></canvas>
+
+<div id="live-badge">
+  <div class="dot"></div>
+  <span>LIVE</span>
+</div>
+
+<div id="status">Initialising...</div>
+
+<div id="chat-bubble">
+  <div class="speaker">Miss OG Tinz</div>
+  <div id="bubble-text">Heyyy! Welcome to the stream!</div>
+</div>
+
+<div id="nameplate">
+  <div class="dot"></div>
+  <div class="name">Miss OG Tinz</div>
+  <div class="tag">AI Presenter</div>
+</div>
+
+<div id="chat-input-area">
+  <input id="chat-input" type="text" placeholder="Chat with Miss OG Tinz..." maxlength="200"/>
+  <button id="send-btn">SEND</button>
+</div>
+
+<!-- Three.js + VRM -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.0/lib/three-vrm.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+// ── Config ─────────────────────────────────────────────
+const VRM_PATH   = './MissOgTinz_Master.vrm'; // put VRM in same folder
+const API_URL    = 'http://localhost:3000/chat/message'; // your backend
+const USER_ID    = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
+
+// ── Elements ────────────────────────────────────────────
+const canvas    = document.getElementById('canvas');
+const loader_el = document.getElementById('loader');
+const bar_fill  = document.getElementById('bar-fill');
+const status_el = document.getElementById('status');
+const bubble    = document.getElementById('chat-bubble');
+const bubbleTxt = document.getElementById('bubble-text');
+const chatInput = document.getElementById('chat-input');
+const sendBtn   = document.getElementById('send-btn');
+
+function setStatus(msg, cls='') {
+  status_el.textContent = msg;
+  status_el.className = cls;
+}
+
+function setProgress(p) {
+  bar_fill.style.width = p + '%';
+}
+
+// ── Three.js Scene ──────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(1280, 720);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1280/720, 0.1, 100);
+camera.position.set(0, 1.35, 3.2);
+camera.lookAt(0, 1.1, 0);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+
+const keyLight = new THREE.DirectionalLight(0xfff5e0, 1.8);
+keyLight.position.set(1.5, 3, 2);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xffe0b0, 0.5);
+fillLight.position.set(-2, 1, 1);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffb830, 0.4);
+rimLight.position.set(0, 2, -3);
+scene.add(rimLight);
+
+// ── Load VRM ────────────────────────────────────────────
+let vrm = null;
+let mixer = null;
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.register(parser => new VRMLoaderPlugin(parser));
+
+setProgress(10);
+setStatus('Loading Miss OG Tinz...');
+
+gltfLoader.load(
+  VRM_PATH,
+  (gltf) => {
+    setProgress(80);
+    vrm = gltf.userData.vrm;
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+
+    // Position avatar — seated/standing at desk level
+    vrm.scene.position.set(0, -0.05, 0);
+    scene.add(vrm.scene);
+
+    // Face camera
+    VRMUtils.rotateVRM0(vrm);
+
+    setProgress(100);
+    setTimeout(() => {
+      loader_el.classList.add('hidden');
+      setStatus('Ready ✦', 'ready');
+      showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
+      startIdleAnimation();
+    }, 400);
+  },
+  (progress) => {
+    const p = 10 + (progress.loaded / (progress.total || 1)) * 65;
+    setProgress(Math.min(p, 75));
+  },
+  (error) => {
+    console.error(error);
+    setStatus('Failed to load VRM — check file path', 'error');
+    loader_el.querySelector('.sub').textContent = 'Error loading avatar. Check console.';
+  }
+);
+
+// ── Blendshape helpers ──────────────────────────────────
+function setBS(name, value) {
+  if (!vrm) return;
+  try {
+    vrm.expressionManager?.setValue(name, Math.max(0, Math.min(1, value)));
+  } catch(e) {}
+}
+
+// ── Lip Sync ────────────────────────────────────────────
+// Drives mouth shapes in real-time from TTS audio analysis
+// Without audio: drives from text length as a fallback
+
+let lipSyncActive = false;
+let lipSyncTimer  = null;
+
+const MOUTH_SHAPES = ['aa', 'ih', 'ou', 'ee', 'oh'];
+const BLENDSHAPE_MAP = { aa:'A', ih:'I', ou:'U', ee:'E', oh:'O' };
+
+function startLipSync(durationMs) {
+  lipSyncActive = true;
+  clearInterval(lipSyncTimer);
+
+  const startTime = Date.now();
+  lipSyncTimer = setInterval(() => {
+    if (!lipSyncActive || Date.now() - startTime > durationMs) {
+      stopLipSync();
+      return;
+    }
+    // Cycle mouth shapes to simulate talking
+    const t = (Date.now() - startTime) / 1000;
+    const openAmount = Math.abs(Math.sin(t * 8)) * 0.7 + 0.1;
+    const shape = MOUTH_SHAPES[Math.floor(t * 4) % MOUTH_SHAPES.length];
+
+    // Reset all mouth shapes
+    MOUTH_SHAPES.forEach(s => setBS(BLENDSHAPE_MAP[s], 0));
+    setBS(BLENDSHAPE_MAP[shape], openAmount);
+  }, 50);
+}
+
+function stopLipSync() {
+  lipSyncActive = false;
+  clearInterval(lipSyncTimer);
+  MOUTH_SHAPES.forEach(s => setBS(BLENDSHAPE_MAP[s], 0));
+}
+
+// ── Expression mapping ──────────────────────────────────
+function setExpression(mood) {
+  // Reset all
+  ['happy','angry','sad','relaxed','surprised'].forEach(e => setBS(e, 0));
+  ['joy','angry','sorrow','fun','neutral'].forEach(e => setBS(e, 0));
+
+  const map = {
+    happy:     () => { setBS('joy', 0.8); setBS('happy', 0.8); },
+    excited:   () => { setBS('joy', 1.0); setBS('fun', 0.6); },
+    angry:     () => { setBS('angry', 0.7); },
+    sad:       () => { setBS('sorrow', 0.7); setBS('sad', 0.6); },
+    neutral:   () => { setBS('neutral', 0.3); },
+    surprised: () => { setBS('surprised', 0.8); }
+  };
+
+  (map[mood] || map.neutral)();
+}
+
+// ── Idle animation ──────────────────────────────────────
+let idleTime = 0;
+let blinkTimer = 0;
+let nextBlink = 3;
+
+function startIdleAnimation() {
+  // Slight idle breathing handled in render loop
+}
+
+// ── Chat bubble ─────────────────────────────────────────
+let bubbleTimeout = null;
+
+function showBubble(text, speaker='Miss OG Tinz') {
+  bubbleTxt.textContent = text;
+  bubble.querySelector('.speaker').textContent = speaker;
+  bubble.classList.add('visible');
+  clearTimeout(bubbleTimeout);
+  const displayTime = Math.max(4000, text.length * 60);
+  bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
+}
+
+// ── Render loop ─────────────────────────────────────────
+const clock = new THREE.Clock();
+
+function render() {
+  requestAnimationFrame(render);
+  const delta = clock.getDelta();
+
+  if (vrm) {
+    vrm.update(delta);
+
+    idleTime += delta;
+    blinkTimer += delta;
+
+    // Breathing — subtle head bob
+    if (vrm.humanoid) {
+      const breathe = Math.sin(idleTime * 1.2) * 0.004;
+      const sway    = Math.sin(idleTime * 0.5) * 0.003;
+      const head = vrm.humanoid.getNormalizedBoneNode('head');
+      if (head) {
+        head.rotation.z = sway;
+        head.rotation.x = breathe;
+      }
+      const spine = vrm.humanoid.getNormalizedBoneNode('spine');
+      if (spine) {
+        spine.rotation.z = Math.sin(idleTime * 1.2) * 0.008;
+      }
+    }
+
+    // Natural eye look around
+    if (vrm.lookAt) {
+      const eyeX = Math.sin(idleTime * 0.3) * 0.15;
+      const eyeY = Math.sin(idleTime * 0.2) * 0.08 + 0.05;
+      vrm.lookAt.target = null;
+      vrm.lookAt.yaw   = eyeX;
+      vrm.lookAt.pitch = eyeY;
+    }
+
+    // Auto blink
+    if (blinkTimer > nextBlink) {
+      blinkTimer = 0;
+      nextBlink = 2.5 + Math.random() * 3;
+      doBlink();
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+function doBlink() {
+  setBS('blink', 1);
+  setTimeout(() => setBS('blink', 0), 120);
+}
+
+render();
+
+// ── TTS via Web Speech API ──────────────────────────────
+function speak(text, mood='neutral') {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    window.speechSynthesis.cancel();
+
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate  = 1.05;
+    utter.pitch = 1.1;
+
+    // Try to find a female voice
+    const voices = window.speechSynthesis.getVoices();
+    const female = voices.find(v =>
+      v.name.toLowerCase().includes('female') ||
+      v.name.includes('Zira') ||
+      v.name.includes('Hazel') ||
+      v.name.includes('Susan') ||
+      v.name.includes('Google UK English Female')
+    );
+    if (female) utter.voice = female;
+
+    const duration = text.length * 65;
+    setExpression(mood);
+    startLipSync(duration);
+
+    utter.onend = () => {
+      stopLipSync();
+      setExpression('neutral');
+      resolve();
+    };
+    utter.onerror = () => { stopLipSync(); resolve(); };
+
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+// ── API call ─────────────────────────────────────────────
+const chatHistory = [];
+
+async function sendMessage(message, displayName='Viewer') {
+  if (!message.trim()) return;
+
+  setStatus('Thinking...', 'thinking');
+  sendBtn.disabled = true;
+
+  chatHistory.push({ role:'user', content: message });
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        user_id:      USER_ID,
+        message,
+        display_name: displayName,
+        history:      chatHistory.slice(-10)
+      })
+    });
+
+    if (!res.ok) throw new Error('API error ' + res.status);
+
+    const data = await res.json();
+    const reply = data.reply || "Ehn ehn, I heard you!";
+    const mood  = data.viewer?.mood || 'neutral';
+
+    chatHistory.push({ role:'assistant', content: reply });
+    if (chatHistory.length > 20) chatHistory.splice(0, 2);
+
+    showBubble(reply, 'Miss OG Tinz');
+    setStatus('Live ✦', 'ready');
+
+    await speak(reply, mood);
+
+  } catch(err) {
+    console.error(err);
+    // Fallback if no backend
+    const fallback = "Oya wait, my brain is loading... try again!";
+    showBubble(fallback, 'Miss OG Tinz');
+    await speak(fallback, 'neutral');
+    setStatus('Ready ✦', 'ready');
+  }
+
+  sendBtn.disabled = false;
+}
+
+// ── UI events ────────────────────────────────────────────
+sendBtn.addEventListener('click', () => {
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+  chatInput.value = '';
+  sendMessage(msg, 'You');
+});
+
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendBtn.click();
+});
+
+// Load voices on user interaction (browser requirement)
+window.speechSynthesis.onvoiceschanged = () => {};
+
+// ── Expose for Twitch bot integration ───────────────────
+// Call window.missOgTinz.receive(username, message) from your Twitch bot
+window.missOgTinz = {
+  receive: (username, message) => sendMessage(message, username),
+  express: setExpression,
+  speak,
+  showBubble
+};
+
+console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
+</script>
+</body>
+</html>
