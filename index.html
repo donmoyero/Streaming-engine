@@ -461,8 +461,9 @@ gltfLoader.load(
       }
     });
 
+    // Scale her up — she exported at 0.015 units, needs to be ~1.7 units tall
+    vrm.scene.scale.set(100, 100, 100);
     vrm.scene.position.set(0, -1.0, 0);
-    vrm.scene.scale.set(1, 1, 1);
     scene.add(vrm.scene);
 
     // Debug: find where she actually is
@@ -474,9 +475,9 @@ gltfLoader.load(
     console.log("VRM size:", size);
     console.log("VRM min:", box.min, "max:", box.max);
     
-    // Point camera directly at her center
-    camera.position.set(center.x, center.y, center.z + 3);
-    camera.lookAt(center);
+    // Point camera at her
+    camera.position.set(0, 0.8, 4);
+    camera.lookAt(0, 0.8, 0);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
