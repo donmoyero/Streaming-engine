@@ -2,6 +2,21 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
+// ── Dead air — forward declaration (full impl below) ────
+// Declared here so it's available when the VRM loader calls deadAir.start()
+let _deadAirTimer  = null;
+let _deadAirActive = false;
+const DEAD_AIR_MS  = 30000;
+const deadAir = {
+  start()  { _deadAirActive = true;  this.reset(); },
+  stop()   { _deadAirActive = false; clearTimeout(_deadAirTimer); },
+  reset()  {
+    clearTimeout(_deadAirTimer);
+    if (!_deadAirActive) return;
+    _deadAirTimer = setTimeout(() => _triggerProactive(), DEAD_AIR_MS);
+  }
+};
+
 // ── Config ─────────────────────────────────────────────
 const VRM_PATH      = '/Streaming-engine/MissOgTinz_Master.vrm';
 const API_URL       = 'https://impactgrid-dijo.onrender.com/chat/message';
@@ -632,22 +647,32 @@ function animateRoomLights(delta) {
 
 const CAM_DIST = { IDLE: 2.2, SPEAK: 1.1, THINK: 1.7 };
 let camMode = 'IDLE';
-
-// Smooth camera state (world-space)
-const camSmooth = {
-  x: 0, y: 1.4, z: 2.2,        // current world position
-  lookX: 0, lookY: 1.1, lookZ: 0 // current look-at point
-};
 const CAM_LERP = 0.04;
 
-// What the camera wants to be
-const camWant = {
-  x: 0, y: 1.4, z: 2.2,
-  lookX: 0, lookY: 1.1, lookZ: 0
+// Camera mode presets: z distance, y height, lookY, rotZ tilt
+const CAM_PRESETS = {
+  IDLE:  { z: 2.2, y: 1.40, lookY: 1.10, rotY: 0    },
+  SPEAK: { z: 1.1, y: 1.55, lookY: 1.25, rotY: 0    },
+  THINK: { z: 1.7, y: 1.45, lookY: 1.15, rotY: 0.01 },
 };
 
+// Target state (set instantly on mode change)
+const camTarget  = { x: 0, z: 2.2, y: 1.40, lookY: 1.10, rotY: 0 };
+// Current smoothed state
+const camCurrent = { x: 0, z: 2.2, y: 1.40, lookY: 1.10, rotY: 0 };
+
+// Aliases so any legacy code referencing camWant/camSmooth still works
+const camSmooth = camCurrent;
+const camWant   = camTarget;
+
 function setCamMode(mode) {
-  if (CAM_DIST[mode] !== undefined) camMode = mode;
+  if (!CAM_PRESETS[mode]) return;
+  camMode = mode;
+  const p = CAM_PRESETS[mode];
+  camTarget.z     = p.z;
+  camTarget.y     = p.y;
+  camTarget.lookY = p.lookY;
+  camTarget.rotY  = p.rotY;
 }
 
 // ── VRM world position & facing ──────────────────────────
@@ -2449,20 +2474,7 @@ function startTopicPolling() {
 }
 
 
-// ── Dead air timer ───────────────────────────────────────
-let _deadAirTimer  = null;
-let _deadAirActive = false;
-const DEAD_AIR_MS  = 30000;
-
-const deadAir = {
-  start()  { _deadAirActive = true; this.reset(); },
-  stop()   { _deadAirActive = false; clearTimeout(_deadAirTimer); },
-  reset()  {
-    clearTimeout(_deadAirTimer);
-    if (!_deadAirActive) return;
-    _deadAirTimer = setTimeout(() => _triggerProactive(), DEAD_AIR_MS);
-  }
-};
+// ── Dead air timer (declared at top of file) ───────────
 
 async function _triggerProactive() {
   try {
