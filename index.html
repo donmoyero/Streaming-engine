@@ -471,7 +471,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 999999);
 camera.position.set(0, 0.8, 4);
 camera.lookAt(0, 0.8, 0);
 
@@ -548,29 +548,48 @@ gltfLoader.load(
       }
     });
 
-    // Natural height 0.016, target 1.7 → scale ~106
-    // Scale up and offset to center her on screen
-    vrm.scene.scale.set(106, 106, 106);
-    vrm.scene.position.set(0, 211, 0); // compensates for internal -1.99 center offset
+    // Face camera FIRST before measuring
+    VRMUtils.rotateVRM0(vrm);
+
+    // Step 1: add to scene at default scale/position
+    vrm.scene.scale.set(1, 1, 1);
+    vrm.scene.position.set(0, 0, 0);
     scene.add(vrm.scene);
 
-    // Debug: find where she actually is
+    // Step 2: measure her natural bounding box
+    const boxRaw = new THREE.Box3().setFromObject(vrm.scene);
+    const sizeRaw = boxRaw.getSize(new THREE.Vector3());
+    const centerRaw = boxRaw.getCenter(new THREE.Vector3());
+    console.log("VRM loaded! Children:", vrm.scene.children.length);
+    console.log("VRM raw center:", centerRaw);
+    console.log("VRM raw size:", sizeRaw);
+
+    // Step 3: scale so she is ~1.7 units tall
+    const targetHeight = 1.7;
+    const scaleVal = targetHeight / sizeRaw.y;
+    vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
+
+    // Step 4: shift her so feet are at y=0
+    vrm.scene.position.set(
+      -centerRaw.x * scaleVal,
+      -boxRaw.min.y * scaleVal,
+      -centerRaw.z * scaleVal
+    );
+
+    // Step 5: re-measure after scale/position applied
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    console.log("VRM loaded! Children:", vrm.scene.children.length);
-    console.log("VRM center:", center);
-    console.log("VRM size:", size);
-    console.log("VRM min:", box.min, "max:", box.max);
-    
-    // Fixed camera — worked when she was visible
-    // Camera framed at her center after position offset
-    camera.position.set(0, 0.85, 3);
-    camera.lookAt(0, 0.85, 0);
-    console.log("Camera set to fixed position");
+    console.log("VRM final center:", center, "size:", size);
 
-    // Face camera
-    VRMUtils.rotateVRM0(vrm);
+    // Step 6: auto-fit camera — show from waist up (chest-level framing)
+    const fovRad = camera.fov * (Math.PI / 180);
+    const frameHeight = size.y * 0.65; // show ~65% of her height
+    const camZ = (frameHeight / 2) / Math.tan(fovRad / 2) * 1.1;
+    const camY = size.y * 0.55; // look at chest/face area
+    camera.position.set(0, camY, camZ);
+    camera.lookAt(0, camY, 0);
+    console.log("Camera auto-fit: pos", camera.position, "lookAt y:", camY);
 
     setProgress(100);
     setTimeout(() => {
@@ -840,6 +859,71 @@ window.missOgTinz = {
 };
 
 console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
+
+// ── Control Panel toggle ─────────────────────────────────
+const panelToggle = document.getElementById('panel-toggle');
+const controlPanel = document.getElementById('control-panel');
+
+panelToggle.addEventListener('click', () => {
+  const isOpen = !controlPanel.classList.contains('hidden');
+  controlPanel.classList.toggle('hidden', isOpen);
+  panelToggle.classList.toggle('open', !isOpen);
+});
+
+// ── Control Panel sliders ────────────────────────────────
+function bindSlider(id, onChange) {
+  const el = document.getElementById(id);
+  const val = document.getElementById(id + '-val');
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (val) val.textContent = el.value;
+    onChange(parseFloat(el.value));
+  });
+}
+
+bindSlider('posX', v => { if (vrm) vrm.scene.position.x = v; });
+bindSlider('posY', v => { if (vrm) vrm.scene.position.y = v; });
+bindSlider('posZ', v => { if (vrm) vrm.scene.position.z = v; });
+bindSlider('scale', v => { if (vrm) vrm.scene.scale.set(v, v, v); });
+bindSlider('camY', v => { camera.position.y = v; camera.lookAt(0, parseFloat(document.getElementById('lookY').value), 0); });
+bindSlider('camZ', v => { camera.position.z = v; });
+bindSlider('lookY', v => { camera.lookAt(0, v, 0); });
+
+// Colour pickers
+function bindColour(id, meshNames) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (!vrm) return;
+    const col = new THREE.Color(el.value);
+    vrm.scene.traverse(obj => {
+      if (obj.isMesh && meshNames.includes(obj.name)) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(m => { if (m) { m.color.set(col); m.needsUpdate = true; } });
+      }
+    });
+  });
+}
+
+bindColour('col-skin', ['Julie_Figure', 'Teargum']);
+bindColour('col-hair', ['Hair_Block', 'Brow', 'Lashes']);
+bindColour('col-top',  ['Top']);
+bindColour('col-bottom', ['Bottom']);
+bindColour('col-gold', ['Ear_Jewel', 'Necklece']);
+
+// Log & Reset buttons
+document.getElementById('btn-log')?.addEventListener('click', () => {
+  if (!vrm) return;
+  const p = vrm.scene.position;
+  const s = vrm.scene.scale;
+  console.log(`Position: (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})`);
+  console.log(`Scale: ${s.x.toFixed(2)}`);
+  console.log(`Camera: pos(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
+});
+
+document.getElementById('btn-reset')?.addEventListener('click', () => {
+  location.reload();
+});
 </script>
 
 <button id="panel-toggle">CONTROLS</button>
