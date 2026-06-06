@@ -463,8 +463,20 @@ gltfLoader.load(
 
     vrm.scene.position.set(0, -1.0, 0);
     vrm.scene.scale.set(1, 1, 1);
-    console.log("VRM loaded! Children:", vrm.scene.children.length);
     scene.add(vrm.scene);
+
+    // Debug: find where she actually is
+    const box = new THREE.Box3().setFromObject(vrm.scene);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    console.log("VRM loaded! Children:", vrm.scene.children.length);
+    console.log("VRM center:", center);
+    console.log("VRM size:", size);
+    console.log("VRM min:", box.min, "max:", box.max);
+    
+    // Point camera directly at her center
+    camera.position.set(center.x, center.y, center.z + 3);
+    camera.lookAt(center);
 
     // Face camera
     VRMUtils.rotateVRM0(vrm);
