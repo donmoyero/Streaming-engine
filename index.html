@@ -476,14 +476,14 @@ camera.position.set(0, 0.8, 4);
 camera.lookAt(0, 0.8, 0);
 
 // Lighting
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+const ambient = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambient);
 
-const keyLight = new THREE.DirectionalLight(0xfff5e0, 1.8);
+const keyLight = new THREE.DirectionalLight(0xfff5e0, 2.5);
 keyLight.position.set(1.5, 3, 2);
 scene.add(keyLight);
 
-const fillLight = new THREE.DirectionalLight(0xffe0b0, 0.5);
+const fillLight = new THREE.DirectionalLight(0xffe0b0, 1.2);
 fillLight.position.set(-2, 1, 1);
 scene.add(fillLight);
 
@@ -508,88 +508,86 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-    // Colour map — solid colours per mesh until textures are baked
+    // Colour map — solid colours per mesh (no textures in VRM export)
     const MESH_COLOURS = {
-      Julie_Figure: 0xc68642,  // medium brown skin
-      Brow:         0x1a0a00,  // dark brows
-      Teargum:      0xc68642,  // skin
-      Ear_Jewel:    0xFFD700,  // gold earring
-      Eye_R:        0x1a0a00,  // dark eye
-      Eyes_L:       0x1a0a00,  // dark eye
-      Lashes:       0x050505,  // black lashes
-      Teeth:        0xfffaf0,  // white teeth
-      Hair_Block:   0x0d0d0d,  // black hair
-      Top:          0xff69b4,  // hot pink top
-      Bottom:       0xff1493,  // deep pink bottom
-      Shoe_R:       0x111111,  // black shoes
-      Shoe_L:       0x111111,  // black shoes
-      Necklece:     0xFFD700,  // gold necklace
+      Julie_Figure: 0xc68642,
+      Brow:         0x1a0a00,
+      Teargum:      0xc68642,
+      Ear_Jewel:    0xFFD700,
+      Eye_R:        0x3b2314,
+      Eyes_L:       0x3b2314,
+      Lashes:       0x050505,
+      Teeth:        0xfffaf0,
+      Hair_Block:   0x0d0d0d,
+      Top:          0xff69b4,
+      Bottom:       0xff1493,
+      Shoe_R:       0x222222,
+      Shoe_L:       0x222222,
+      Necklece:     0xFFD700,
     };
 
     vrm.scene.traverse((obj) => {
       if (obj.isMesh) {
         obj.frustumCulled = false;
-        const colour = MESH_COLOURS[obj.name] || 0xb5743a;
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach(mat => {
-          if (mat) {
-            mat.color.set(colour);
-            mat.map = null;         // remove broken texture
-            mat.transparent = false;
-            mat.opacity = 1;
-            mat.depthWrite = true;
-            mat.side = THREE.FrontSide;
-            mat.roughness = obj.name === "Julie_Figure" || obj.name === "Teargum" ? 0.5 : 0.7;
-            mat.metalness = obj.name.includes('Jewel') || obj.name.includes('Necklece') ? 0.9 : 0.0;
-            mat.envMapIntensity = 0.5;
-            mat.needsUpdate = true;
-          }
+        const hexColour = MESH_COLOURS[obj.name] ?? 0xb5743a;
+        const isMetallic = obj.name.includes('Jewel') || obj.name.includes('Necklece');
+        const isSkin     = obj.name === 'Julie_Figure' || obj.name === 'Teargum';
+        // Replace with MeshStandardMaterial so colours are guaranteed to show
+        obj.material = new THREE.MeshStandardMaterial({
+          color:      hexColour,
+          roughness:  isSkin ? 0.55 : isMetallic ? 0.2 : 0.75,
+          metalness:  isMetallic ? 0.85 : 0.0,
+          side:       THREE.FrontSide,
+          depthWrite: true,
         });
       }
     });
 
-    // Face camera FIRST before measuring
+    // Face camera FIRST, then measure
     VRMUtils.rotateVRM0(vrm);
 
-    // Step 1: add to scene at default scale/position
+    // Fold arms down from T-pose
+    if (vrm.humanoid) {
+      const lShoulder = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+      const rShoulder = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+      const lElbow    = vrm.humanoid.getNormalizedBoneNode('leftLowerArm');
+      const rElbow    = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+      if (lShoulder) lShoulder.rotation.z =  1.1;
+      if (rShoulder) rShoulder.rotation.z = -1.1;
+      if (lElbow)    lElbow.rotation.z    =  0.3;
+      if (rElbow)    rElbow.rotation.z    = -0.3;
+    }
+
+    // Add at scale 1, measure, then auto-scale to 1.7m
     vrm.scene.scale.set(1, 1, 1);
     vrm.scene.position.set(0, 0, 0);
     scene.add(vrm.scene);
 
-    // Step 2: measure her natural bounding box
-    const boxRaw = new THREE.Box3().setFromObject(vrm.scene);
-    const sizeRaw = boxRaw.getSize(new THREE.Vector3());
+    const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
+    const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
     console.log("VRM loaded! Children:", vrm.scene.children.length);
-    console.log("VRM raw center:", centerRaw);
-    console.log("VRM raw size:", sizeRaw);
+    console.log("VRM raw center:", centerRaw, "size:", sizeRaw);
 
-    // Step 3: scale so she is ~1.7 units tall
-    const targetHeight = 1.7;
-    const scaleVal = targetHeight / sizeRaw.y;
+    const scaleVal = 1.7 / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
-
-    // Step 4: shift her so feet are at y=0
     vrm.scene.position.set(
       -centerRaw.x * scaleVal,
       -boxRaw.min.y * scaleVal,
       -centerRaw.z * scaleVal
     );
 
-    // Step 5: re-measure after scale/position applied
-    const box = new THREE.Box3().setFromObject(vrm.scene);
-    const center = box.getCenter(new THREE.Vector3());
+    const box  = new THREE.Box3().setFromObject(vrm.scene);
     const size = box.getSize(new THREE.Vector3());
-    console.log("VRM final center:", center, "size:", size);
+    console.log("VRM final size:", size);
 
-    // Step 6: auto-fit camera — show from waist up (chest-level framing)
+    // Camera: show full body with slight headroom
     const fovRad = camera.fov * (Math.PI / 180);
-    const frameHeight = size.y * 0.65; // show ~65% of her height
-    const camZ = (frameHeight / 2) / Math.tan(fovRad / 2) * 1.1;
-    const camY = size.y * 0.55; // look at chest/face area
+    const camZ   = (size.y / 2) / Math.tan(fovRad / 2) * 1.18;
+    const camY   = size.y * 0.5;
     camera.position.set(0, camY, camZ);
     camera.lookAt(0, camY, 0);
-    console.log("Camera auto-fit: pos", camera.position, "lookAt y:", camY);
+    console.log("Camera auto-fit done, camZ:", camZ.toFixed(2), "camY:", camY.toFixed(2));
 
     setProgress(100);
     setTimeout(() => {
@@ -861,7 +859,7 @@ window.missOgTinz = {
 console.log('Miss OG Tinz ready. Call window.missOgTinz.receive(user, msg) to feed Twitch chat.');
 
 // ── Control Panel toggle ─────────────────────────────────
-const panelToggle = document.getElementById('panel-toggle');
+const panelToggle  = document.getElementById('panel-toggle');
 const controlPanel = document.getElementById('control-panel');
 
 panelToggle.addEventListener('click', () => {
@@ -870,9 +868,9 @@ panelToggle.addEventListener('click', () => {
   panelToggle.classList.toggle('open', !isOpen);
 });
 
-// ── Control Panel sliders ────────────────────────────────
+// ── Control sliders ──────────────────────────────────────
 function bindSlider(id, onChange) {
-  const el = document.getElementById(id);
+  const el  = document.getElementById(id);
   const val = document.getElementById(id + '-val');
   if (!el) return;
   el.addEventListener('input', () => {
@@ -881,15 +879,15 @@ function bindSlider(id, onChange) {
   });
 }
 
-bindSlider('posX', v => { if (vrm) vrm.scene.position.x = v; });
-bindSlider('posY', v => { if (vrm) vrm.scene.position.y = v; });
-bindSlider('posZ', v => { if (vrm) vrm.scene.position.z = v; });
+bindSlider('posX',  v => { if (vrm) vrm.scene.position.x = v; });
+bindSlider('posY',  v => { if (vrm) vrm.scene.position.y = v; });
+bindSlider('posZ',  v => { if (vrm) vrm.scene.position.z = v; });
 bindSlider('scale', v => { if (vrm) vrm.scene.scale.set(v, v, v); });
-bindSlider('camY', v => { camera.position.y = v; camera.lookAt(0, parseFloat(document.getElementById('lookY').value), 0); });
-bindSlider('camZ', v => { camera.position.z = v; });
+bindSlider('camY',  v => { camera.position.y = v; camera.lookAt(0, parseFloat(document.getElementById('lookY').value), 0); });
+bindSlider('camZ',  v => { camera.position.z = v; });
 bindSlider('lookY', v => { camera.lookAt(0, v, 0); });
 
-// Colour pickers
+// ── Colour pickers ───────────────────────────────────────
 function bindColour(id, meshNames) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -898,32 +896,27 @@ function bindColour(id, meshNames) {
     const col = new THREE.Color(el.value);
     vrm.scene.traverse(obj => {
       if (obj.isMesh && meshNames.includes(obj.name)) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach(m => { if (m) { m.color.set(col); m.needsUpdate = true; } });
+        const m = obj.material;
+        if (m) { m.color.set(col); m.needsUpdate = true; }
       }
     });
   });
 }
 
-bindColour('col-skin', ['Julie_Figure', 'Teargum']);
-bindColour('col-hair', ['Hair_Block', 'Brow', 'Lashes']);
-bindColour('col-top',  ['Top']);
+bindColour('col-skin',   ['Julie_Figure', 'Teargum']);
+bindColour('col-hair',   ['Hair_Block', 'Brow', 'Lashes']);
+bindColour('col-top',    ['Top']);
 bindColour('col-bottom', ['Bottom']);
-bindColour('col-gold', ['Ear_Jewel', 'Necklece']);
+bindColour('col-gold',   ['Ear_Jewel', 'Necklece']);
 
-// Log & Reset buttons
 document.getElementById('btn-log')?.addEventListener('click', () => {
   if (!vrm) return;
-  const p = vrm.scene.position;
-  const s = vrm.scene.scale;
-  console.log(`Position: (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})`);
-  console.log(`Scale: ${s.x.toFixed(2)}`);
-  console.log(`Camera: pos(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
+  const p = vrm.scene.position, s = vrm.scene.scale;
+  console.log(`vrm pos (${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.z.toFixed(3)})  scale ${s.x.toFixed(3)}`);
+  console.log(`camera pos (${camera.position.x.toFixed(3)}, ${camera.position.y.toFixed(3)}, ${camera.position.z.toFixed(3)})`);
 });
 
-document.getElementById('btn-reset')?.addEventListener('click', () => {
-  location.reload();
-});
+document.getElementById('btn-reset')?.addEventListener('click', () => location.reload());
 </script>
 
 <button id="panel-toggle">CONTROLS</button>
