@@ -1828,9 +1828,56 @@ function updateCompanion(delta) {
 setTimeout(loadCompanion, 3000);
 
 // ── Blendshape helpers ──────────────────────────────────
+// Maps VRM standard expression names → mesh morph target names
+const BS_MAP = {
+  'A': 'vrc.v_aa', 'I': 'vrc.v_ih', 'U': 'vrc.v_ou',
+  'E': 'vrc.v_ee', 'O': 'vrc.v_oh',
+  'blink': 'blink', 'Blink': 'blink',
+  'blink_l': 'blink_l', 'Blink_L': 'blink_l',
+  'blink_r': 'blink_r', 'Blink_R': 'blink_r',
+  'joy': 'joy',     'Joy': 'joy',
+  'angry': 'angry', 'Angry': 'angry',
+  'sorrow': 'sorrow', 'Sorrow': 'sorrow',
+  'fun': 'fun',     'Fun': 'fun',
+};
+
+// Cache of mesh → morph target index maps, built on first use
+const _morphCache = {};
+function _getMorphIndex(mesh, targetName) {
+  if (!mesh.morphTargetDictionary) return -1;
+  const key = mesh.uuid;
+  if (!_morphCache[key]) _morphCache[key] = mesh.morphTargetDictionary;
+  return _morphCache[key][targetName] ?? -1;
+}
+
+// Face mesh reference — populated after VRM loads
+let faceMesh = null;
+function _findFaceMesh() {
+  if (faceMesh) return faceMesh;
+  if (!vrm) return null;
+  vrm.scene.traverse(obj => {
+    if (obj.isMesh && obj.morphTargetDictionary &&
+        'vrc.v_aa' in obj.morphTargetDictionary) {
+      faceMesh = obj;
+    }
+  });
+  return faceMesh;
+}
+
 function setBS(name, value) {
   if (!vrm) return;
-  try { vrm.expressionManager?.setValue(name, Math.max(0, Math.min(1, value))); } catch(e) {}
+  const v = Math.max(0, Math.min(1, value));
+  // Try VRM expression manager first (works if bindings are set)
+  try { vrm.expressionManager?.setValue(name, v); } catch(e) {}
+  // Always also drive morph targets directly on the mesh
+  const morphName = BS_MAP[name] || name.toLowerCase();
+  const mesh = _findFaceMesh();
+  if (mesh) {
+    const idx = _getMorphIndex(mesh, morphName);
+    if (idx !== -1 && mesh.morphTargetInfluences) {
+      mesh.morphTargetInfluences[idx] = v;
+    }
+  }
 }
 
 // ── Lip Sync ────────────────────────────────────────────
