@@ -64,12 +64,12 @@ function setStageLight(mood, durationMs = 4000) {
 
 // ── Chat bubble ──────────────────────────────────────────────────
 let bubbleTimeout = null;
-export function showBubble(text, speaker = 'Miss OG Tinz', durationMs = 0) {
+export function showBubble(text, speaker = 'Miss OG Tinz') {
   bubbleTxt.textContent = text;
   bubble.querySelector('.speaker').textContent = speaker;
   bubble.classList.add('visible');
   clearTimeout(bubbleTimeout);
-  const displayTime = durationMs > 0 ? durationMs : Math.max(4000, text.length * 60);
+  const displayTime = Math.max(4000, text.length * 60);
   bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
 }
 
@@ -254,7 +254,7 @@ export function walkTo(waypointName, onArrive = null) {
   const dz = wp.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
   walk.duration     = Math.max(0.8, dist / 1.5);
-  walk.targetFacing = Math.atan2(dx, dz);
+  walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // +PI so her FRONT faces travel direction
   _targetFacing     = walk.targetFacing;
 }
 
@@ -470,8 +470,33 @@ function goToSpot(spot) {
   });
 }
 
-function lifeUpdate(delta) {
+// ── Public room teleport — sends her to a random spot in the named room ──
+export function goToRoom(roomName) {
+  const hDef = HOUSE[roomName];
+  if (!hDef || !hDef.spots?.length) return;
+  // Pick a random spot in that room, tag it with room name for goToSpot
+  const spot = { ...hDef.spots[Math.floor(Math.random() * hDef.spots.length)], room: roomName };
+  goToSpot(spot);
+  // Reset life timer so she dwells properly after arriving
+  _lifeTimer = 0;
+  _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+}
+
+// ── Public activity override — sets activity immediately, life resumes after dwell ──
+export function doActivity(actName) {
+  if (!_vrm()) return;
+  ACTIVITY.current  = actName;
+  ACTIVITY.timer    = 0;
+  ACTIVITY.phase    = 0;
+  ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+  // Short api-override window so lifeUpdate doesn't immediately overwrite it
+  _apiOverride      = true;
+  _apiOverrideTimer = 12; // 12 seconds before life scheduler resumes
+}
+
+function lifeUpdate() {
   if (!_vrm() || walk.active) return;
+  const delta = 1/60;
   famUpdate(delta);
   if (_apiOverride) {
     _apiOverrideTimer -= delta;
@@ -693,11 +718,11 @@ export function _initDeadAir() {
 
 // ── Twitch chat ──────────────────────────────────────────────────
 export function initTwitchChat() {
-  if (typeof window.tmi === 'undefined') {
+  if (typeof tmi === 'undefined') {
     console.warn('[Twitch] tmi.js not available — check the <script> tag in index.html');
     return;
   }
-  const client = new window.tmi.Client({ channels: [TWITCH_CHANNEL] });
+  const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
   client.connect()
     .then(() => { console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`); setStatus('Live ✦', 'ready'); })
     .catch(err => console.warn('[Twitch] Chat connect failed:', err));
@@ -784,17 +809,9 @@ async function sendMessage(message, displayName = 'Viewer') {
       body.vision_context = `This is a screenshot of Miss OG Tinz's live 3D avatar standing in her ${_currentRoom.replace('-', ' ')}. Use what you see to make your reply feel grounded and self-aware.`;
     }
 
-    const _msgCtrl    = new AbortController();
-    const _msgTimeout = setTimeout(() => _msgCtrl.abort(), 15_000); // 15s timeout
-    let res;
-    try {
-      res = await fetch(API_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: _msgCtrl.signal,
-      });
-    } finally {
-      clearTimeout(_msgTimeout);
-    }
+    const res = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
 
     if (res.status === 429) {
       let retryMs = 5000;
@@ -893,6 +910,101 @@ document.getElementById('btn-log')?.addEventListener('click', () => {
 });
 document.getElementById('btn-reset')?.addEventListener('click', () => location.reload());
 
+// ── Room buttons ─────────────────────────────────────────────────
+(function initRoomButtons() {
+  const panel = document.getElementById('control-panel');
+  if (!panel) return;
+
+  const sep = document.createElement('hr');
+  sep.className = 'ctrl-sep';
+  panel.appendChild(sep);
+
+  const label = document.createElement('div');
+  label.className = 'ctrl-label';
+  label.textContent = 'Send to Room';
+  panel.appendChild(label);
+
+  const ROOMS = [
+    { key: 'studio',        icon: '🎙', name: 'Studio'      },
+    { key: 'living-room',   icon: '📺', name: 'Living Room' },
+    { key: 'kitchen',       icon: '🍳', name: 'Kitchen'     },
+    { key: 'dining',        icon: '🍽', name: 'Dining'      },
+    { key: 'hallway',       icon: '🚪', name: 'Hallway'     },
+    { key: 'bedroom',       icon: '🛏', name: 'Bedroom'     },
+    { key: 'bathroom',      icon: '🚿', name: 'Bathroom'    },
+  ];
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;';
+  ROOMS.forEach(({ key, icon, name }) => {
+    const btn = document.createElement('button');
+    btn.className = 'ctrl-btn';
+    btn.textContent = `${icon} ${name}`;
+    btn.style.fontSize = '11px';
+    btn.addEventListener('click', () => {
+      goToRoom(key);
+      // Highlight active room button
+      grid.querySelectorAll('button').forEach(b => b.style.outline = '');
+      btn.style.outline = '2px solid #FFB830';
+    });
+    grid.appendChild(btn);
+  });
+  panel.appendChild(grid);
+
+  // ── Activity buttons ──────────────────────────────────────────
+  const sep2 = document.createElement('hr');
+  sep2.className = 'ctrl-sep';
+  panel.appendChild(sep2);
+
+  const label2 = document.createElement('div');
+  label2.className = 'ctrl-label';
+  label2.textContent = 'Force Activity';
+  panel.appendChild(label2);
+
+  // Re-render activity buttons whenever current room changes
+  const actWrap = document.createElement('div');
+  actWrap.id = 'act-btn-wrap';
+  panel.appendChild(actWrap);
+
+  const ACTIVITY_ICONS = {
+    idle: '🧍', dance: '💃', stretch: '🤸', hairflick: '💁',
+    hiponhip: '😏', phoneScroll: '📱', tvReact: '😲', sofaSit: '🛋',
+    readBook: '📖', typing: '⌨️', monitor: '🖥', stirring: '🥄',
+    chopping: '🔪', tasting: '😋', washingUp: '🧼', cabinetOpen: '🗄',
+    mirrorPose: '🪞', noseCover: '🤭', windowLook: '🪟', fireGaze: '🔥',
+  };
+
+  let _lastRenderedRoom = null;
+  function refreshActivityButtons() {
+    if (_currentRoom === _lastRenderedRoom) return;
+    _lastRenderedRoom = _currentRoom;
+    const pool = [...new Set(getFamiliarActivityPool(_currentRoom))];
+    actWrap.innerHTML = '';
+    const g = document.createElement('div');
+    g.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;';
+    pool.forEach(act => {
+      const btn = document.createElement('button');
+      btn.className = 'ctrl-btn';
+      const icon = ACTIVITY_ICONS[act] || '▶';
+      btn.textContent = `${icon} ${act}`;
+      btn.style.fontSize = '10px';
+      btn.addEventListener('click', () => {
+        doActivity(act);
+        g.querySelectorAll('button').forEach(b => b.style.outline = '');
+        btn.style.outline = '2px solid #FFB830';
+        // Clear highlight after override expires
+        setTimeout(() => btn.style.outline = '', 13000);
+      });
+      g.appendChild(btn);
+    });
+    actWrap.appendChild(g);
+  }
+
+  // Poll for room changes to refresh activity list
+  setInterval(refreshActivityButtons, 1000);
+  refreshActivityButtons();
+})();
+
 // ── Public API ───────────────────────────────────────────────────
 window.missOgTinz = {
   receive:        (username, message) => sendMessage(message, username),
@@ -943,7 +1055,7 @@ function render() {
 
     // ── Walk / life scheduler ──────────────────────────────────
     updateWalk(delta);
-    lifeUpdate(delta);
+    lifeUpdate();
 
     // ── Facing — smoothly rotate toward _targetFacing ─────────
     const cur  = vrm.scene.rotation.y;
