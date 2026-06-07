@@ -26,6 +26,64 @@ const USER_ID       = 'stream-viewer-' + Math.random().toString(36).slice(2,8);
 const TTS_URL       = 'https://impactgrid-dijo.onrender.com/tts';
 const TWITCH_CHANNEL = 'Miss_ogtinz';
 
+// ── Vision system ────────────────────────────────────────
+// Captures what the camera sees and sends it with chat messages
+// so Miss OG Tinz can describe her environment naturally.
+// Gemini Flash on the server does the actual image reading —
+// it's free (1500 req/day) and we only fire it when useful.
+
+const VISION = {
+  // How often we're allowed to send a snapshot (ms) — rate limiting
+  COOLDOWN_MS:   12000,  // max once every 12 seconds
+  // Only fire vision on these triggers — not every single message
+  TRIGGERS:      ['look', 'see', 'around', 'room', 'doing', 'house',
+                  'standing', 'wearing', 'outfit', 'where', 'what are you',
+                  'show me', 'describe', 'background', 'behind', 'floor',
+                  'sitting', 'dancing', 'moving'],
+  _lastSentAt:   0,
+  _lastRoomSent: null,
+
+  // Returns true if we should attach a snapshot to this message
+  shouldCapture(message, roomChanged) {
+    const now = Date.now();
+    if (now - this._lastSentAt < this.COOLDOWN_MS) return false;
+    if (roomChanged) return true;
+    const lower = (message || '').toLowerCase();
+    return this.TRIGGERS.some(t => lower.includes(t));
+  },
+
+  // Grab a JPEG snapshot from the Three.js canvas
+  // Renders fresh, scales down to 512px wide to save bandwidth
+  capture() {
+    try {
+      // Force a fresh render so the snapshot is current
+      renderer.render(scene, camera);
+
+      // Use an offscreen canvas to resize — 512px wide is enough for Gemini
+      const src = canvas;
+      const scale = Math.min(1, 512 / src.width);
+      const w = Math.round(src.width  * scale);
+      const h = Math.round(src.height * scale);
+
+      const off = document.createElement('canvas');
+      off.width  = w;
+      off.height = h;
+      off.getContext('2d').drawImage(src, 0, 0, w, h);
+
+      // Return base64 without the data: prefix (server adds it back)
+      return off.toDataURL('image/jpeg', 0.72).split(',')[1];
+    } catch (e) {
+      console.warn('[Vision] Capture failed:', e.message);
+      return null;
+    }
+  },
+
+  markSent(room) {
+    this._lastSentAt   = Date.now();
+    this._lastRoomSent = room;
+  }
+};
+
 // ── Elements ────────────────────────────────────────────
 const canvas      = document.getElementById('canvas');
 const loader_el   = document.getElementById('loader');
@@ -3672,16 +3730,31 @@ async function sendMessage(message, displayName='Viewer') {
   chatHistory.push({ role:'user', content: message });
 
   try {
+    // ── Vision: capture scene snapshot if triggered ──────────────
+    const roomChanged = VISION._lastRoomSent !== _currentRoom;
+    let sceneSnapshot = null;
+    if (VISION.shouldCapture(message, roomChanged)) {
+      sceneSnapshot = VISION.capture();
+      if (sceneSnapshot) VISION.markSent(_currentRoom);
+    }
+
+    const body = {
+      user_id:      USER_ID,
+      message,
+      display_name: displayName,
+      history:      chatHistory.slice(-6),
+      system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
+      current_room: _currentRoom,
+    };
+    if (sceneSnapshot) {
+      body.scene_image    = sceneSnapshot;   // base64 JPEG
+      body.vision_context = `This is a screenshot of Miss OG Tinz's live 3D avatar standing in her ${_currentRoom.replace('-', ' ')}. Use what you see to make your reply feel grounded and self-aware.`;
+    }
+
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        user_id:      USER_ID,
-        message,
-        display_name: displayName,
-        history:      chatHistory.slice(-6),
-        system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.'
-      })
+      body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error('API error ' + res.status);
 
