@@ -18,7 +18,7 @@ const deadAir = {
 };
 
 // ── Config ─────────────────────────────────────────────
-const VRM_PATH      = '/Streaming-engine/MissOgTinz_Master.vrm';
+const VRM_PATH      = 'MissOgTinz_Master.vrm';
 const API_URL       = 'https://impactgrid-dijo.onrender.com/chat/message';
 const PROACTIVE_URL = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 const TOPIC_URL     = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -71,8 +71,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 999999);
-camera.position.set(0, 1.6, 3);
-camera.lookAt(0, 1.2, 0);
+// Initial camera — points at studio desk spot where avatar will start
+// (will be overridden once VRM loads and updateCamera() takes over)
+camera.position.set(0.6, 1.8, 1.5);
+camera.lookAt(0.6, 1.2, -1.2);
 
 // ── Lighting ─────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0xffffff, 2.5);
@@ -631,23 +633,40 @@ const _gltfLoader = new GLTFLoader();
 
 let _houseLoaded = false;
 _gltfLoader.load(
-  '/Streaming-engine/House.glb',
+  'House.glb',
   (gltf) => {
     const house = gltf.scene;
-    // House is in Blender metres — scale down so avatar (1.7 units) fits inside
-    // Typical Blender house room = ~4m wide → we want ~4 Three.js units wide
-    house.scale.setScalar(0.6);
-    // Offset so avatar starts inside the living room
-    house.position.set(-1, 0, 2);
-    house.traverse(n => {
-      if (n.isMesh) {
-        n.castShadow    = true;
-        n.receiveShadow = true;
-      }
-    });
     scene.add(house);
+
+    // Auto-fit: measure the house, scale so it's roughly 14 units wide
+    // (to match avatar room coords spanning ~12 units), then center at origin.
+    const houseBox  = new THREE.Box3().setFromObject(house);
+    const houseSize = houseBox.getSize(new THREE.Vector3());
+    const houseCenter = houseBox.getCenter(new THREE.Vector3());
+
+    // Target width: 14 units so rooms at x=±6 are well inside
+    const targetWidth = 14;
+    const houseScale  = targetWidth / Math.max(houseSize.x, houseSize.z);
+    house.scale.setScalar(houseScale);
+
+    // Recalculate after scaling
+    const scaledBox    = new THREE.Box3().setFromObject(house);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    const scaledMin    = scaledBox.min;
+
+    // Center X/Z on origin, floor at y=0
+    house.position.set(
+      -scaledCenter.x,
+      -scaledMin.y,
+      -scaledCenter.z
+    );
+
+    house.traverse(n => {
+      if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
+    });
     _houseLoaded = true;
-    console.log('[House] GLB loaded ✓');
+    console.log(`[House] GLB loaded ✓  raw size: ${houseSize.x.toFixed(1)} × ${houseSize.z.toFixed(1)} m  applied scale: ${houseScale.toFixed(3)}`);
+    console.log(`[House] Scaled size: ${(houseSize.x * houseScale).toFixed(1)} × ${(houseSize.z * houseScale).toFixed(1)} units  floor at y=0`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
@@ -922,8 +941,8 @@ const WORLD_CAM = { behindDist: 3.5, sideDist: 0.8, height: 2.2, lookHeight: 1.1
 const FACE_CAM  = { frontDist: 1.05, height: 1.65, lookHeight: 1.45 };
 const THINK_CAM = { behindDist: 2.2, sideDist: 0.5, height: 1.8, lookHeight: 1.3 };
 
-const camCurrent = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
-const camTarget  = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
+const camCurrent = { x: 0.6, y: 1.8, z: 1.5, lookX: 0.6, lookY: 1.2, lookZ: -1.2 };
+const camTarget  = { x: 0.6, y: 1.8, z: 1.5, lookX: 0.6, lookY: 1.2, lookZ: -1.2 };
 const camSmooth  = camCurrent;
 const camWant    = camTarget;
 const CAM_DIST   = { IDLE: 3.5, SPEAK: 1.05, THINK: 2.2 };
