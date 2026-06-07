@@ -982,8 +982,9 @@ function moveToRoom(roomName) {
   _apiOverride      = true;
   _apiOverrideTimer = 0;
 
+  const prevRoom = _currentRoom;
+
   if (roomName !== _currentRoom) {
-    setRoomVisible(_currentRoom, false);
     _currentRoom = roomName;
     // Update ambient immediately so colour doesn't snap on arrival
     const hNew = HOUSE[roomName];
@@ -995,9 +996,23 @@ function moveToRoom(roomName) {
 
   WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName, facingY: wpDef.facingY };
   walkTo('_room_dest', () => {
+    // Hide previous room, show new one
+    if (prevRoom && prevRoom !== roomName) setRoomVisible(prevRoom, false);
     setRoomVisible(roomName, true);
     // Face the right direction on arrival
     if (wpDef.facingY !== undefined) _targetFacing = wpDef.facingY;
+    // Move companion to the new room too
+    if (companion) {
+      const hNew = HOUSE[roomName];
+      if (hNew?.spots?.length) {
+        const sp = hNew.spots[Math.floor(Math.random() * hNew.spots.length)];
+        companion.scene.position.set(sp.x + 0.8, 0, sp.z + 0.8);
+        companionPos.x = sp.x + 0.8;
+        companionPos.z = sp.z + 0.8;
+        companionPos.targetX = undefined;
+        companionPos.targetZ = undefined;
+      }
+    }
     // Start an activity in this room immediately on arrival
     const roomSpots = HOUSE[roomName]?.spots;
     if (roomSpots?.length) {
@@ -1081,9 +1096,13 @@ function walkTo(waypointName, onArrive = null) {
   const dx = wp.x - vrmPos.x;
   const dz = wp.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
-  walk.duration = Math.max(1.0, dist * 0.65);
+  const WALK_SPEED = 1.5; // world units per second — natural walking pace
+  walk.duration = Math.max(0.8, dist / WALK_SPEED);
   walk.targetFacing = Math.atan2(dx, dz) + Math.PI;
 }
+
+// Walk animation time accumulator (keeps counting while walking)
+let _walkPhase = 0;
 
 function updateWalk(delta) {
   if (!walk.active || !vrm) return;
@@ -1094,9 +1113,25 @@ function updateWalk(delta) {
     walk.active   = false;
     vrmPos.x = walk.toX;
     vrmPos.z = walk.toZ;
+    _walkPhase = 0;
+    // Restore rest pose after arriving
+    if (boneHips)       boneHips.rotation.set(0,0,0);
+    if (boneSpine)      boneSpine.rotation.set(0,0,0);
+    if (boneLUpperLeg)  boneLUpperLeg.rotation.set(0,0,-0.04);
+    if (boneRUpperLeg)  boneRUpperLeg.rotation.set(0,0, 0.06);
+    if (boneLLowerLeg)  boneLLowerLeg.rotation.set(0.04,0,0);
+    if (boneRLowerLeg)  boneRLowerLeg.rotation.set(0.04,0,0);
+    if (boneLFoot)      boneLFoot.rotation.set(-0.05,0,-0.03);
+    if (boneRFoot)      boneRFoot.rotation.set(-0.05,0, 0.04);
+    if (boneLUpperArm)  boneLUpperArm.rotation.set(0.07,0.04, 0.9);
+    if (boneRUpperArm)  boneRUpperArm.rotation.set(0.07,-0.04,-0.9);
+    if (boneLLowerArm)  boneLLowerArm.rotation.set(-0.04,0, 0.52);
+    if (boneRLowerArm)  boneRLowerArm.rotation.set(-0.04,0,-0.52);
     if (walk.onArrive) walk.onArrive();
+    return;
   }
 
+  // Ease-in-out for position
   const t    = walk.progress;
   const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
   vrmPos.x = walk.fromX + (walk.toX - walk.fromX) * ease;
@@ -1105,11 +1140,96 @@ function updateWalk(delta) {
   vrm.scene.position.x = vrmPos.x;
   vrm.scene.position.z = vrmPos.z;
 
+  // Smooth turn toward travel direction
   const currentFacing = vrm.scene.rotation.y;
   let diff = walk.targetFacing - currentFacing;
   while (diff >  Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  vrm.scene.rotation.y += diff * Math.min(1, delta * 5);
+  vrm.scene.rotation.y += diff * Math.min(1, delta * 6);
+
+  // ── WALK ANIMATION ──────────────────────────────────────────────
+  // Speed: steps per second. A natural feminine walk ~2.2 steps/sec
+  const STEP_FREQ  = 2.4;
+  _walkPhase += delta * STEP_FREQ * Math.PI * 2;
+  const p = _walkPhase; // continuous angle
+
+  // ── Legs ── alternating forward/back swing
+  const legSwing  = Math.sin(p) * 0.42;       // upper leg forward-back
+  const kneeBend  = Math.max(0, -Math.sin(p)) * 0.55; // knee bends on the back-step
+  const kneeSwing = Math.max(0,  Math.sin(p)) * 0.35; // slight bend on forward-swing too
+  const footLift  = Math.max(0, Math.sin(p)) * 0.18;  // foot lifts slightly
+
+  if (boneLUpperLeg) boneLUpperLeg.rotation.x =  legSwing;
+  if (boneRUpperLeg) boneRUpperLeg.rotation.x = -legSwing;
+  if (boneLLowerLeg) boneLLowerLeg.rotation.x =  kneeBend  + 0.04;
+  if (boneRLowerLeg) boneRLowerLeg.rotation.x =  kneeSwing + 0.04;
+  if (boneLFoot)     { boneLFoot.rotation.x = -0.05 + footLift * 0.5; boneLFoot.rotation.z = -0.03; }
+  if (boneRFoot)     { boneRFoot.rotation.x = -0.05;                  boneRFoot.rotation.z =  0.04; }
+  if (boneLToes)     boneLToes.rotation.x =  0.08 + footLift * 0.3;
+  if (boneRToes)     boneRToes.rotation.x =  0.08;
+
+  // ── Hips ── side sway + forward tilt on each step
+  const hipSway = Math.sin(p) * 0.1;
+  const hipTilt = Math.cos(p) * 0.04; // slight forward/back tilt
+  if (boneHips) {
+    boneHips.rotation.z = hipSway;
+    boneHips.rotation.x = hipTilt;
+    boneHips.rotation.y = Math.sin(p) * 0.05;
+  }
+
+  // ── Spine & Chest ── counter-rotate against hips for natural twist
+  if (boneSpine) {
+    boneSpine.rotation.z = -hipSway * 0.6;
+    boneSpine.rotation.x =  0.02 + Math.abs(Math.cos(p)) * 0.015;
+    boneSpine.rotation.y = -Math.sin(p) * 0.04;
+  }
+  if (boneChest) {
+    boneChest.rotation.z = -hipSway * 0.3;
+    boneChest.rotation.y = -Math.sin(p) * 0.06;
+  }
+
+  // ── Head ── slight bob + forward-facing, with subtle look-ahead tilt
+  if (boneHead) {
+    boneHead.rotation.x = 0.04 + Math.abs(Math.sin(p)) * 0.02;  // bob
+    boneHead.rotation.z = Math.sin(p) * 0.018;                    // tiny head tilt
+    boneHead.rotation.y = Math.sin(p) * 0.04;                     // micro glance
+  }
+
+  // ── Arms ── counter-swing to legs (left arm swings forward when right leg does)
+  // Arms stay close to body — not flailing — with a natural bend at the elbow
+  const armSwing    = -Math.sin(p) * 0.28;  // opposite phase to lead leg
+  const elbowBend   = 0.35 + Math.abs(Math.sin(p)) * 0.1;
+
+  if (boneLUpperArm) {
+    boneLUpperArm.rotation.x =  armSwing;
+    boneLUpperArm.rotation.z =  0.8;     // arm close to body, slight outward
+    boneLUpperArm.rotation.y =  0.04;
+  }
+  if (boneRUpperArm) {
+    boneRUpperArm.rotation.x = -armSwing;
+    boneRUpperArm.rotation.z = -0.8;
+    boneRUpperArm.rotation.y = -0.04;
+  }
+  if (boneLLowerArm) {
+    boneLLowerArm.rotation.x = 0;
+    boneLLowerArm.rotation.z =  elbowBend;
+  }
+  if (boneRLowerArm) {
+    boneRLowerArm.rotation.x = 0;
+    boneRLowerArm.rotation.z = -elbowBend;
+  }
+  // Hands relaxed during walk — slight droop
+  if (boneLHand) { boneLHand.rotation.z =  0.15; boneLHand.rotation.x = 0.05; }
+  if (boneRHand) { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.05; }
+
+  // Fingers relaxed during walk
+  setLeftFingerRelax();
+  setRightFingerRelax();
+
+  // Vertical bob — body rises and falls with each step
+  const basePosY = vrm.scene.position.y;
+  const bobY     = Math.abs(Math.sin(p)) * 0.018;
+  vrm.scene.position.y = (vrm._restPosY || 0) + bobY;
 }
 
 // ── Activity → location mapping ───────────────────────────────────────────────
@@ -1535,6 +1655,7 @@ gltfLoader.load(
       if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
+    vrm._restPosY = vrm.scene.position.y;
 
     // ── Bootstrap 360° camera system ─────────────────────
     // Place her at centre stage facing camera (Z+) initially
@@ -1605,18 +1726,32 @@ function loadCompanion() {
         if (!obj.isMesh) return;
         obj.frustumCulled = false;
         if (!obj.material) return;
-        // Default dark outfit, medium skin
         const n = obj.name.toLowerCase();
-        if (n.includes('hair')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a0a00, roughness: 0.8 });
-        } else if (n.includes('eye')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x3b2010, roughness: 0.1 });
+        // Hair
+        if (n.includes('hair') || n.includes('brow') || n.includes('lash')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a0800, roughness: 0.75 });
+        // Eyes
+        } else if (n.includes('eye') || n.includes('iris')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x3b2010, roughness: 0.1, metalness: 0.1 });
+        // Skin — face, hands, arms
+        } else if (n.includes('face') || n.includes('skin') || n.includes('body') || n.includes('hand') || n.includes('arm') || n.includes('leg') || n.includes('figure')) {
+          obj.material = new THREE.MeshStandardMaterial({
+            color: 0xb07040, roughness: 0.65,
+            emissive: new THREE.Color(0xb07040), emissiveIntensity: 0.12,
+          });
+        // Top / shirt — burgundy
+        } else if (n.includes('top') || n.includes('shirt') || n.includes('upper') || n.includes('torso') || n.includes('chest')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x5a1a1a, roughness: 0.8 });
+        // Bottom / trousers — dark navy
+        } else if (n.includes('bottom') || n.includes('pant') || n.includes('jean') || n.includes('skirt') || n.includes('lower')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a1a3a, roughness: 0.8 });
+        // Shoes
+        } else if (n.includes('shoe') || n.includes('foot') || n.includes('boot')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7, metalness: 0.1 });
+        // Catch-all — give a neutral outfit colour instead of skin
         } else {
           obj.material = new THREE.MeshStandardMaterial({
-            color:    0xb07040,
-            roughness: 0.65,
-            emissive: new THREE.Color(0xb07040),
-            emissiveIntensity: 0.12,
+            color: 0x2a1a0a, roughness: 0.8,
           });
         }
       });
@@ -1647,34 +1782,41 @@ function updateCompanion(delta) {
     companion.scene.position.y = Math.sin(_compPhase * 0.8) * 0.008;
   }
 
-  // Wander to a new spot every _companionDwell seconds
-  if (_companionTimer > _companionDwell) {
+  // Wander to a new spot every _companionDwell seconds — stay near Miss OG Tinz
+  if (_companionTimer > _companionDwell && companionPos.targetX === undefined) {
     _companionTimer = 0;
-    _companionDwell = 12 + Math.random() * 20;
+    _companionDwell = 14 + Math.random() * 18;
 
-    // Pick a random spot in the house (same HOUSE definition)
-    const allSpots = Object.entries(HOUSE).flatMap(([, roomDef]) => roomDef.spots);
-    const spot = allSpots[Math.floor(Math.random() * allSpots.length)];
+    // Stay in the same room as Miss OG Tinz — pick one of her room's spots
+    const roomKey = _currentRoom || 'studio';
+    const roomDef = HOUSE[roomKey];
+    const spots   = roomDef ? roomDef.spots : [{ x: 0, z: 0 }];
+    const spot    = spots[Math.floor(Math.random() * spots.length)];
 
-    // Smoothly lerp his position over next few seconds (simple teleport with lerp)
-    companionPos.targetX = spot.x + (Math.random() - 0.5) * 1.5;
-    companionPos.targetZ = spot.z + (Math.random() - 0.5) * 1.5;
-    companionPos.lerpT   = 0;
+    companionPos.targetX = spot.x + (Math.random() - 0.5) * 1.2;
+    companionPos.targetZ = spot.z + (Math.random() - 0.5) * 1.2;
   }
 
-  // Lerp toward target position
+  // Lerp toward target position — use a speed-based approach so she walks steadily
   if (companionPos.targetX !== undefined) {
-    companionPos.lerpT = Math.min(1, (companionPos.lerpT || 0) + delta * 0.3);
-    companionPos.x = THREE.MathUtils.lerp(companionPos.x, companionPos.targetX, companionPos.lerpT);
-    companionPos.z = THREE.MathUtils.lerp(companionPos.z, companionPos.targetZ, companionPos.lerpT);
-    companion.scene.position.x = companionPos.x;
-    companion.scene.position.z = companionPos.z;
-
-    // Face direction of travel
     const dx = companionPos.targetX - companionPos.x;
     const dz = companionPos.targetZ - companionPos.z;
-    if (Math.abs(dx) + Math.abs(dz) > 0.05) {
+    const dist = Math.sqrt(dx*dx + dz*dz);
+    const WALK_SPEED = 1.4; // world units per second — realistic walking pace
+    if (dist > 0.05) {
+      const step = Math.min(dist, WALK_SPEED * delta);
+      companionPos.x += (dx / dist) * step;
+      companionPos.z += (dz / dist) * step;
+      companion.scene.position.x = companionPos.x;
+      companion.scene.position.z = companionPos.z;
+      // Face direction of travel
       companion.scene.rotation.y = Math.atan2(dx, dz);
+    } else {
+      // Arrived — clear target
+      companionPos.x = companionPos.targetX;
+      companionPos.z = companionPos.targetZ;
+      companionPos.targetX = undefined;
+      companionPos.targetZ = undefined;
     }
   }
 
@@ -3226,12 +3368,16 @@ function render() {
     blinkTimer += delta;
 
     // ── Activity system ────────────────────────────────
-    activityUpdate(delta);
+    if (!walk.active) activityUpdate(delta);
     hyperUpdate(delta);
 
     // ── Walk / room movement ───────────────────────────
     updateWalk(delta);
     lifeUpdate();
+    // Show the walk — use IDLE/world camera mode while she's moving
+    if (walk.active && camMode === 'IDLE') {
+      // camMode stays IDLE (world cam) so we can see her walk
+    }
 
     // ── Facing direction — lerp toward target so she turns to face her props ──
     if (!walk.active && vrm) {
@@ -3242,8 +3388,8 @@ function render() {
       vrm.scene.rotation.y += normalised * Math.min(delta * 2.5, 1);
     }
 
-    // ── Idle body sway (only when not mid-gesture) ────
-    if (!gestureActive()) {
+    // ── Idle body sway (only when not mid-gesture AND not walking) ────
+    if (!gestureActive() && !walk.active) {
 
       // ── GIRLY IDLE BASE — always running ──────────────
       // S-curve weight shift: hips sway, spine counter, chest independent
