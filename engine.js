@@ -700,10 +700,16 @@ function _placeVRMOnFloor() {
     console.warn('[VRM] Raycast gave no good floor — defaulting to Y=0');
   }
 
-  vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
-  vrm._restPosY = _houseFloorY;
+  // The VRM loader set position.y = -boxRaw.min.y * scaleVal so the feet
+  // sit at Y=0. That value is the feet-to-origin offset (vrm._feetOffset).
+  // ADD it to floorY so the feet land ON the floor, not the hips.
+  const feetOffset = vrm._feetOffset ?? 0;
+  const finalY = _houseFloorY + feetOffset;
+
+  vrm.scene.position.set(_houseSpawnX, finalY, _houseSpawnZ);
+  vrm._restPosY = finalY;
   vrm.scene.rotation.y = Math.PI;
-  console.log(`[VRM] Placed on floor Y=${_houseFloorY.toFixed(4)}`);
+  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${feetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
 }
 
 _gltfLoader.load(
@@ -1553,9 +1559,11 @@ gltfLoader.load(
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
     // Center X/Z, place feet at Y=0 — _placeVRMOnFloor will lift to actual floorY
+    const feetToOrigin = -boxRaw.min.y * scaleVal; // how far origin is above feet
+    vrm._feetOffset = feetToOrigin;               // stored so _placeVRMOnFloor can add it
     vrm.scene.position.set(
       -centerRaw.x * scaleVal,
-      -boxRaw.min.y * scaleVal,
+      feetToOrigin,
       -centerRaw.z * scaleVal
     );
 
@@ -2195,7 +2203,7 @@ function activityUpdate(delta) {
         setBS('O', p * 0.4); // mouth opens
       } else {
         // Land + watch — arms fall, she poses watching, one hip out
-        if (vrm) vrm.scene.position.y = 0;
+        if (vrm) vrm.scene.position.y = vrm._restPosY || 0;
         if (boneLUpperArm) boneLUpperArm.rotation.z = 0.75;
         if (boneRUpperArm) boneRUpperArm.rotation.z = -0.75;
         if (boneLHand)     { boneLHand.rotation.z =  0.2; boneLHand.rotation.x = 0.08; }
@@ -2674,7 +2682,7 @@ function activityUpdate(delta) {
       const bob   = Math.sin(t * 0.9) * 0.025;
 
       // Lower hips to seated height
-      if (vrm) vrm.scene.position.y = -ease * 0.38; // sink down
+      if (vrm) vrm.scene.position.y = (vrm._restPosY || 0) - ease * 0.38; // sink down
       if (boneHips)       { boneHips.rotation.x = ease * 0.35; boneHips.rotation.z = ease * 0.08 + bob; }
       if (boneSpine)      { boneSpine.rotation.x = ease * 0.08; boneSpine.rotation.z = -ease * 0.04 + bob * 0.4; }
       if (boneChest)      boneChest.rotation.x = ease * 0.05;
@@ -2706,7 +2714,7 @@ function activityUpdate(delta) {
       // When leaving sofaSit, reset position
       if (ACTIVITY.timer > ACTIVITY.duration - 0.5) {
         const fadeOut = 1 - ((ACTIVITY.duration - ACTIVITY.timer) / 0.5);
-        if (vrm) vrm.scene.position.y = -0.38 + fadeOut * 0.38;
+        if (vrm) vrm.scene.position.y = (vrm._restPosY || 0) - 0.38 + fadeOut * 0.38;
       }
       break;
     }
@@ -3107,7 +3115,7 @@ function triggerSubCelebration() {
     }},
     // Point and lean toward cam
     { dur: 2.0, fn: (t, p) => {
-      if (vrm) { vrm.scene.position.y = 0; vrm._lastJump = 0; }
+      if (vrm) { vrm.scene.position.y = vrm._restPosY || 0; vrm._lastJump = 0; }
       const ep = easeInOut(Math.min(p*2,1));
       const ret = p > 0.5 ? easeInOut((p-0.5)*2) : 0;
       if (vrm) vrm.scene.position.z = ep*0.14 - ret*0.14;
