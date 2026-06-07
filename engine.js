@@ -1,21 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import DeadAirTimer from './utils/dead-air-timer.js';
 
-// ── Dead air — forward declaration (full impl below) ────
-// Declared here so it's available when the VRM loader calls deadAir.start()
-let _deadAirTimer  = null;
-let _deadAirActive = false;
-const DEAD_AIR_MS  = 30000;
-const deadAir = {
-  start()  { _deadAirActive = true;  this.reset(); },
-  stop()   { _deadAirActive = false; clearTimeout(_deadAirTimer); },
-  reset()  {
-    clearTimeout(_deadAirTimer);
-    if (!_deadAirActive) return;
-    _deadAirTimer = setTimeout(() => _triggerProactive(), DEAD_AIR_MS);
-  }
-};
+// ── Dead air — handled by DeadAirTimer class ────────────────
+// Instantiated in _initDeadAir() once the VRM is ready.
+// The inline implementation has been removed — DeadAirTimer handles
+// 429 backoff, minimum intervals, and tiered error recovery.
+let deadAir = null;
 
 // ── Config ─────────────────────────────────────────────
 const VRM_PATH      = 'MissOgTinz_Master.vrm';
@@ -1061,7 +1053,7 @@ gltfLoader.load(
       setStatus('Ready ✦', 'ready');
       showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
       startTopicPolling();
-      deadAir.start();
+      _initDeadAir();
       initTwitchChat();
     }, 400);
   },
@@ -3038,30 +3030,36 @@ function startTopicPolling() {
 }
 
 
-// ── Dead air timer (declared at top of file) ───────────
+// ── Dead air — DeadAirTimer integration ────────────────────
+// The DeadAirTimer class handles silence detection, 429 backoff,
+// minimum speak intervals, and tiered error recovery.
+// We only need to handle the proactive message payload here.
 
-async function _triggerProactive() {
-  if (_isSpeaking) return; // don't talk over herself
-  try {
-    setStatus('Thinking...', 'thinking');
-    setCamMode('THINK');
-    const res  = await fetch(PROACTIVE_URL, { method: 'POST' });
-    const data = await res.json();
-    const text = data?.response || '';
-    if (!text) return;
-    if (data.location) moveToRoom(data.location);
-    setCamMode('SPEAK');
-    showBubble(text, 'Miss OG Tinz');
-    setStatus('Live ✦', 'ready');
-    doGesture('talk', text.length * 65);
-    await speak(text, 'neutral');
-    setCamMode('IDLE');
-  } catch(err) {
-    console.error('[DeadAir]', err);
-    setStatus('Ready ✦', 'ready');
-    setCamMode('IDLE');
-  }
-  setTimeout(() => deadAir.reset(), 8000);
+async function _onProactiveMessage(text) {
+  if (_isSpeaking) return; // guard: don't talk over herself
+  if (!text) return;
+  setCamMode('SPEAK');
+  showBubble(text, 'Miss OG Tinz');
+  setStatus('Live ✦', 'ready');
+  doGesture('talk', text.length * 65);
+  await speak(text, 'neutral');
+  setCamMode('IDLE');
+  deadAir?.reset(); // restart timer after speaking
+}
+
+function _initDeadAir() {
+  deadAir = new DeadAirTimer({
+    silenceThresholdMs: 120_000,   // 2 minutes of silence
+    minIntervalMs:      180_000,   // at least 3 min between proactive speaks
+    chatEndpoint:       PROACTIVE_URL,
+    onProactiveMessage: (text) => {
+      // DeadAirTimer has already fetched and parsed the response;
+      // hand it off to the UI handler
+      _onProactiveMessage(text);
+    },
+    debug: false,
+  });
+  deadAir?.start();
 }
 
 
@@ -3070,7 +3068,7 @@ const chatHistory = [];
 
 async function sendMessage(message, displayName='Viewer') {
   if (!message.trim()) return;
-  deadAir.reset();
+  deadAir?.reset();
   setStatus('Thinking...', 'thinking');
   sendBtn.disabled = true;
 
@@ -3160,7 +3158,7 @@ async function sendMessage(message, displayName='Viewer') {
 
     // Camera: back to idle after speaking
     setCamMode('IDLE');
-    deadAir.reset();
+    deadAir?.reset();
 
   } catch(err) {
     console.error(err);
