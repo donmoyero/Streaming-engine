@@ -630,18 +630,18 @@ const roomLights = {};
 const _gltfLoader = new GLTFLoader();
 
 let _houseLoaded = false;
-// VRM spawn point — set by the floor-finder once house loads
-let _houseSpawnX = 0;
-let _houseSpawnZ = 0;
-let _houseFloorY = 0;  // actual floor Y at spawn point
+// VRM spawn point — calculated from real GLB mesh analysis
+// Floor Y = 0.486 (hScale=1.23, sMinY=-0.486 → world floor at +0.486)
+// Living room centre in world space: (-2.7, 0.486, -3.8)
+let _houseSpawnX = -2.7;
+let _houseSpawnZ = -3.8;
+let _houseFloorY = 0.486;
 
 // Place the VRM standing on the detected floor at the spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
-  // Her scene origin is at her feet after VRMUtils.rotateVRM0 + auto-scale.
-  // Stand her exactly on the detected floor surface.
   vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
   vrm._restPosY = _houseFloorY;
   vrm.scene.rotation.y = Math.PI;
@@ -666,28 +666,14 @@ _gltfLoader.load(
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
 
-    // ── Find floor Y by single downward raycast at spawn X/Z ──────
-    // We know (-3, 0, -3) is in the living room from visual testing.
-    // Just cast straight down to find the exact floor surface Y.
-    _houseSpawnX = -3;
-    _houseSpawnZ = -3;
-
-    const _spawnRay = new THREE.Raycaster(
-      new THREE.Vector3(_houseSpawnX, 20, _houseSpawnZ),
-      new THREE.Vector3(0, -1, 0)
-    );
-    const _houseMeshes = [];
-    house.traverse(n => { if (n.isMesh) _houseMeshes.push(n); });
-    const _floorHits = _spawnRay.intersectObjects(_houseMeshes, false);
-    _houseFloorY = (_floorHits.length > 0) ? _floorHits[0].point.y : 0;
-
-    // If the VRM is already loaded, reposition it now
+    // Spawn coords confirmed from GLB mesh analysis — living room centre
+    // No raycasting needed; values are hardcoded from real geometry data
     if (vrm) {
       _placeVRMOnFloor();
       _snapCameraToVRM();
     }
 
-    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  spawn=(-3, ${_houseFloorY.toFixed(3)}, -3)`);
+    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  spawn=(${_houseSpawnX}, ${_houseFloorY}, ${_houseSpawnZ})`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
@@ -708,56 +694,55 @@ _gltfLoader.load(
 // ================================================================
 
 const HOUSE = {
+  // All coordinates from real GLB mesh analysis (hScale=1.23, floorY=0.486)
   'living-room': {
-    origin: { x:  2,   z: -3  }, size: { w: 6, d: 5 },
-    door:   { x:  0,   z:  0  },
+    origin: { x: -2.7,  z: -3.8 }, size: { w: 5, d: 4 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',      x:  2.0, z: -3.5, facingY: 0,           activities: ['sofaSit','phoneScroll','idle','tvReact'] },
-      { label: 'TV',        x:  2.0, z: -5.0, facingY: 0,           activities: ['tvReact','idle','dance'] },
-      { label: 'Centre',    x:  2.0, z: -3.0, facingY: Math.PI,     activities: ['dance','stretch','hairflick','hiponhip','idle'] },
-      { label: 'Window',    x:  4.5, z: -2.5, facingY: -Math.PI/2,  activities: ['idle','stretch','hairflick'] },
+      { label: 'Sofa',        x: -4.0, z: -4.8, facingY: 0,          activities: ['sofaSit','phoneScroll','idle','tvReact'] },
+      { label: 'TV',          x: -2.3, z: -4.8, facingY: 0,          activities: ['tvReact','idle','dance'] },
+      { label: 'Centre',      x: -2.7, z: -3.5, facingY: Math.PI,    activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      { label: 'Fireplace',   x: -1.6, z: -2.0, facingY: Math.PI,    activities: ['idle','stretch'] },
     ]
   },
   kitchen: {
-    origin: { x: -3,   z: -3  }, size: { w: 5, d: 4 },
-    door:   { x:  0,   z: -2  },
+    origin: { x: -5.0,  z:  0.3 }, size: { w: 3, d: 3 },
     ambientColor: 0x0a1005,
     spots: [
-      { label: 'Stove',   x: -4.5, z: -4.5, facingY: Math.PI/2,   activities: ['stirring','chopping','idle'] },
-      { label: 'Counter', x: -3.0, z: -5.0, facingY: 0,           activities: ['chopping','tasting','idle'] },
-      { label: 'Sink',    x: -1.5, z: -5.0, facingY: 0,           activities: ['idle','hairflick'] },
-      { label: 'Centre',  x: -3.0, z: -3.5, facingY: Math.PI,     activities: ['tasting','hiponhip','idle'] },
+      { label: 'Stove',   x: -5.3, z:  0.3, facingY: Math.PI/2,  activities: ['stirring','chopping','idle'] },
+      { label: 'Sink',    x: -5.9, z: -0.8, facingY: Math.PI/2,  activities: ['idle','hairflick'] },
+      { label: 'Centre',  x: -4.5, z:  0.5, facingY: Math.PI,    activities: ['tasting','hiponhip','idle'] },
+    ]
+  },
+  dining: {
+    origin: { x: -2.9,  z:  2.3 }, size: { w: 4, d: 3 },
+    ambientColor: 0x0a0a05,
+    spots: [
+      { label: 'Table',   x: -3.0, z:  2.3, facingY: Math.PI/2,  activities: ['idle','tasting','phoneScroll'] },
+      { label: 'Centre',  x: -2.5, z:  2.8, facingY: Math.PI,    activities: ['dance','idle','hiponhip'] },
     ]
   },
   bedroom: {
-    origin: { x:  4,   z:  3  }, size: { w: 5, d: 5 },
-    door:   { x:  2,   z:  1  },
+    origin: { x:  3.2,  z: -0.7 }, size: { w: 4, d: 3 },
     ambientColor: 0x05050d,
     spots: [
-      { label: 'Bed',     x:  5.0, z:  4.0, facingY: Math.PI/4,   activities: ['sofaSit','idle','phoneScroll'] },
-      { label: 'Dresser', x:  6.5, z:  2.5, facingY: -Math.PI/2,  activities: ['mirrorPose','hairflick','idle'] },
-      { label: 'Window',  x:  3.5, z:  5.5, facingY: 0,           activities: ['idle','stretch'] },
-      { label: 'Centre',  x:  4.5, z:  3.5, facingY: Math.PI,     activities: ['dance','stretch','idle'] },
+      { label: 'Wardrobe', x:  3.3, z: -0.7, facingY: -Math.PI/2, activities: ['mirrorPose','hairflick','idle'] },
+      { label: 'Centre',   x:  4.0, z:  0.5, facingY: Math.PI,    activities: ['dance','stretch','idle','phoneScroll'] },
     ]
   },
-  bathroom: {
-    origin: { x: -3,   z:  3  }, size: { w: 4, d: 4 },
-    door:   { x: -1,   z:  1  },
-    ambientColor: 0x05100f,
+  bedroom2: {
+    origin: { x:  5.2,  z:  3.3 }, size: { w: 3, d: 4 },
+    ambientColor: 0x05050d,
     spots: [
-      { label: 'Mirror',  x: -3.5, z:  4.5, facingY: 0,           activities: ['mirrorPose','hairflick','idle'] },
-      { label: 'Sink',    x: -2.5, z:  4.5, facingY: 0,           activities: ['idle'] },
-      { label: 'Bath',    x: -4.5, z:  3.5, facingY: Math.PI/2,   activities: ['sofaSit','idle'] },
+      { label: 'Window',  x:  4.1, z:  5.5, facingY: 0,          activities: ['idle','stretch','hairflick'] },
+      { label: 'Centre',  x:  5.0, z:  3.8, facingY: Math.PI,    activities: ['dance','idle','sofaSit'] },
     ]
   },
   studio: {
-    origin: { x:  0,   z:  0  }, size: { w: 4, d: 3 },
-    door:   { x:  0,   z:  1  },
+    origin: { x: -2.7,  z: -3.8 }, size: { w: 5, d: 4 },
     ambientColor: 0x1a0a2e,
     spots: [
-      { label: 'Desk',    x:  0.6, z: -1.2, facingY: Math.PI,     activities: ['typing','monitor','noseCover','idle'] },
-      { label: 'Centre',  x:  0.0, z:  0.0, facingY: Math.PI,     activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      { label: 'Centre',  x: -2.7, z: -3.5, facingY: Math.PI,    activities: ['dance','stretch','hairflick','hiponhip','idle','typing','monitor'] },
     ]
   },
 };
