@@ -668,6 +668,15 @@ const ROOM_WAYPOINT_DEFS = {
 let _currentRoom   = 'studio';  // which room she's in
 const _roomObjects = {};         // room name → array of loaded THREE.Object3D
 
+// ── Wander / API override state (declared here so moveToRoom can reference them) ──
+let _wanderTimer        = 0;
+const WANDER_MIN        = 18;
+const WANDER_MAX        = 40;
+let   _nextWander       = WANDER_MIN + Math.random() * (WANDER_MAX - WANDER_MIN);
+let   _apiOverride      = false;
+let   _apiOverrideTimer = 0;
+const API_OVERRIDE_DURATION = 90;
+
 // ── Load a room's props (lazy — only on first visit) ─────────
 function loadRoomProps(roomName, onDone) {
   if (_roomObjects[roomName]) { onDone?.(); return; } // already loaded
@@ -717,24 +726,30 @@ function setRoomVisible(roomName, visible) {
 // Called with the location string from the API response.
 // She walks to the right spot; props fade in on arrival.
 function moveToRoom(roomName) {
-  if (!roomName || roomName === _currentRoom) return;
+  if (!roomName) return;
+  // Allow re-entry to same room from API (might come from wander)
+  if (roomName === _currentRoom && _apiOverride) return;
 
-  console.log(`[Room] Moving to: ${roomName}`);
+  console.log(`[Room] API → Moving to: ${roomName}`);
 
-  // Hide current room props
-  setRoomVisible(_currentRoom, false);
-  _currentRoom = roomName;
+  // Pause autonomous wandering — API is directing her
+  _apiOverride      = true;
+  _apiOverrideTimer = 0;
+
+  // Hide current room props if switching rooms
+  if (roomName !== _currentRoom) {
+    setRoomVisible(_currentRoom, false);
+    _currentRoom = roomName;
+  }
 
   // Work out her waypoint destination
   const wpDef = ROOM_WAYPOINT_DEFS[roomName];
   if (!wpDef) return;
 
-  // Temporarily add/overwrite a waypoint for this room
   WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName };
 
   // Walk her there — props appear when she arrives
   walkTo('_room_dest', () => {
-    // Load props (lazy) then show them
     loadRoomProps(roomName, () => {
       setRoomVisible(roomName, true);
     });
@@ -754,48 +769,66 @@ function animateRoomLights(delta) {
   }
 }
 
-// ── 360° Camera System ───────────────────────────────────
-// The camera ALWAYS stays in front of Miss OG Tinz's face.
-// When she walks/turns anywhere in the room, the camera orbits
-// to stay facing her — you always see her front.
+// ================================================================
+//  SIMS-STYLE CAMERA SYSTEM
 //
-// Architecture:
-//   vrmFacing  = current world-space angle she faces (radians)
-//   camOffset  = distance in front of her face + height
-//   camPos     = vrmPos + rotate(camOffset, vrmFacing + Math.PI)
-//                  (Math.PI puts camera in FRONT, not behind)
+//  Two modes:
+//    WORLD  — camera floats behind/beside her, showing the room.
+//             Tracks her position as she walks around.
+//    FACE   — camera punches in close to her face when she speaks.
+//             Pulls back to WORLD when she's done.
 //
-// Three zoom modes (IDLE / SPEAK / THINK) control distance only.
-// ─────────────────────────────────────────────────────────
+//  camMode values: 'IDLE' | 'SPEAK' | 'THINK'
+//    IDLE  → WORLD camera (she's living her life)
+//    THINK → soft pull-in (processing)
+//    SPEAK → FACE camera (talking directly to viewer)
+// ================================================================
 
-const CAM_DIST = { IDLE: 2.2, SPEAK: 1.1, THINK: 1.7 };
 let camMode = 'IDLE';
-const CAM_LERP = 0.04;
+const CAM_LERP = 0.035; // how fast camera moves (lower = smoother/slower)
 
-// Camera mode presets: z distance, y height, lookY, rotZ tilt
-const CAM_PRESETS = {
-  IDLE:  { z: 2.2, y: 1.40, lookY: 1.10, rotY: 0    },
-  SPEAK: { z: 1.1, y: 1.55, lookY: 1.25, rotY: 0    },
-  THINK: { z: 1.7, y: 1.45, lookY: 1.15, rotY: 0.01 },
+// WORLD camera: follows her from behind, shows the environment
+// Offset is relative to her position and facing direction
+const WORLD_CAM = {
+  behindDist: 3.5,   // how far behind her the camera floats
+  sideDist:   0.8,   // slight side offset (cinematic angle)
+  height:     2.2,   // camera height above floor
+  lookHeight: 1.1,   // where on her body the camera looks at
 };
 
-// Target state (set instantly on mode change)
-const camTarget  = { x: 0, z: 2.2, y: 1.40, lookY: 1.10, rotY: 0 };
-// Current smoothed state
-const camCurrent = { x: 0, z: 2.2, y: 1.40, lookY: 1.10, rotY: 0 };
+// FACE camera: tight on her face when speaking
+const FACE_CAM = {
+  frontDist:  1.05,  // how far in front of her face
+  height:     1.65,  // eye level
+  lookHeight: 1.45,  // looks at her face/neck area
+};
 
-// Aliases so any legacy code referencing camWant/camSmooth still works
+// THINK camera: mid distance, slightly dramatic angle
+const THINK_CAM = {
+  behindDist: 2.2,
+  sideDist:   0.5,
+  height:     1.8,
+  lookHeight: 1.3,
+};
+
+// Live camera position (smoothed every frame)
+const camCurrent = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
+// Target the camera lerps toward
+const camTarget  = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
+
+// Legacy aliases — keep old code working
 const camSmooth = camCurrent;
 const camWant   = camTarget;
+const CAM_DIST  = { IDLE: 3.5, SPEAK: 1.05, THINK: 2.2 };
+const CAM_PRESETS = {
+  IDLE:  { z: 3.5, y: 2.2, lookY: 1.1,  rotY: 0 },
+  SPEAK: { z: 1.05,y: 1.65,lookY: 1.45, rotY: 0 },
+  THINK: { z: 2.2, y: 1.8, lookY: 1.3,  rotY: 0.01 },
+};
 
 function setCamMode(mode) {
-  if (!CAM_PRESETS[mode]) return;
+  if (!['IDLE','SPEAK','THINK'].includes(mode)) return;
   camMode = mode;
-  const p = CAM_PRESETS[mode];
-  camTarget.z     = p.z;
-  camTarget.y     = p.y;
-  camTarget.lookY = p.lookY;
-  camTarget.rotY  = p.rotY;
 }
 
 // ── VRM world position & facing ──────────────────────────
@@ -905,18 +938,61 @@ const ACTIVITY_LOCATIONS = {
 
 let _lastWaypointActivity = '';
 
+// ── Autonomous House Wandering ────────────────────────────────
+// She drifts between rooms and spots on her own. When the API
+// sends a location, moveToRoom() overrides this. Between API
+// responses she lives her life: kitchen, sofa, desk, wander.
+
+// All the spots she might drift to organically
+const WANDER_SPOTS = [
+  // studio
+  { room: 'studio',      x:  0.6, z: -1.2, label: 'Desk'        },
+  { room: 'studio',      x:  0.0, z:  0.0, label: 'Centre'      },
+  { room: 'studio',      x: -5.2, z:  0.5, label: 'Bean Bags'   },
+  { room: 'studio',      x: -4.5, z: -1.0, label: 'Dartboard'   },
+  { room: 'studio',      x:  4.0, z: -0.8, label: 'Basketball'  },
+  // kitchen
+  { room: 'kitchen',     x: -2.0, z: -4.0, label: 'Stove'       },
+  { room: 'kitchen',     x:  1.0, z: -4.5, label: 'Counter'     },
+  // living room
+  { room: 'living-room', x: -0.5, z: -3.5, label: 'Sofa'        },
+  { room: 'living-room', x:  1.5, z: -4.5, label: 'TV Area'     },
+];
+
 function roamUpdate() {
-  if (walk.active) return; // already walking somewhere
-  if (_currentRoom !== 'studio') return; // room system is in charge — don't fight it
+  if (walk.active) return;
 
-  const currentActivity = ACTIVITY.current;
-  const targetWP = ACTIVITY_LOCATIONS[currentActivity] || 'centre';
-
-  // If activity changed, walk to the right location
-  if (currentActivity !== _lastWaypointActivity) {
-    _lastWaypointActivity = currentActivity;
-    walkTo(targetWP);
+  // Count down API override — after a while she starts wandering again
+  if (_apiOverride) {
+    _apiOverrideTimer += 1/60;
+    if (_apiOverrideTimer > API_OVERRIDE_DURATION) {
+      _apiOverride = false;
+      _wanderTimer = 0;
+    }
+    return;
   }
+
+  _wanderTimer += 1/60;
+  if (_wanderTimer < _nextWander) return;
+
+  // Time to wander — pick a random spot
+  _wanderTimer  = 0;
+  _nextWander   = WANDER_MIN + Math.random() * (WANDER_MAX - WANDER_MIN);
+
+  const spot = WANDER_SPOTS[Math.floor(Math.random() * WANDER_SPOTS.length)];
+  console.log(`[Wander] Drifting to: ${spot.label}`);
+
+  // If the spot is in a different room, trigger room switch
+  if (spot.room !== _currentRoom) {
+    // Temporarily switch room to load/show props
+    setRoomVisible(_currentRoom, false);
+    _currentRoom = spot.room;
+    loadRoomProps(spot.room, () => setRoomVisible(spot.room, true));
+  }
+
+  // Walk her there
+  WAYPOINTS['_room_dest'] = { x: spot.x, z: spot.z, label: spot.label };
+  walkTo('_room_dest');
 }
 
 // ── Load VRM ────────────────────────────────────────────
@@ -2233,19 +2309,62 @@ function triggerGiftPop() {
 // ================================================================
 
 function updateCamera(delta) {
-  // Lerp current → target for all camera params
-  camCurrent.z     += (camTarget.z     - camCurrent.z)     * CAM_LERP;
-  camCurrent.y     += (camTarget.y     - camCurrent.y)     * CAM_LERP;
-  camCurrent.lookY += (camTarget.lookY - camCurrent.lookY) * CAM_LERP;
-  camCurrent.rotY  += (camTarget.rotY  - camCurrent.rotY)  * CAM_LERP;
+  if (!vrm) return;
 
-  // Track her X position so camera pans with her (subtle, not 1:1)
-  const targetCamX  = vrm ? vrm.scene.position.x * 0.25 : 0;
-  camCurrent.x      = (camCurrent.x || 0) + (targetCamX - (camCurrent.x || 0)) * 0.04;
+  const vx = vrm.scene.position.x;
+  const vy = vrm.scene.position.y;
+  const vz = vrm.scene.position.z;
+  // Her current facing angle in world space
+  const facing = vrm.scene.rotation.y;
 
-  camera.position.set(camCurrent.x || 0, camCurrent.y, camCurrent.z);
-  camera.lookAt(camCurrent.x || 0, camCurrent.lookY, 0);
-  camera.rotation.z = camCurrent.rotY;
+  let tx, ty, tz, lx, ly, lz;
+
+  if (camMode === 'SPEAK') {
+    // ── FACE CAM: punch in to her face ──────────────────────
+    // Place camera directly in front of her face
+    const frontX = vx + Math.sin(facing) * FACE_CAM.frontDist;
+    const frontZ = vz + Math.cos(facing) * FACE_CAM.frontDist;
+    tx = frontX;
+    ty = FACE_CAM.height;
+    tz = frontZ;
+    lx = vx;
+    ly = FACE_CAM.lookHeight;
+    lz = vz;
+
+  } else if (camMode === 'THINK') {
+    // ── THINK CAM: mid-distance, slight cinematic angle ──────
+    const bx = vx - Math.sin(facing) * THINK_CAM.behindDist + Math.cos(facing) * THINK_CAM.sideDist;
+    const bz = vz - Math.cos(facing) * THINK_CAM.behindDist - Math.sin(facing) * THINK_CAM.sideDist;
+    tx = bx;
+    ty = THINK_CAM.height;
+    tz = bz;
+    lx = vx;
+    ly = THINK_CAM.lookHeight;
+    lz = vz;
+
+  } else {
+    // ── WORLD CAM: Sims-style — behind her, shows the room ──
+    const bx = vx - Math.sin(facing) * WORLD_CAM.behindDist + Math.cos(facing) * WORLD_CAM.sideDist;
+    const bz = vz - Math.cos(facing) * WORLD_CAM.behindDist - Math.sin(facing) * WORLD_CAM.sideDist;
+    tx = bx;
+    ty = WORLD_CAM.height;
+    tz = bz;
+    lx = vx;
+    ly = WORLD_CAM.lookHeight;
+    lz = vz;
+  }
+
+  // Smooth lerp toward target
+  const L = camMode === 'SPEAK' ? 0.06 : CAM_LERP;
+  camCurrent.x    += (tx - camCurrent.x)    * L;
+  camCurrent.y    += (ty - camCurrent.y)    * L;
+  camCurrent.z    += (tz - camCurrent.z)    * L;
+  camCurrent.lookX += (lx - camCurrent.lookX) * L;
+  camCurrent.lookY += (ly - camCurrent.lookY) * L;
+  camCurrent.lookZ += (lz - camCurrent.lookZ) * L;
+
+  camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+  camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
 }
 
 
