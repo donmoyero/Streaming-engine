@@ -1053,9 +1053,13 @@ gltfLoader.load(
       loader_el.classList.add('hidden');
       setStatus('Ready ✦', 'ready');
       showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
-      startTopicPolling();
-      _initDeadAir();
       initTwitchChat();
+      // Delay API-hitting systems by 8s to let Render wake up fully
+      // and avoid an immediate 429 on cold start
+      setTimeout(() => {
+        startTopicPolling();
+        _initDeadAir();
+      }, 8000);
     }, 400);
   },
   (progress) => {
@@ -3202,15 +3206,29 @@ function updateTopicBox(data) {
 }
 
 function startTopicPolling() {
+  let _pollInterval = 6000;
   async function poll() {
     try {
-      const res  = await fetch(TOPIC_URL);
+      const res = await fetch(TOPIC_URL);
+      if (res.status === 429) {
+        // Back off — double the interval up to 60s, then recover
+        _pollInterval = Math.min(_pollInterval * 2, 60000);
+        return;
+      }
+      _pollInterval = 6000; // reset on success
       const data = await res.json();
       updateTopicBox(data);
     } catch (_) {}
   }
+  // Use recursive setTimeout so we can adjust the interval dynamically
+  function schedulePoll() {
+    setTimeout(async () => {
+      await poll();
+      schedulePoll();
+    }, _pollInterval);
+  }
   poll();
-  setInterval(poll, 6000);
+  schedulePoll();
 }
 
 
