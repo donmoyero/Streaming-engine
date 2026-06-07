@@ -3491,8 +3491,8 @@ window.missOgTinz = {
     const x = vrm.scene.position.x.toFixed(3);
     const z = vrm.scene.position.z.toFixed(3);
     const y = vrm.scene.rotation.y.toFixed(3);
-    console.log(\`%c[Room Mapper] x: \${x}, z: \${z}, facingY: \${y}\`, 'color:#FFB830;font-weight:bold');
-    console.log(\`  → { label: 'NewSpot', x: \${x}, z: \${z}, facingY: Math.PI, activities: ['idle'] }\`);
+    console.log(`%c[Room Mapper] x: ${x}, z: ${z}, facingY: ${y}`, 'color:#FFB830;font-weight:bold');
+    console.log(`  → { label: 'NewSpot', x: ${x}, z: ${z}, facingY: Math.PI, activities: ['idle'] }`);
   },
   // Teleport her to specific coords instantly (for testing spots)
   teleport: (x, z) => {
@@ -3500,7 +3500,7 @@ window.missOgTinz = {
     vrmPos.x = x; vrmPos.z = z;
     vrm.scene.position.x = x;
     vrm.scene.position.z = z;
-    console.log(\`[Teleport] → (\${x}, \${z})\`);
+    console.log(`[Teleport] → (${x}, ${z})`);
   },
 };
 
