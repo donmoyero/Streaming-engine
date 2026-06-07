@@ -772,12 +772,15 @@ function _placeVRMOnFloor() {
   // feetOffset was measured after the rest pose so feet sit exactly at Y=0.
   // Adding it to floorY lifts the origin up so feet land ON the floor surface.
   const feetOffset = vrm._feetOffset ?? 0;
-  const finalY = _houseFloorY + feetOffset;
+  // Safety: if feetOffset is suspiciously small (< 0.05), the matrix measurement
+  // failed. Fall back to half of VRM_TARGET_HEIGHT as a safe estimate.
+  const safeFeetOffset = feetOffset < 0.05 ? 0.82 : feetOffset;
+  const finalY = _houseFloorY + safeFeetOffset;
 
   vrm.scene.position.set(_houseSpawnX, finalY, _houseSpawnZ);
   vrm._restPosY = finalY;
   vrm.scene.rotation.y = Math.PI;
-  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${feetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
+  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${safeFeetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
 }
 
 _gltfLoader.load(
@@ -1540,10 +1543,12 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
+    // ── Skin tone: rich deep brown ────────────────────────────────
+    const SKIN_HEX = 0x7B3F00; // deep warm brown
     const MESH_COLOURS = {
-      Julie_Figure: 0xc68642,
+      Julie_Figure: SKIN_HEX,
       Brow:         0x1a0a00,
-      Teargum:      0xc68642,
+      Teargum:      SKIN_HEX,
       Ear_Jewel:    0xFFD700,
       Eye_R:        0x3b2314,
       Eyes_L:       0x3b2314,
@@ -1603,8 +1608,8 @@ gltfLoader.load(
           roughness:        isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
           metalness:        isMetallic ? 0.88 : 0.0,
           // Emissive floor prevents skin going black under harsh neon swings
-          emissive:         isSkin ? new THREE.Color(0xc68642) : new THREE.Color(0x000000),
-          emissiveIntensity: isSkin ? 0.18 : 0.0,
+          emissive:         isSkin ? new THREE.Color(0x7B3F00) : new THREE.Color(0x000000),
+          emissiveIntensity: isSkin ? 0.15 : 0.0,
           side:             THREE.FrontSide,
           depthWrite:       true,
         });
@@ -1614,12 +1619,12 @@ gltfLoader.load(
     VRMUtils.rotateVRM0(vrm);
     vrm.scene.scale.set(1,1,1);
     vrm.scene.position.set(0,0,0);
-    // rotateVRM0 sets a base Y rotation so the model faces the camera.
-    // Store it so pacing can apply offsets on top rather than overwriting it.
     VRM_BASE_ROT_Y = vrm.scene.rotation.y;
     scene.add(vrm.scene);
 
-    // Measure at scale=1, position=0
+    // ── Scale VRM to target height ───────────────────────────────
+    // Force matrix update BEFORE measuring so Box3 gets real values.
+    vrm.scene.updateMatrixWorld(true);
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
@@ -1627,53 +1632,47 @@ gltfLoader.load(
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
     vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
-    // feetOffset will be measured AFTER setRestPose() below, once legs are posed
 
     cacheBones();
 
-    // ── Set natural girly resting pose (out of T-pose) ───────
+    // ── Set natural girly resting pose (out of T-pose) ───────────
     function setRestPose() {
-      // Arms slightly in, not full T-pose
       if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.0; boneLUpperArm.rotation.x = 0.05; }
       if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0; boneRUpperArm.rotation.x = 0.05; }
       if (boneLLowerArm) { boneLLowerArm.rotation.z =  0.35; boneLLowerArm.rotation.x = 0.05; }
       if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = 0.05; }
-      // Soft limp wrists — feminine hand droop
       if (boneLHand) { boneLHand.rotation.z =  0.18; boneLHand.rotation.x = 0.08; }
       if (boneRHand) { boneRHand.rotation.z = -0.18; boneRHand.rotation.x = 0.08; }
-      // Slight hip shift right — weight on one leg
       if (boneHips) { boneHips.rotation.z = 0.06; boneHips.rotation.x = 0.01; }
-      // Left knee slightly bent (weight-bearing)
       if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; }
       if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; }
-      // Feet natural — slight toe point
       if (boneLFoot) { boneLFoot.rotation.x = -0.05; boneLFoot.rotation.z = -0.03; }
       if (boneRFoot) { boneRFoot.rotation.x = -0.05; boneRFoot.rotation.z =  0.04; }
       if (boneLToes) { boneLToes.rotation.x =  0.08; }
       if (boneRToes) { boneRToes.rotation.x =  0.08; }
-      // Gentle spine lean
       if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
 
-    // Measure feet position AFTER pose is applied (bent legs sit lower).
-    // Force a matrix update so Box3 sees the posed skeleton positions.
-    vrm.scene.updateMatrixWorld(true);
-    const boxPosed = new THREE.Box3().setFromObject(vrm.scene);
-    const feetToOrigin = -boxPosed.min.y; // how far to lift so feet are at Y=0
-    vrm._feetOffset = feetToOrigin;
+    // ── Measure feet offset with FULL matrix commit ───────────────
+    // updateMatrixWorld(true) forces Three.js to recompute every bone's
+    // world transform so Box3 sees the posed skeleton, not the T-pose.
+    vrm.update(0);                        // tick VRM internals once
+    vrm.scene.updateMatrixWorld(true);    // commit all world matrices
+    const boxPosed      = new THREE.Box3().setFromObject(vrm.scene);
+    // feetToOrigin = how far to push her UP so her lowest point is at Y=0
+    const feetToOrigin  = Math.max(0, -boxPosed.min.y);
+    vrm._feetOffset     = feetToOrigin;
     vrm.scene.position.y = feetToOrigin;
     console.log('[VRM] feetOffset after pose:', feetToOrigin.toFixed(4));
 
-    // ── Place avatar on the house floor ─────────────────────────
-    // Defer by one frame so all world matrices are committed before raycasting.
+    // ── Place avatar on house floor ───────────────────────────────
     if (_houseLoaded) {
       requestAnimationFrame(() => _placeVRMOnFloor());
     } else {
-      // Temporary: stand at origin until house loads and repositions her
       vrmPos.x = 0; vrmPos.z = 0;
-      vrm.scene.position.set(0, vrm.scene.position.y, 0);
-      vrm._restPosY = vrm.scene.position.y;
+      vrm.scene.position.set(0, feetToOrigin, 0);
+      vrm._restPosY = feetToOrigin;
       vrm.scene.rotation.y = Math.PI;
     }
 
