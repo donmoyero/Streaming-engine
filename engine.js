@@ -666,9 +666,11 @@ function _placeVRMOnFloor() {
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
 
-  // Fire a grid of raycasts from high above to find the real walkable floor.
-  // We pick the LOWEST hit that is plausibly a floor (not a ceiling or roof).
-  const offsets = [[0,0],[0.3,0],[-0.3,0],[0,0.3],[0,-0.3]];
+  // Fire a dense grid of downward raycasts. For each ray we take the
+  // FIRST (highest) hit — that's whatever surface the ray lands on first
+  // coming down from above, which is the walkable floor, not sub-floor
+  // geometry or foundations beneath it.
+  const offsets = [[0,0],[0.25,0],[-0.25,0],[0,0.25],[0,-0.25],[0.15,0.15],[-0.15,0.15]];
   let floorCandidates = [];
   for (const [ox, oz] of offsets) {
     const ray = new THREE.Raycaster(
@@ -677,21 +679,30 @@ function _placeVRMOnFloor() {
       0, 100
     );
     const hits = ray.intersectObjects(scene.children, true)
-      .filter(h => h.object.isMesh && h.object !== vrm?.scene);
-    for (const h of hits) {
-      floorCandidates.push(h.point.y);
+      .filter(h => h.object.isMesh && h.object !== vrm?.scene)
+      .sort((a, b) => b.point.y - a.point.y); // highest first
+    if (hits.length > 0) {
+      const y = hits[0].point.y;
+      // Accept values that are plausibly a ground floor (not ceiling/roof)
+      if (y > -0.5 && y < 5) floorCandidates.push(y);
     }
   }
 
   if (floorCandidates.length > 0) {
-    // Sort ascending; the lowest candidates near the bottom of the house are floor meshes.
-    // Filter out anything below -0.5 (outside building) or above 8 (ceiling/roof).
-    const valid = floorCandidates.filter(y => y > -0.5 && y < 8).sort((a, b) => a - b);
-    if (valid.length > 0) {
-      // Pick the lowest valid surface — that is the floor, not a table-top or ceiling.
-      _houseFloorY = valid[0];
-      console.log(`[VRM] Raycast floor Y=${_houseFloorY.toFixed(4)} (from ${valid.length} candidates)`);
+    // Cluster: sort ascending, then find the mode cluster (most rays agree on same level).
+    floorCandidates.sort((a, b) => a - b);
+    // Group values within 0.15 of each other — the largest group is the real floor.
+    let bestClusterY = floorCandidates[0], bestCount = 1, curY = floorCandidates[0], curCount = 1;
+    for (let i = 1; i < floorCandidates.length; i++) {
+      if (floorCandidates[i] - floorCandidates[i - 1] < 0.15) {
+        curCount++;
+        if (curCount > bestCount) { bestCount = curCount; bestClusterY = floorCandidates[i]; }
+      } else {
+        curY = floorCandidates[i]; curCount = 1;
+      }
     }
+    _houseFloorY = bestClusterY;
+    console.log(`[VRM] Floor cluster Y=${_houseFloorY.toFixed(4)} (${bestCount}/${floorCandidates.length} rays agreed)`);
   }
 
   // Final clamp — must be >= 0
@@ -700,9 +711,8 @@ function _placeVRMOnFloor() {
     console.warn('[VRM] Raycast gave no good floor — defaulting to Y=0');
   }
 
-  // The VRM loader set position.y = -boxRaw.min.y * scaleVal so the feet
-  // sit at Y=0. That value is the feet-to-origin offset (vrm._feetOffset).
-  // ADD it to floorY so the feet land ON the floor, not the hips.
+  // feetOffset was measured after the rest pose so feet sit exactly at Y=0.
+  // Adding it to floorY lifts the origin up so feet land ON the floor surface.
   const feetOffset = vrm._feetOffset ?? 0;
   const finalY = _houseFloorY + feetOffset;
 
@@ -1641,228 +1651,69 @@ gltfLoader.load(
 );
 
 // ================================================================
-//  COMPANION CHARACTER — free VRoid Hub model loaded as background NPC
-//  He wanders the house independently, no AI/speech.
-//  Uses the official VRoid sample male avatar (CC0 licence).
-//  To swap: replace COMPANION_PATH with any .vrm in your repo.
+//  MALE VRM — drop your own .vrm here when it's ready.
+//  Set MALE_VRM_PATH to the filename and uncomment loadMaleVRM().
+//  The character will stand on the house floor with a natural idle
+//  pose and wander the same room as Miss OG Tinz.
+//
+//  const MALE_VRM_PATH = 'MrOgTinz.vrm'; // ← swap in your file
+//  setTimeout(loadMaleVRM, 3000);
 // ================================================================
-const COMPANION_PATH = 'https://cdn.jsdelivr.net/gh/pixiv/three-vrm@dev/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm';
-let companion     = null;
-let companionPos  = { x: 2.5, z: 1.5 };
-let _companionTimer = 0;
-let _companionDwell = 15 + Math.random() * 20;
 
-// Simple idle bob for companion
-let _compPhase = 0;
+let companion = null; // kept as null — no character loaded yet
 
-function loadCompanion() {
-  const loader = new GLTFLoader();
-  loader.register(parser => new VRMLoaderPlugin(parser));
-  loader.load(
-    COMPANION_PATH,
-    (gltf) => {
-      companion = gltf.userData.vrm;
-      if (!companion) return;
-      VRMUtils.removeUnnecessaryJoints(gltf.scene);
-      VRMUtils.rotateVRM0(companion);
-
-      // ── Materials: replace ALL materials with proper MeshStandardMaterial.
-      // We can't rely on mesh names matching for an unknown VRM, so we use
-      // a colour-assignment approach based on mesh index/position in skeleton.
-      // The key insight: iterate ALL meshes, sort roughly by vertical position,
-      // and assign colours top-to-bottom (hair → skin → clothes → shoes).
-      const meshes = [];
-      companion.scene.traverse(obj => {
-        if (!obj.isMesh) return;
-        obj.frustumCulled = false;
-        // Compute world-space centre Y for sorting
-        const b = new THREE.Box3().setFromObject(obj);
-        const cy = (b.min.y + b.max.y) / 2;
-        meshes.push({ obj, cy, name: obj.name.toLowerCase() });
-      });
-
-      // Sort bottom to top
-      meshes.sort((a, b) => a.cy - b.cy);
-      const total = meshes.length || 1;
-
-      meshes.forEach(({ obj, cy, name }, i) => {
-        const frac = i / total; // 0=bottom, 1=top
-
-        let color, roughness = 0.75, metalness = 0, emissive = 0x000000, emissiveIntensity = 0;
-
-        // Name-based first (most reliable when names exist)
-        if (/hair|brow|lash/i.test(name)) {
-          color = 0x120800; roughness = 0.8;
-        } else if (/eye|iris|cornea|pupil/i.test(name)) {
-          // Draw a proper eye texture
-          const ec = document.createElement('canvas'); ec.width = ec.height = 128;
-          const ctx = ec.getContext('2d');
-          ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
-          const g = ctx.createRadialGradient(64,64,4,64,64,38);
-          g.addColorStop(0,'#1a0800'); g.addColorStop(0.5,'#3b1a08'); g.addColorStop(1,'#5c2e10');
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
-          ctx.fillStyle = '#080300'; ctx.beginPath(); ctx.arc(64,64,16,0,Math.PI*2); ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(72,54,7,0,Math.PI*2); ctx.fill();
-          obj.material = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(ec), roughness: 0.05 });
-          return;
-        } else if (/tooth|teeth|mouth/i.test(name)) {
-          color = 0xfff8f0; roughness = 0.4;
-        } else if (/jewel|gold|necklace|earring|ring|chain|accessory/i.test(name)) {
-          color = 0xFFD700; roughness = 0.15; metalness = 0.9; emissive = 0xFFD700; emissiveIntensity = 0.15;
-        } else if (/shoe|boot|heel|sole/i.test(name)) {
-          color = 0x1a0f08; roughness = 0.7;
-        } else if (/skin|face|figure|body|arm|hand|leg|finger|toe|neck|head/i.test(name)) {
-          color = 0xb07040; roughness = 0.62; emissive = 0xb07040; emissiveIntensity = 0.12;
-        } else if (/top|shirt|blouse|torso|chest|upper|jacket|sleeve/i.test(name)) {
-          color = 0x5a1a2a; roughness = 0.8;
-        } else if (/bottom|pant|jean|skirt|trouser|lower|shorts/i.test(name)) {
-          color = 0x1a1a4a; roughness = 0.8;
-        } else {
-          // Fallback: use vertical position to guess
-          if (frac > 0.82)       { color = 0x120800; roughness = 0.8; }         // top = hair
-          else if (frac > 0.65)  { color = 0xb07040; roughness = 0.62; emissive = 0xb07040; emissiveIntensity = 0.12; } // face/neck
-          else if (frac > 0.45)  { color = 0x5a1a2a; roughness = 0.8; }         // torso = top
-          else if (frac > 0.15)  { color = 0x1a1a4a; roughness = 0.8; }         // legs = bottom
-          else                   { color = 0x1a0f08; roughness = 0.7; }         // feet = shoes
-        }
-
-        obj.material = new THREE.MeshStandardMaterial({
-          color, roughness, metalness,
-          emissive: new THREE.Color(emissive),
-          emissiveIntensity,
-          side: THREE.FrontSide,
-          depthWrite: true,
-        });
-      });
-
-      // ── Scale to match Miss OG Tinz height ──
-      companion.scene.scale.set(1, 1, 1);
-      companion.scene.position.set(0, 0, 0);
-      const rawBox = new THREE.Box3().setFromObject(companion.scene);
-      const rawH   = rawBox.getSize(new THREE.Vector3()).y;
-      const sc     = 1.60 / rawH;
-      companion.scene.scale.set(sc, sc, sc);
-
-      // ── Apply a natural idle pose — out of T-pose ──
-      // Use VRM humanoid if available, otherwise skip
-      if (companion.humanoid) {
-        const ch = companion.humanoid;
-        const cb = (name) => ch.getNormalizedBoneNode(name);
-        // Arms down naturally
-        const clua = cb('leftUpperArm'),  crua = cb('rightUpperArm');
-        const clla = cb('leftLowerArm'),  crla = cb('rightLowerArm');
-        const clh  = cb('leftHand'),      crh  = cb('rightHand');
-        const chip = cb('hips'),          csp  = cb('spine');
-        const clul = cb('leftUpperLeg'),  crul = cb('rightUpperLeg');
-        const clll = cb('leftLowerLeg'),  crll = cb('rightLowerLeg');
-        const clf  = cb('leftFoot'),      crf  = cb('rightFoot');
-
-        if (clua) { clua.rotation.set(0.06, 0.04,  0.85); }
-        if (crua) { crua.rotation.set(0.06,-0.04, -0.85); }
-        if (clla) { clla.rotation.set(0,    0,     0.45); }
-        if (crla) { crla.rotation.set(0,    0,    -0.45); }
-        if (clh)  { clh.rotation.set(0.06,  0,     0.15); }
-        if (crh)  { crh.rotation.set(0.06,  0,    -0.15); }
-        if (chip) { chip.rotation.set(0,     0,     0.04); }
-        if (csp)  { csp.rotation.set(0.02,  0,    -0.02); }
-        if (clul) { clul.rotation.set(0,     0,    -0.05); }
-        if (crul) { crul.rotation.set(0,     0,     0.05); }
-        if (clll) { clll.rotation.set(0.03,  0,     0); }
-        if (crll) { crll.rotation.set(0.03,  0,     0); }
-        if (clf)  { clf.rotation.set(-0.04,  0,    -0.03); }
-        if (crf)  { crf.rotation.set(-0.04,  0,     0.03); }
-      }
-
-      // ── Feet on floor — same feetOffset approach as main VRM ──
-      companion.scene.updateMatrixWorld(true);
-      const posedBox = new THREE.Box3().setFromObject(companion.scene);
-      const compFeetOffset = -posedBox.min.y;
-      companion._feetOffset = compFeetOffset;
-
-      // Place at spawn position on the house floor
-      const compFloorY = (_houseFloorY || 0) + compFeetOffset;
-      companion.scene.position.set(companionPos.x, compFloorY, companionPos.z);
-      companion._restPosY = compFloorY;
-
-      scene.add(companion.scene);
-      console.log('[Companion] Loaded — feetOffset:', compFeetOffset.toFixed(4), 'floorY:', compFloorY.toFixed(4));
-    },
-    null,
-    (err) => console.warn('[Companion] Could not load — skipping:', err.message)
-  );
+function updateCompanion(_delta) {
+  // No-op until a real male VRM is dropped in.
 }
 
-function updateCompanion(delta) {
-  if (!companion) return;
-  _compPhase += delta;
-  _companionTimer += delta;
-
-  // Gentle idle breathing — bob around rest position, not absolute 0
-  if (companion.scene) {
-    const base = companion._restPosY ?? 0;
-    companion.scene.position.y = base + Math.sin(_compPhase * 0.8) * 0.008;
-
-    // Subtle idle bone animation — gentle sway so she doesn't look frozen
-    if (companion.humanoid) {
-      const ch = companion.humanoid;
-      const t  = _compPhase;
-      const hs = ch.getNormalizedBoneNode('hips');
-      const sp = ch.getNormalizedBoneNode('spine');
-      const hd = ch.getNormalizedBoneNode('head');
-      const la = ch.getNormalizedBoneNode('leftUpperArm');
-      const ra = ch.getNormalizedBoneNode('rightUpperArm');
-      if (hs) { hs.rotation.z = Math.sin(t * 0.7) * 0.025; }
-      if (sp) { sp.rotation.z = -Math.sin(t * 0.7) * 0.015; sp.rotation.x = 0.02; }
-      if (hd) { hd.rotation.y = Math.sin(t * 0.4) * 0.06; hd.rotation.x = 0.04; }
-      if (la) { la.rotation.z =  0.85 + Math.sin(t * 0.6) * 0.04; }
-      if (ra) { ra.rotation.z = -0.85 - Math.sin(t * 0.6) * 0.04; }
-    }
-  }
-
-  // Wander to a new spot every _companionDwell seconds — stay near Miss OG Tinz
-  if (_companionTimer > _companionDwell && companionPos.targetX === undefined) {
-    _companionTimer = 0;
-    _companionDwell = 14 + Math.random() * 18;
-
-    // Stay in the same room as Miss OG Tinz — pick one of her room's spots
-    const roomKey = _currentRoom || 'studio';
-    const roomDef = HOUSE[roomKey];
-    const spots   = roomDef ? roomDef.spots : [{ x: 0, z: 0 }];
-    const spot    = spots[Math.floor(Math.random() * spots.length)];
-
-    companionPos.targetX = spot.x + (Math.random() - 0.5) * 1.2;
-    companionPos.targetZ = spot.z + (Math.random() - 0.5) * 1.2;
-  }
-
-  // Lerp toward target position — use a speed-based approach so she walks steadily
-  if (companionPos.targetX !== undefined) {
-    const dx = companionPos.targetX - companionPos.x;
-    const dz = companionPos.targetZ - companionPos.z;
-    const dist = Math.sqrt(dx*dx + dz*dz);
-    const WALK_SPEED = 1.4; // world units per second — realistic walking pace
-    if (dist > 0.05) {
-      const step = Math.min(dist, WALK_SPEED * delta);
-      companionPos.x += (dx / dist) * step;
-      companionPos.z += (dz / dist) * step;
-      companion.scene.position.x = companionPos.x;
-      companion.scene.position.z = companionPos.z;
-      // Face direction of travel
-      companion.scene.rotation.y = Math.atan2(dx, dz);
-    } else {
-      // Arrived — clear target
-      companionPos.x = companionPos.targetX;
-      companionPos.z = companionPos.targetZ;
-      companionPos.targetX = undefined;
-      companionPos.targetZ = undefined;
-    }
-  }
-
-  // Update VRM internals
-  try { companion.update(delta); } catch(e) {}
-}
-
-// Load companion after a short delay (don't block main VRM)
-setTimeout(loadCompanion, 3000);
+// ── loadMaleVRM — uncomment and call once your .vrm is in the repo ───────────
+// async function loadMaleVRM() {
+//   const loader = new GLTFLoader();
+//   loader.register(parser => new VRMLoaderPlugin(parser));
+//   loader.load(
+//     MALE_VRM_PATH,
+//     (gltf) => {
+//       companion = gltf.userData.vrm;
+//       if (!companion) return;
+//       VRMUtils.removeUnnecessaryJoints(gltf.scene);
+//       VRMUtils.rotateVRM0(companion);
+//
+//       // Apply your mesh colours here — mirror the MESH_COLOURS block above
+//       // and rename keys to match your male VRM mesh names.
+//
+//       // Scale to natural male height (1.78 m)
+//       companion.scene.scale.set(1, 1, 1);
+//       const rawH = new THREE.Box3().setFromObject(companion.scene).getSize(new THREE.Vector3()).y;
+//       const sc   = 1.78 / rawH;
+//       companion.scene.scale.set(sc, sc, sc);
+//
+//       // Rest pose — arms down, slight weight shift
+//       if (companion.humanoid) {
+//         const h = companion.humanoid;
+//         const b = n => h.getNormalizedBoneNode(n);
+//         if (b('leftUpperArm'))  b('leftUpperArm').rotation.set(0.05, 0.03,  0.78);
+//         if (b('rightUpperArm')) b('rightUpperArm').rotation.set(0.05,-0.03, -0.78);
+//         if (b('leftLowerArm'))  b('leftLowerArm').rotation.set(0, 0,  0.38);
+//         if (b('rightLowerArm')) b('rightLowerArm').rotation.set(0, 0, -0.38);
+//         if (b('hips'))          b('hips').rotation.set(0, 0, 0.02);
+//         if (b('spine'))         b('spine').rotation.set(0.02, 0, -0.01);
+//       }
+//
+//       // Place feet on house floor
+//       companion.scene.updateMatrixWorld(true);
+//       const posed   = new THREE.Box3().setFromObject(companion.scene);
+//       const feetOff = -posed.min.y;
+//       companion._feetOffset = feetOff;
+//       const floorY  = (_houseFloorY || 0) + feetOff;
+//       companion.scene.position.set(2.5, floorY, 1.5);
+//       companion._restPosY = floorY;
+//       scene.add(companion.scene);
+//       console.log('[MaleVRM] Loaded. floorY:', floorY.toFixed(4));
+//     },
+//     null,
+//     err => console.warn('[MaleVRM] Load failed:', err.message)
+//   );
+// }
 
 // ── Blendshape helpers ──────────────────────────────────
 // Maps VRM standard expression names → mesh morph target names
@@ -4016,7 +3867,7 @@ function bindSlider(id, onChange) {
 }
 
 bindSlider('posX',  v => { if (vrm) vrm.scene.position.x = v; });
-bindSlider('posY',  v => { if (vrm) vrm.scene.position.y = v; });
+bindSlider('posY',  v => { if (vrm) { vrm.scene.position.y = v; vrm._restPosY = v; _houseFloorY = v - (vrm._feetOffset ?? 0); } });
 bindSlider('posZ',  v => { if (vrm) vrm.scene.position.z = v; });
 bindSlider('scale', v => { if (vrm) vrm.scene.scale.set(v,v,v); });
 bindSlider('camY',  v => { camera.position.y = v; camera.lookAt(0, parseFloat(document.getElementById('lookY').value), 0); });
