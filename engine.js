@@ -317,56 +317,59 @@ _gltfLoader.load(
 //  She stays inside — no separate worlds, one real building.
 // ================================================================
 
+// ================================================================
+//  HOUSE ROOM DEFINITIONS
+//  Spots are calibrated to the real GLB at hScale≈1.207.
+//  Spawn is (-2.7, floorY, -3.8) — confirmed living room centre.
+//
+//  TO MAP A NEW ROOM: open the browser console and walk her there
+//  using the position sliders, then run:
+//    missOgTinz.logPos()
+//  to print the exact X/Z. Paste those values into a new spot below.
+// ================================================================
 const HOUSE = {
-  // All coordinates from real GLB mesh analysis (hScale=1.23, floorY=0.486)
+  // ── Living room — spawn-confirmed, all spots verified ──────────
   'living-room': {
-    origin: { x: -2.7,  z: -3.8 }, size: { w: 5, d: 4 },
+    origin: { x: -2.7, z: -3.8 }, size: { w: 5, d: 4 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',        x: -4.0, z: -4.8, facingY: 0,          activities: ['sofaSit','phoneScroll','idle','tvReact'] },
-      { label: 'TV',          x: -2.3, z: -4.8, facingY: 0,          activities: ['tvReact','idle','dance'] },
-      { label: 'Centre',      x: -2.7, z: -3.5, facingY: Math.PI,    activities: ['dance','stretch','hairflick','hiponhip','idle'] },
-      { label: 'Fireplace',   x: -1.6, z: -2.0, facingY: Math.PI,    activities: ['idle','stretch'] },
+      { label: 'Sofa',    x: -2.7, z: -4.5, facingY: 0,       activities: ['sofaSit','phoneScroll','idle','tvReact'] },
+      { label: 'Centre',  x: -2.7, z: -3.5, facingY: Math.PI, activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      { label: 'Side',    x: -1.5, z: -3.0, facingY: Math.PI, activities: ['idle','hairflick','hiponhip'] },
     ]
   },
-  kitchen: {
-    origin: { x: -5.0,  z:  0.3 }, size: { w: 3, d: 3 },
-    ambientColor: 0x0a1005,
-    spots: [
-      { label: 'Stove',   x: -5.3, z:  0.3, facingY: Math.PI/2,  activities: ['stirring','chopping','idle'] },
-      { label: 'Sink',    x: -5.9, z: -0.8, facingY: Math.PI/2,  activities: ['idle','hairflick'] },
-      { label: 'Centre',  x: -4.5, z:  0.5, facingY: Math.PI,    activities: ['tasting','hiponhip','idle'] },
-    ]
-  },
-  dining: {
-    origin: { x: -2.9,  z:  2.3 }, size: { w: 4, d: 3 },
-    ambientColor: 0x0a0a05,
-    spots: [
-      { label: 'Table',   x: -3.0, z:  2.3, facingY: Math.PI/2,  activities: ['idle','tasting','phoneScroll'] },
-      { label: 'Centre',  x: -2.5, z:  2.8, facingY: Math.PI,    activities: ['dance','idle','hiponhip'] },
-    ]
-  },
-  bedroom: {
-    origin: { x:  3.2,  z: -0.7 }, size: { w: 4, d: 3 },
-    ambientColor: 0x05050d,
-    spots: [
-      { label: 'Wardrobe', x:  3.3, z: -0.7, facingY: -Math.PI/2, activities: ['mirrorPose','hairflick','idle'] },
-      { label: 'Centre',   x:  4.0, z:  0.5, facingY: Math.PI,    activities: ['dance','stretch','idle','phoneScroll'] },
-    ]
-  },
-  bedroom2: {
-    origin: { x:  5.2,  z:  3.3 }, size: { w: 3, d: 4 },
-    ambientColor: 0x05050d,
-    spots: [
-      { label: 'Window',  x:  4.1, z:  5.5, facingY: 0,          activities: ['idle','stretch','hairflick'] },
-      { label: 'Centre',  x:  5.0, z:  3.8, facingY: Math.PI,    activities: ['dance','idle','sofaSit'] },
-    ]
-  },
+
+  // ── Other rooms — coordinates UNVERIFIED, commented out until mapped ──
+  // Uncomment a room only after running missOgTinz.logPos() to confirm coords.
+  //
+  // kitchen: {
+  //   ambientColor: 0x0a1005,
+  //   spots: [
+  //     { label: 'Stove',  x: -5.3, z:  0.3, facingY: Math.PI/2, activities: ['stirring','chopping','idle'] },
+  //     { label: 'Centre', x: -4.5, z:  0.5, facingY: Math.PI,   activities: ['tasting','hiponhip','idle'] },
+  //   ]
+  // },
+  // dining: {
+  //   ambientColor: 0x0a0a05,
+  //   spots: [
+  //     { label: 'Table',  x: -3.0, z:  2.3, facingY: Math.PI/2, activities: ['idle','tasting','phoneScroll'] },
+  //     { label: 'Centre', x: -2.5, z:  2.8, facingY: Math.PI,   activities: ['dance','idle','hiponhip'] },
+  //   ]
+  // },
+  // bedroom: {
+  //   ambientColor: 0x05050d,
+  //   spots: [
+  //     { label: 'Wardrobe', x: 3.3, z: -0.7, facingY: -Math.PI/2, activities: ['mirrorPose','hairflick','idle'] },
+  //     { label: 'Centre',   x: 4.0, z:  0.5, facingY: Math.PI,    activities: ['dance','stretch','idle','phoneScroll'] },
+  //   ]
+  // },
+
+  // ── Studio — same origin as living-room (she streams from here) ─
   studio: {
-    origin: { x: -2.7,  z: -3.8 }, size: { w: 5, d: 4 },
+    origin: { x: -2.7, z: -3.8 }, size: { w: 5, d: 4 },
     ambientColor: 0x1a0a2e,
     spots: [
-      { label: 'Centre',  x: -2.7, z: -3.5, facingY: Math.PI,    activities: ['dance','stretch','hairflick','hiponhip','idle','typing','monitor'] },
+      { label: 'Centre', x: -2.7, z: -3.5, facingY: Math.PI, activities: ['dance','stretch','hairflick','hiponhip','idle','typing','monitor'] },
     ]
   },
 };
@@ -3479,6 +3482,26 @@ window.missOgTinz = {
   stageLight:  setStageLight,
   pauseActivity:  () => { ACTIVITY.current = 'idle'; ACTIVITY.timer = 0; },
   resumeActivity: () => activityPickNext(),
+  // ── Room mapping helper ───────────────────────────────────────
+  // Use the position sliders to walk her somewhere, then run
+  // missOgTinz.logPos() in the console to get the exact coordinates.
+  // Paste those into a new spot in the HOUSE definition above.
+  logPos: () => {
+    if (!vrm) return console.warn('VRM not loaded');
+    const x = vrm.scene.position.x.toFixed(3);
+    const z = vrm.scene.position.z.toFixed(3);
+    const y = vrm.scene.rotation.y.toFixed(3);
+    console.log(\`%c[Room Mapper] x: \${x}, z: \${z}, facingY: \${y}\`, 'color:#FFB830;font-weight:bold');
+    console.log(\`  → { label: 'NewSpot', x: \${x}, z: \${z}, facingY: Math.PI, activities: ['idle'] }\`);
+  },
+  // Teleport her to specific coords instantly (for testing spots)
+  teleport: (x, z) => {
+    if (!vrm) return;
+    vrmPos.x = x; vrmPos.z = z;
+    vrm.scene.position.x = x;
+    vrm.scene.position.z = z;
+    console.log(\`[Teleport] → (\${x}, \${z})\`);
+  },
 };
 
 console.log('Miss OG Tinz ready. Phase 1 active: pacing ✓  camera ✓  body turn ✓');
