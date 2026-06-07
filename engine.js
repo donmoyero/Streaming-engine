@@ -634,15 +634,462 @@ const roomLights = buildGameRoom();
 
 const _gltfLoader = new GLTFLoader();
 
-// ── Per-room prop definitions ──────────────────────────────────
-// Each entry: { file, pos:[x,y,z], rot:[x,y,z], scale }
+// ================================================================
+//  REAL HOUSE — each room is a self-contained world-space box.
+//  Rooms are laid out side by side so she actually walks between them.
+//
+//  Layout (top-down, X = right, Z = back):
+//
+//    [ BEDROOM  ] [ BATHROOM ]
+//    [ KITCHEN  ] [ LIVING RM]
+//    [ STUDIO   ] [ OFFICE   ]
+//
+//  Each room has:
+//    - origin: world-space centre of the room floor
+//    - size:   width (X) × depth (Z)
+//    - door:   where she stands when leaving/entering (world space)
+//    - spots:  named spots within the room she wanders between
+//
+// ================================================================
+
+const HOUSE = {
+  studio: {
+    origin: { x:  0,   z:  0  }, size: { w: 10, d: 9  },
+    door:   { x:  5,   z: -3  },
+    ambientColor: 0x1a0a2e,
+    spots: [
+      { label: 'Desk',         x:  0.6, z: -1.2, facingY: Math.PI,        activities: ['typing','monitor','noseCover','idle'] },
+      { label: 'Centre Stage', x:  0.0, z:  0.5, facingY: Math.PI,        activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      { label: 'Bean Bags',    x: -4.5, z:  0.8, facingY: Math.PI * 0.6,  activities: ['sofaSit','phoneScroll','idle'] },
+      { label: 'Dartboard',   x: -4.5, z: -1.0, facingY: Math.PI / 2,    activities: ['darts','idle'] },
+      { label: 'Basketball',   x:  4.0, z: -0.8, facingY: -Math.PI / 2,   activities: ['basketball','idle'] },
+    ]
+  },
+  kitchen: {
+    origin: { x:  0,   z: -18 }, size: { w: 10, d: 8  },
+    door:   { x:  4,   z: -14 },
+    ambientColor: 0x0a1505,
+    spots: [
+      { label: 'Stove',     x: -2.0, z: -20.5, facingY: 0,             activities: ['stirring','chopping','idle'] },
+      { label: 'Counter',   x:  0.5, z: -20.5, facingY: 0,             activities: ['chopping','tasting','idle'] },
+      { label: 'Sink',      x:  2.8, z: -20.5, facingY: 0,             activities: ['idle','hairflick'] },
+      { label: 'Centre',    x:  0.0, z: -18.5, facingY: Math.PI,       activities: ['tasting','hiponhip','idle'] },
+    ]
+  },
+  'living-room': {
+    origin: { x: 15,   z: -9  }, size: { w: 11, d: 10 },
+    door:   { x:  9.5, z: -9  },
+    ambientColor: 0x0d0a05,
+    spots: [
+      { label: 'Main Sofa',     x: 14.5, z: -9.5,  facingY: 0.3,         activities: ['sofaSit','phoneScroll','idle'] },
+      { label: 'Corner Sofa',   x: 18.0, z: -9.0,  facingY: -Math.PI/2,  activities: ['sofaSit','idle'] },
+      { label: 'TV Area',       x: 15.0, z:-11.5,  facingY: 0,           activities: ['tvReact','idle'] },
+      { label: 'Reading Chair', x: 10.5, z:-11.0,  facingY: Math.PI/3,   activities: ['phoneScroll','idle','hairflick'] },
+    ]
+  },
+  bedroom: {
+    origin: { x: -14,  z: -9  }, size: { w: 10, d: 10 },
+    door:   { x: -9,   z: -9  },
+    ambientColor: 0x05050d,
+    spots: [
+      { label: 'Bed',         x:-14.5, z:-11.0,  facingY: Math.PI/4,    activities: ['sofaSit','idle','phoneScroll'] },
+      { label: 'Bedside',     x:-12.0, z:-11.0,  facingY: Math.PI,      activities: ['idle','hairflick'] },
+      { label: 'Window',      x:-17.5, z: -8.5,  facingY: -Math.PI/2,   activities: ['idle','stretch'] },
+      { label: 'Dresser',     x:-17.0, z:-11.5,  facingY: Math.PI/2,    activities: ['mirrorPose','hairflick','idle'] },
+    ]
+  },
+  bathroom: {
+    origin: { x: -14,  z: -21 }, size: { w: 7,  d: 7  },
+    door:   { x: -10,  z: -19 },
+    ambientColor: 0x05100f,
+    spots: [
+      { label: 'Mirror',   x:-14.0, z:-23.0,  facingY: 0,              activities: ['mirrorPose','hairflick','idle'] },
+      { label: 'Sink',     x:-14.0, z:-22.0,  facingY: 0,              activities: ['idle','tasting'] },
+      { label: 'Bath',     x:-17.0, z:-22.5,  facingY: Math.PI/2,      activities: ['sofaSit','idle'] },
+    ]
+  },
+  office: {
+    origin: { x: 15,   z: -21 }, size: { w: 9,  d: 8  },
+    door:   { x:  9.5, z: -21 },
+    ambientColor: 0x050a10,
+    spots: [
+      { label: 'Desk',       x: 15.0, z:-23.0,  facingY: 0,             activities: ['typing','monitor','idle'] },
+      { label: 'Bookcase',   x: 19.0, z:-23.5,  facingY: Math.PI/2,     activities: ['idle','hairflick'] },
+      { label: 'Think spot', x: 13.0, z:-22.0,  facingY: Math.PI,       activities: ['stretch','idle','noseCover'] },
+    ]
+  },
+};
+
+// ── Room geometry builder ─────────────────────────────────────────────────────
+// Builds walls, floor, ceiling for a room at its world-space origin.
+// Returns the room group so lights can be toggled per-room later.
+function buildRoomShell(key) {
+  const r = HOUSE[key];
+  const ox = r.origin.x, oz = r.origin.z;
+  const hw = r.size.w / 2, hd = r.size.d / 2;
+  const h  = 3.2; // room height
+
+  // Palette per room
+  const palettes = {
+    studio:       { floor: 0x1a1005, wall: 0x0d0818, ceil: 0x080510 },
+    kitchen:      { floor: 0xc8b89a, wall: 0xe8e0d0, ceil: 0xf0ece4 },
+    'living-room':{ floor: 0x6b4c2a, wall: 0x2a1f14, ceil: 0x1a140e },
+    bedroom:      { floor: 0x3a2a4a, wall: 0x1a1028, ceil: 0x100c1a },
+    bathroom:     { floor: 0xd4e8e0, wall: 0xe8f4f0, ceil: 0xf0f8f6 },
+    office:       { floor: 0x2a3020, wall: 0x1a2018, ceil: 0x111510 },
+  };
+  const pal = palettes[key] || palettes.studio;
+
+  const g = new THREE.Group();
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(r.size.w, r.size.d),
+    new THREE.MeshStandardMaterial({ color: pal.floor, roughness: 0.7 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(ox, 0, oz);
+  g.add(floor);
+
+  // Ceiling
+  const ceil = new THREE.Mesh(
+    new THREE.PlaneGeometry(r.size.w, r.size.d),
+    new THREE.MeshStandardMaterial({ color: pal.ceil, roughness: 1 })
+  );
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.set(ox, h, oz);
+  g.add(ceil);
+
+  // Walls: back, front, left, right
+  const wallMat = new THREE.MeshStandardMaterial({ color: pal.wall, roughness: 0.85 });
+  const wallData = [
+    { w: r.size.w, pos: [ox, h/2, oz - hd],      ry: 0           }, // back
+    { w: r.size.w, pos: [ox, h/2, oz + hd],       ry: Math.PI     }, // front
+    { w: r.size.d, pos: [ox - hw, h/2, oz],       ry:  Math.PI/2  }, // left
+    { w: r.size.d, pos: [ox + hw, h/2, oz],       ry: -Math.PI/2  }, // right
+  ];
+  wallData.forEach(({ w: ww, pos, ry }) => {
+    const wall = new THREE.Mesh(
+      new THREE.PlaneGeometry(ww, h),
+      wallMat
+    );
+    wall.position.set(...pos);
+    wall.rotation.y = ry;
+    g.add(wall);
+  });
+
+  // Ambient light local to this room
+  const amb = new THREE.PointLight(r.ambientColor, 1.5, r.size.w * 2);
+  amb.position.set(ox, h * 0.8, oz);
+  g.add(amb);
+
+  scene.add(g);
+  return g;
+}
+
+// Build all room shells
+Object.keys(HOUSE).forEach(k => buildRoomShell(k));
+
+// Studio still gets its full game-room dressing from buildGameRoom()
+// Other rooms get their props from ROOM_PROPS via loadRoomProps()
+
+// ── Per-room prop definitions ─────────────────────────────────────────────────
+// Positions are in WORLD space (matching HOUSE origins above)
 const ROOM_PROPS = {
 
-  // ── KITCHEN ─────────────────────────────────────────────────────────────────
-  // Appliances live in living-room/ folder (path fix from handover notes)
-  // Countertop dressing from kitchen/ folder
-  // Activity anchors: pot (stirring), cutting-board (chopping), cooking-spoon (tasting)
   kitchen: [
+    { file: 'living-room/kitchenStove.glb',          pos: [-2.5, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
+    { file: 'living-room/kitchenFridgeLarge.glb',    pos: [-4.8, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
+    { file: 'living-room/kitchenCabinet.glb',        pos: [ 0.5, 0, -21.5], rot: [0,0,0],    scale: 1.8 },
+    { file: 'living-room/kitchenSink.glb',           pos: [ 2.8, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
+    { file: 'living-room/kitchenCabinetDrawer.glb',  pos: [-1.0, 0, -21.5], rot: [0,0,0],    scale: 1.8 },
+    { file: 'living-room/hoodLarge.glb',             pos: [-2.5, 2.2,-21.5],rot: [0,0,0],    scale: 1.8 },
+    { file: 'kitchen/pot.glb',                       pos: [-2.5,1.05,-21.0],rot: [0,0,0],    scale: 1.2 },
+    { file: 'kitchen/pot-lid.glb',                   pos: [-2.5,1.22,-21.0],rot: [0,0.3,0],  scale: 1.2 },
+    { file: 'kitchen/frying-pan.glb',                pos: [-1.7,1.05,-21.0],rot: [0,0.4,0],  scale: 1.2 },
+    { file: 'kitchen/cutting-board.glb',             pos: [ 1.0, 1.0,-21.2],rot: [0,-0.3,0], scale: 1.0 },
+    { file: 'kitchen/tajine.glb',                    pos: [ 0.2,0.95,-21.2],rot: [0,0.5,0],  scale: 1.0 },
+    { file: 'kitchen/tajine-lid.glb',                pos: [ 0.2,1.18,-21.2],rot: [0,0.5,0],  scale: 1.0 },
+    { file: 'kitchen/knife-block.glb',               pos: [ 2.0, 1.0,-21.1],rot: [0,0.2,0],  scale: 1.0 },
+    { file: 'kitchen/cooking-spoon.glb',             pos: [-1.2, 1.0,-21.2],rot: [0,-0.4,0], scale: 1.0 },
+    { file: 'kitchen/whisk.glb',                     pos: [-0.9, 1.0,-21.2],rot: [0,0.3,0],  scale: 1.0 },
+    { file: 'kitchen/shaker-salt.glb',               pos: [ 0.6, 1.0,-21.1],rot: [0,0,0],    scale: 1.0 },
+    { file: 'kitchen/shaker-pepper.glb',             pos: [ 0.75,1.0,-21.1],rot: [0,0,0],    scale: 1.0 },
+    { file: 'kitchen/cup-coffee.glb',                pos: [ 3.2, 1.0,-21.0],rot: [0,-0.5,0], scale: 1.0 },
+    { file: 'kitchen/bowl.glb',                      pos: [ 1.6, 1.0,-21.2],rot: [0,0,0],    scale: 1.0 },
+    { file: 'kitchen/rollingPin.glb',                pos: [ 2.4, 1.0,-21.1],rot: [0,0.6,0],  scale: 1.0 },
+    { file: 'kitchen/tomato.glb',                    pos: [ 0.9, 1.0,-21.1],rot: [0,0,0],    scale: 0.8 },
+    { file: 'kitchen/carrot.glb',                    pos: [ 1.1, 1.0,-21.05],rot:[0,0.8,0],  scale: 0.8 },
+    { file: 'kitchen/egg.glb',                       pos: [-0.6, 1.0,-21.2],rot: [0,0.2,0],  scale: 0.8 },
+    { file: 'kitchen/bread.glb',                     pos: [ 3.4, 1.0,-21.0],rot: [0,-0.3,0], scale: 0.9 },
+    { file: 'kitchen/steamer.glb',                   pos: [-3.2,1.05,-21.0],rot: [0,0,0],    scale: 1.0 },
+    { file: 'living-room/rugRectangle.glb',          pos: [ 0.0,0.01,-18.5],rot: [0,0,0],    scale: 2.0 },
+    { file: 'kitchen/cooking-knife.glb',             pos: [ 1.8, 1.0,-21.05],rot:[0,-0.2,0], scale: 1.0 },
+  ],
+
+  'living-room': [
+    { file: 'living-room/loungeSofaLong.glb',        pos: [13.5, 0, -9.5],   rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/loungeSofaCorner.glb',      pos: [18.5, 0, -8.5],   rot: [0,-Math.PI/2,0], scale: 1.8 },
+    { file: 'living-room/loungeChairRelax.glb',      pos: [10.2, 0,-11.0],   rot: [0,0.5,0],    scale: 1.8 },
+    { file: 'living-room/cabinetTelevision.glb',     pos: [15.0, 0,-13.8],   rot: [0,0,0],      scale: 2.0 },
+    { file: 'living-room/rugRectangle.glb',          pos: [14.5,0.01,-10.5], rot: [0,0,0],      scale: 2.8 },
+    { file: 'living-room/bookcaseOpen.glb',          pos: [19.8, 0,-13.0],   rot: [0,-Math.PI/2,0], scale: 1.8 },
+    { file: 'living-room/bookcaseClosed.glb',        pos: [10.0, 0,-13.0],   rot: [0,Math.PI/2,0],  scale: 1.8 },
+    { file: 'living-room/books.glb',                 pos: [19.8,1.4,-12.8],  rot: [0,-Math.PI/2,0], scale: 1.5 },
+    { file: 'living-room/lampRoundFloor.glb',        pos: [19.5, 0, -7.8],   rot: [0,0,0],      scale: 1.6 },
+    { file: 'living-room/lampSquareTable.glb',       pos: [10.2,0.82,-9.5],  rot: [0,0,0],      scale: 1.3 },
+    { file: 'living-room/lampRoundTable.glb',        pos: [13.5,0.82,-8.5],  rot: [0,0,0],      scale: 1.3 },
+    { file: 'living-room/pottedPlant.glb',           pos: [ 9.5, 0, -7.5],   rot: [0,0.3,0],    scale: 1.6 },
+    { file: 'living-room/plantSmall1.glb',           pos: [19.8,1.4,-13.2],  rot: [0,0,0],      scale: 1.4 },
+    { file: 'living-room/laptop.glb',                pos: [14.0,0.85, -9.2], rot: [0,0.3,0],    scale: 1.4 },
+    { file: 'living-room/radio.glb',                 pos: [10.0,1.55,-13.0], rot: [0,Math.PI/2,0],  scale: 1.3 },
+    { file: 'living-room/pillow.glb',                pos: [12.5,0.85, -9.2], rot: [0,0.4,0],    scale: 1.4 },
+    { file: 'living-room/pillowBlue.glb',            pos: [17.0,0.85, -8.5], rot: [0,-0.5,0],   scale: 1.4 },
+    { file: 'living-room/pillowLong.glb',            pos: [14.8,0.85, -9.2], rot: [0,0,0],      scale: 1.3 },
+    { file: 'living-room/bear.glb',                  pos: [12.0,0.85, -9.2], rot: [0,0.5,0],    scale: 1.2 },
+    { file: 'living-room/rugDoormat.glb',            pos: [ 9.5,0.01, -9.0], rot: [0,0,0],      scale: 1.5 },
+    { file: 'living-room/coatRackStanding.glb',      pos: [ 9.5, 0,  -7.5],  rot: [0,-0.3,0],   scale: 1.6 },
+    { file: 'living-room/desk.glb',                  pos: [19.5, 0, -9.0],   rot: [0,-Math.PI/2,0], scale: 1.8 },
+    { file: 'living-room/lampSquareFloor.glb',       pos: [ 9.5, 0,-12.5],   rot: [0,0,0],      scale: 1.5 },
+  ],
+
+  bedroom: [
+    { file: 'living-room/bedDouble.glb',             pos: [-14.5, 0,-12.0],  rot: [0,0,0],      scale: 2.0 },
+    { file: 'living-room/cabinetBed.glb',            pos: [-11.5, 0,-12.0],  rot: [0,0,0],      scale: 1.6 },
+    { file: 'living-room/cabinetBedDrawer.glb',      pos: [-17.5, 0,-12.0],  rot: [0,Math.PI,0], scale: 1.6 },
+    { file: 'living-room/pillowBlue.glb',            pos: [-14.5,0.85,-11.2],rot: [0,0,0],      scale: 1.4 },
+    { file: 'living-room/pillow.glb',                pos: [-13.5,0.85,-11.2],rot: [0,0.1,0],    scale: 1.4 },
+    { file: 'living-room/pillowLong.glb',            pos: [-14.5,0.85,-11.8],rot: [0,0,0],      scale: 1.5 },
+    { file: 'living-room/bookcaseClosed.glb',        pos: [-19.0, 0, -8.5],  rot: [0,Math.PI/2,0],  scale: 1.8 },
+    { file: 'living-room/books.glb',                 pos: [-19.0,1.4, -8.3], rot: [0,Math.PI/2,0],  scale: 1.5 },
+    { file: 'living-room/lampRoundTable.glb',        pos: [-11.5,0.6,-12.0], rot: [0,0,0],      scale: 1.3 },
+    { file: 'living-room/lampRoundTable.glb',        pos: [-17.5,0.6,-12.0], rot: [0,0,0],      scale: 1.3 },
+    { file: 'living-room/rugRectangle.glb',          pos: [-14.5,0.01,-10.5],rot: [0,0,0],      scale: 2.2 },
+    { file: 'living-room/chairModernCushion.glb',    pos: [-11.5, 0, -8.2],  rot: [0,-0.5,0],   scale: 1.6 },
+    { file: 'living-room/pottedPlant.glb',           pos: [-19.0, 0,-12.5],  rot: [0,0.3,0],    scale: 1.5 },
+    { file: 'living-room/coatRack.glb',              pos: [-10.0, 0, -8.5],  rot: [0,-0.3,0],   scale: 1.5 },
+    { file: 'living-room/laptop.glb',                pos: [-11.5,0.68,-12.0],rot: [0,0.5,0],    scale: 1.4 },
+    { file: 'living-room/lampSquareFloor.glb',       pos: [-19.0, 0, -9.8],  rot: [0,0,0],      scale: 1.5 },
+    { file: 'living-room/bear.glb',                  pos: [-12.8,0.85,-11.2],rot: [0,-0.5,0],   scale: 1.2 },
+  ],
+
+  bathroom: [
+    { file: 'living-room/bathroomMirror.glb',        pos: [-14.0, 0,-24.5],  rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/bathroomSinkSquare.glb',    pos: [-14.0, 0,-24.5],  rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/bathroomCabinet.glb',       pos: [-12.0, 0,-24.8],  rot: [0,0.3,0],    scale: 1.8 },
+    { file: 'living-room/bathroomCabinetDrawer.glb', pos: [-16.0, 0,-24.8],  rot: [0,-0.3,0],   scale: 1.8 },
+    { file: 'living-room/bathtub.glb',               pos: [-17.5, 0,-22.5],  rot: [0,Math.PI/2,0],  scale: 1.8 },
+    { file: 'living-room/bench.glb',                 pos: [-14.0, 0,-22.5],  rot: [0,0,0],      scale: 1.6 },
+    { file: 'living-room/benchCushion.glb',          pos: [-14.0,0.42,-22.5],rot: [0,0,0],      scale: 1.6 },
+    { file: 'living-room/rugRound.glb',              pos: [-14.0,0.01,-22.5],rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/plantSmall2.glb',           pos: [-11.0, 0,-24.5],  rot: [0,0.4,0],    scale: 1.4 },
+    { file: 'living-room/lampSquareTable.glb',       pos: [-11.5,0.82,-22.5],rot: [0,0,0],      scale: 1.3 },
+  ],
+
+  office: [
+    { file: 'living-room/deskCorner.glb',            pos: [15.0, 0,-24.0],   rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/desk.glb',                  pos: [12.8, 0,-23.5],   rot: [0,Math.PI/2,0],  scale: 1.8 },
+    { file: 'living-room/chairDesk.glb',             pos: [15.0, 0,-22.5],   rot: [0,0,0],      scale: 1.8 },
+    { file: 'living-room/computerScreen.glb',        pos: [15.0,0.9,-24.0],  rot: [0,0,0],      scale: 1.5 },
+    { file: 'living-room/computerKeyboard.glb',      pos: [15.0,0.82,-23.5], rot: [0,0,0],      scale: 1.4 },
+    { file: 'living-room/computerMouse.glb',         pos: [15.5,0.82,-23.5], rot: [0,0,0],      scale: 1.4 },
+    { file: 'living-room/laptop.glb',                pos: [12.8,0.85,-23.5], rot: [0,Math.PI/2,0],  scale: 1.4 },
+    { file: 'living-room/bookcaseClosed.glb',        pos: [19.5, 0,-24.5],   rot: [0,-Math.PI/2,0], scale: 1.8 },
+    { file: 'living-room/bookcaseClosedWide.glb',    pos: [10.5, 0,-24.5],   rot: [0,Math.PI/2,0],  scale: 1.8 },
+    { file: 'living-room/books.glb',                 pos: [19.5,1.4,-24.3],  rot: [0,-Math.PI/2,0], scale: 1.5 },
+    { file: 'living-room/lampSquareCeiling.glb',     pos: [15.0,3.0,-23.5],  rot: [0,0,0],      scale: 1.6 },
+    { file: 'living-room/lampSquareTable.glb',       pos: [12.8,0.85,-23.0], rot: [0,Math.PI/2,0],  scale: 1.3 },
+    { file: 'living-room/rugRectangle.glb',          pos: [15.0,0.01,-23.0], rot: [0,0,0],      scale: 2.0 },
+    { file: 'living-room/plantSmall3.glb',           pos: [19.5, 0,-22.5],   rot: [0,0.5,0],    scale: 1.5 },
+    { file: 'living-room/cardboardBoxClosed.glb',    pos: [18.5, 0,-24.5],   rot: [0,0.3,0],    scale: 1.4 },
+    { file: 'living-room/coatRack.glb',              pos: [10.5, 0,-21.5],   rot: [0,-0.5,0],   scale: 1.5 },
+  ],
+};
+
+// ── Load all room props at startup — preload everything ───────────────────────
+// Rather than lazy-loading on first visit, we load everything upfront.
+// Props start hidden and become visible when she enters the room.
+const _gltfLoader = new GLTFLoader();
+const _roomObjects = {};   // room name → array of THREE.Object3D
+
+function loadRoomProps(roomName, onDone) {
+  if (_roomObjects[roomName]) { onDone?.(); return; }
+
+  const defs = ROOM_PROPS[roomName];
+  if (!defs || !defs.length) { onDone?.(); return; }
+
+  _roomObjects[roomName] = [];
+  let pending = defs.length;
+
+  defs.forEach(def => {
+    _gltfLoader.load(
+      `./models/${def.file}`,
+      (gltf) => {
+        const obj = gltf.scene;
+        obj.position.set(...def.pos);
+        obj.rotation.set(...def.rot);
+        obj.scale.setScalar(def.scale);
+        obj.visible = false;
+        obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+        scene.add(obj);
+        _roomObjects[roomName].push(obj);
+        if (--pending === 0) onDone?.();
+      },
+      null,
+      () => { if (--pending === 0) onDone?.(); }
+    );
+  });
+}
+
+function setRoomVisible(roomName, visible) {
+  (_roomObjects[roomName] || []).forEach(obj => { obj.visible = visible; });
+}
+
+// Preload all rooms in background
+['kitchen','living-room','bedroom','bathroom','office'].forEach(r => loadRoomProps(r, () => console.log(`[Room] Loaded: ${r}`)));
+
+// ── Room waypoints — used by moveToRoom() ─────────────────────────────────────
+const ROOM_WAYPOINT_DEFS = {
+  studio:         { x:  0.6, z: -1.2,  facingY: Math.PI },
+  kitchen:        { x:  0.0, z:-19.5,  facingY: 0        },
+  'living-room':  { x: 14.5, z: -9.5,  facingY: 0.3      },
+  bedroom:        { x:-14.0, z:-10.0,  facingY: Math.PI/4 },
+  bathroom:       { x:-14.0, z:-22.0,  facingY: 0        },
+  office:         { x: 15.0, z:-23.0,  facingY: 0        },
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _currentRoom   = 'studio';
+
+// ── Transition to a room ──────────────────────────────────────────────────────
+function moveToRoom(roomName) {
+  if (!roomName) return;
+  if (roomName === _currentRoom && _apiOverride) return;
+
+  console.log(`[Room] Moving to: ${roomName}`);
+  _apiOverride      = true;
+  _apiOverrideTimer = 0;
+
+  if (roomName !== _currentRoom) {
+    setRoomVisible(_currentRoom, false);
+    _currentRoom = roomName;
+  }
+
+  const wpDef = ROOM_WAYPOINT_DEFS[roomName];
+  if (!wpDef) return;
+
+  WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName, facingY: wpDef.facingY };
+  walkTo('_room_dest', () => {
+    setRoomVisible(roomName, true);
+  });
+}
+
+// ================================================================
+//  DAILY LIFE SCHEDULER
+//  She lives autonomously. No waiting at the desk. She moves around
+//  her house doing things, and the camera follows her wherever she is.
+//  Spots have a 'facingY' so she faces the props, not the camera.
+// ================================================================
+
+let _lifeTimer     = 0;
+let _lifeMinDwell  = 12;  // minimum seconds at a spot before moving
+let _lifeMaxDwell  = 45;  // maximum seconds at a spot
+let _nextDwell     = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+let _apiOverride      = false;
+let _apiOverrideTimer = 0;
+const API_OVERRIDE_DURATION = 60; // seconds before she resumes her life
+
+// All spots across the house, flat list for the scheduler
+function getAllSpots() {
+  return Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
+    roomDef.spots.map(spot => ({ ...spot, room: roomKey }))
+  );
+}
+
+let _currentSpot = null;
+
+function pickNextSpot(avoidRoom = null) {
+  const allSpots = getAllSpots();
+  // Bias: 50% chance to stay in current room, 50% to wander to another
+  const stayRoom = Math.random() < 0.5 ? _currentRoom : null;
+  let candidates = stayRoom
+    ? allSpots.filter(s => s.room === stayRoom && s !== _currentSpot)
+    : allSpots.filter(s => s.room !== _currentRoom);
+  if (!candidates.length) candidates = allSpots.filter(s => s !== _currentSpot);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function goToSpot(spot) {
+  if (!spot || !vrm) return;
+  _currentSpot = spot;
+
+  const needsRoomSwitch = spot.room !== _currentRoom;
+
+  if (needsRoomSwitch) {
+    setRoomVisible(_currentRoom, false);
+    _currentRoom = spot.room;
+    setRoomVisible(_currentRoom, true);
+    // Update ambient lighting for this room
+    const h = HOUSE[spot.room];
+    if (h) {
+      ambient.color.setHex(h.ambientColor);
+    }
+  }
+
+  WAYPOINTS['_life_dest'] = { x: spot.x, z: spot.z, label: spot.label };
+  walkTo('_life_dest', () => {
+    // Face the right direction for this spot
+    if (spot.facingY !== undefined && vrm) {
+      _targetFacing = spot.facingY;
+    }
+    // Pick an activity for this spot
+    const pool = spot.activities || ['idle'];
+    const next = pool[Math.floor(Math.random() * pool.length)];
+    ACTIVITY.current = next;
+    ACTIVITY.timer   = 0;
+    ACTIVITY.phase   = 0;
+    ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+  });
+}
+
+// Facing target — render loop lerps toward this
+let _targetFacing = Math.PI;
+
+function lifeUpdate() {
+  if (walk.active) return;
+  if (_apiOverride) {
+    _apiOverrideTimer += 1/60;
+    if (_apiOverrideTimer > API_OVERRIDE_DURATION) {
+      _apiOverride = false;
+      _lifeTimer   = _nextDwell; // trigger immediate next move
+    }
+    return;
+  }
+
+  _lifeTimer += 1/60;
+  if (_lifeTimer < _nextDwell) return;
+
+  _lifeTimer  = 0;
+  _nextDwell  = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+
+  const spot = pickNextSpot();
+  if (spot) {
+    console.log(`[Life] ${spot.room} → ${spot.label}`);
+    goToSpot(spot);
+  }
+}
+
+// Animate room neon lights (gentle pulse)
+let _roomTime = 0;
+function animateRoomLights(delta) {
+  _roomTime += delta;
+  roomLights.neonPink.intensity   = 3.2 + Math.sin(_roomTime * 1.7) * 0.8;
+  roomLights.neonBlue.intensity   = 2.8 + Math.sin(_roomTime * 1.3 + 1) * 0.7;
+  roomLights.neonPurple.intensity = 2.3 + Math.sin(_roomTime * 0.9 + 2) * 0.5;
+  if (monitorGlowLight && ACTIVITY.current !== 'monitor') {
+    monitorGlowLight.intensity = 0.7 + Math.sin(_roomTime * 0.8) * 0.15;
+  }
+}
     // Big appliances — correct path: they live in living-room/ folder
     { file: 'living-room/kitchenStove.glb',         pos: [-2.5, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
     { file: 'living-room/kitchenFridgeLarge.glb',   pos: [-4.8, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
@@ -2320,8 +2767,9 @@ function activityUpdate(delta) {
       break;
   }
 
-  // Always face forward — no rotation drift
-  if (vrm) vrm.scene.rotation.y = VRM_BASE_ROT_Y;
+  // Do NOT force camera-facing here.
+  // Rotation is set by: walkTo() during travel, and spot.facingY when she arrives.
+  // Activities in kitchen/lounge face the props, not the camera.
 }
 
 // ================================================================
