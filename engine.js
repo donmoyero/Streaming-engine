@@ -679,7 +679,8 @@ function loadRoomProps(roomName, onDone) {
   let pending = defs.length;
 
   defs.forEach(def => {
-    const url = `/Streaming-engine/models/${def.file}`;
+    const url = `./models/${def.file}`;
+    console.log(`[Room] Loading: ${url}`);
     _gltfLoader.load(
       url,
       (gltf) => {
@@ -687,19 +688,19 @@ function loadRoomProps(roomName, onDone) {
         obj.position.set(...def.pos);
         obj.rotation.set(...def.rot);
         obj.scale.setScalar(def.scale);
-        obj.visible = false; // hidden until room is active
-        // Shadow casting
+        obj.visible = false;
         obj.traverse(n => {
           if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
         });
         scene.add(obj);
         _roomObjects[roomName].push(obj);
         pending--;
-        if (pending === 0) onDone?.();
+        console.log(`[Room] Loaded OK: ${def.file} (${pending} left)`);
+        if (pending === 0) { console.log('[Room] All props loaded for:', roomName); onDone?.(); }
       },
       null,
       (err) => {
-        console.warn(`[Room] Failed to load ${def.file}:`, err.message || err);
+        console.warn(`[Room] FAILED: ${url}`, err.message || err);
         pending--;
         if (pending === 0) onDone?.();
       }
@@ -906,6 +907,7 @@ let _lastWaypointActivity = '';
 
 function roamUpdate() {
   if (walk.active) return; // already walking somewhere
+  if (_currentRoom !== 'studio') return; // room system is in charge — don't fight it
 
   const currentActivity = ACTIVITY.current;
   const targetWP = ACTIVITY_LOCATIONS[currentActivity] || 'centre';
@@ -2280,6 +2282,10 @@ function render() {
     // ── Activity system ────────────────────────────────
     activityUpdate(delta);
     hyperUpdate(delta);
+
+    // ── Walk / room movement ───────────────────────────
+    updateWalk(delta);
+    roamUpdate();
 
     // ── Idle body sway (only when not mid-gesture) ────
     if (!gestureActive()) {
