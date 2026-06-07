@@ -983,6 +983,110 @@ function moveToRoom(roomName) {
   });
 }
 
+// ── Camera system ─────────────────────────────────────────────────────────────
+let camMode = 'IDLE';
+const CAM_LERP = 0.035;
+
+const WORLD_CAM = { behindDist: 3.5, sideDist: 0.8, height: 2.2, lookHeight: 1.1 };
+const FACE_CAM  = { frontDist: 1.05, height: 1.65, lookHeight: 1.45 };
+const THINK_CAM = { behindDist: 2.2, sideDist: 0.5, height: 1.8, lookHeight: 1.3 };
+
+const camCurrent = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
+const camTarget  = { x: 0, y: 2.2, z: 3.5, lookX: 0, lookY: 1.1, lookZ: 0 };
+const camSmooth  = camCurrent;
+const camWant    = camTarget;
+const CAM_DIST   = { IDLE: 3.5, SPEAK: 1.05, THINK: 2.2 };
+const CAM_PRESETS = {
+  IDLE:  { z: 3.5,  y: 2.2,  lookY: 1.1,  rotY: 0    },
+  SPEAK: { z: 1.05, y: 1.65, lookY: 1.45, rotY: 0    },
+  THINK: { z: 2.2,  y: 1.8,  lookY: 1.3,  rotY: 0.01 },
+};
+
+function setCamMode(mode) {
+  if (!['IDLE','SPEAK','THINK'].includes(mode)) return;
+  camMode = mode;
+}
+
+// ── VRM world position tracking ───────────────────────────────────────────────
+const vrmWorld = { x: 0, y: 0, z: 0, facingY: 0 };
+
+// ── Waypoints & Walk system ───────────────────────────────────────────────────
+const WAYPOINTS = {
+  centre:     { x:  0.0, z:  0.0, label: 'Centre Stage'   },
+  desk:       { x:  0.6, z: -1.2, label: 'Streaming Desk' },
+  dartboard:  { x: -4.5, z: -1.0, label: 'Dartboard'      },
+  basketball: { x:  4.0, z: -0.8, label: 'Basketball Hoop'},
+  foosball:   { x: -4.5, z: -3.2, label: 'Foosball Table' },
+  trophy:     { x:  3.5, z: -4.5, label: 'Trophy Shelf'   },
+  beans:      { x: -5.2, z:  0.5, label: 'Bean Bag Zone'  },
+};
+
+const walk = {
+  active: false,
+  fromX: 0, fromZ: 0,
+  toX: 0,   toZ: 0,
+  progress: 0,
+  duration: 2.0,
+  targetFacing: 0,
+  onArrive: null,
+};
+
+const vrmPos = { x: 0, z: 0 };
+
+function walkTo(waypointName, onArrive = null) {
+  const wp = WAYPOINTS[waypointName];
+  if (!wp || !vrm) return;
+
+  walk.fromX    = vrmPos.x;
+  walk.fromZ    = vrmPos.z;
+  walk.toX      = wp.x;
+  walk.toZ      = wp.z;
+  walk.progress = 0;
+  walk.active   = true;
+  walk.onArrive = onArrive;
+
+  const dx = wp.x - vrmPos.x;
+  const dz = wp.z - vrmPos.z;
+  const dist = Math.sqrt(dx*dx + dz*dz);
+  walk.duration = Math.max(1.0, dist * 0.65);
+  walk.targetFacing = Math.atan2(dx, dz) + Math.PI;
+}
+
+function updateWalk(delta) {
+  if (!walk.active || !vrm) return;
+
+  walk.progress += delta / walk.duration;
+  if (walk.progress >= 1) {
+    walk.progress = 1;
+    walk.active   = false;
+    vrmPos.x = walk.toX;
+    vrmPos.z = walk.toZ;
+    if (walk.onArrive) walk.onArrive();
+  }
+
+  const t    = walk.progress;
+  const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+  vrmPos.x = walk.fromX + (walk.toX - walk.fromX) * ease;
+  vrmPos.z = walk.fromZ + (walk.toZ - walk.fromZ) * ease;
+
+  vrm.scene.position.x = vrmPos.x;
+  vrm.scene.position.z = vrmPos.z;
+
+  const currentFacing = vrm.scene.rotation.y;
+  let diff = walk.targetFacing - currentFacing;
+  while (diff >  Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  vrm.scene.rotation.y += diff * Math.min(1, delta * 5);
+}
+
+// ── Activity → location mapping ───────────────────────────────────────────────
+const ACTIVITY_LOCATIONS = {
+  darts: 'dartboard', basketball: 'basketball', dance: 'centre',
+  stretch: 'centre',  hairflick: 'centre',      hiponhip: 'centre',
+  noseCover: 'centre', typing: 'desk',           monitor: 'desk', idle: 'centre',
+};
+let _lastWaypointActivity = '';
+
 // ================================================================
 //  DAILY LIFE SCHEDULER
 //  She lives autonomously. No waiting at the desk. She moves around
