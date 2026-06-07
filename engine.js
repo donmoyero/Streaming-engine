@@ -296,9 +296,9 @@ _gltfLoader.load(
     // ── Scale HOUSE spot coords to match scaled GLB ───────────────────────────
     // Raw GLB coords in HOUSE are in GLB units. House is scaled by hScale so
     // all spot X/Z must be multiplied by hScale to land in world space.
-    // Only do this once — guard with a flag.
-    if (!HOUSE._scaled) {
-      HOUSE._scaled = true;
+    // Only do this once — guard with a separate flag (NOT on HOUSE object).
+    if (!window._houseScaled) {
+      window._houseScaled = true;
       for (const roomDef of Object.values(HOUSE)) {
         if (!roomDef.spots) continue;
         for (const spot of roomDef.spots) {
@@ -956,9 +956,10 @@ function famScore(roomName) {
 
 // Weighted room picker — more familiar rooms get picked more often
 function pickNextSpotFamiliar() {
-  const allSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
-    roomDef.spots.map(spot => ({ ...spot, room: roomKey }))
-  );
+  const allSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) => {
+    if (!roomDef || !roomDef.spots) return [];
+    return roomDef.spots.map(spot => ({ ...spot, room: roomKey }));
+  });
 
   // Build weighted list — familiar rooms appear more times in the pool
   const weighted = [];
@@ -980,9 +981,12 @@ function getFamiliarActivityPool(roomName) {
   const base = {
     studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover','darts','basketball'],
     kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting'],
-    'living-room': ['idle','hairflick','hiponhip','stretch','sofaSit','phoneScroll','tvReact','dance','readBook'],
-    bedroom:       ['idle','hairflick','noseCover','sofaSit','phoneScroll','stretch'],
+    'living-room': ['idle','hairflick','hiponhip','stretch','phoneScroll','tvReact','dance','readBook','fireGaze','windowLook'],
+    bedroom:       ['idle','hairflick','noseCover','phoneScroll','stretch','mirrorPose'],
     bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
+    dining:        ['idle','tasting','phoneScroll','readBook','hairflick','hiponhip','windowLook'],
+    hallway:       ['idle','hairflick','stretch'],
+    garden:        ['idle','hairflick','hiponhip','dance','stretch','phoneScroll'],
     office:        ['idle','hairflick','noseCover','typing','monitor','stretch'],
   };
   const advanced = {
@@ -1096,9 +1100,10 @@ function maybeChangeOutfit(roomName) {
 
 // All spots across the house, flat list for the scheduler
 function getAllSpots() {
-  return Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
-    roomDef.spots.map(spot => ({ ...spot, room: roomKey }))
-  );
+  return Object.entries(HOUSE).flatMap(([roomKey, roomDef]) => {
+    if (!roomDef || !roomDef.spots) return [];
+    return roomDef.spots.map(spot => ({ ...spot, room: roomKey }));
+  });
 }
 
 let _currentSpot = null;
@@ -1799,12 +1804,15 @@ const ACTIVITY = {
 // Activities per room — she only does activities that fit where she is
 const ACTIVITY_POOLS = {
   studio:        ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor', 'noseCover'],
-  kitchen:       ['stirring', 'chopping', 'tasting', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
-  'living-room': ['sofaSit', 'tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'readBook', 'dance', 'stretch', 'idle'],
+  kitchen:       ['stirring', 'chopping', 'tasting', 'hairflick', 'hiponhip', 'idle', 'noseCover', 'washingUp'],
+  'living-room': ['tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'readBook', 'dance', 'stretch', 'idle', 'fireGaze', 'windowLook'],
   office:        ['typing', 'monitor', 'stretch', 'hairflick', 'idle', 'noseCover'],
   beauty:        ['mirrorPose', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
-  bedroom:       ['sofaSit', 'phoneScroll', 'stretch', 'hairflick', 'idle', 'noseCover'],
+  bedroom:       ['phoneScroll', 'stretch', 'hairflick', 'idle', 'noseCover', 'mirrorPose'],
   bathroom:      ['mirrorPose', 'hairflick', 'stretch', 'idle', 'noseCover'],
+  dining:        ['tasting', 'phoneScroll', 'readBook', 'hairflick', 'idle', 'windowLook'],
+  hallway:       ['idle', 'hairflick', 'stretch'],
+  garden:        ['idle', 'hairflick', 'hiponhip', 'dance', 'stretch', 'phoneScroll'],
 };
 // Fallback pool when room has no specific entry
 const ACTIVITY_POOL = ACTIVITY_POOLS.studio;
@@ -1827,7 +1835,13 @@ function activityUpdate(delta) {
   ACTIVITY.timer += delta;
   ACTIVITY.phase += delta;
 
-  if (ACTIVITY.timer > ACTIVITY.duration) activityPickNext();
+  if (ACTIVITY.timer > ACTIVITY.duration) {
+    // Reset Y before switching — sofaSit and jump activities move it
+    if (vrm && vrm._restPosY !== undefined) {
+      vrm.scene.position.y = vrm._restPosY;
+    }
+    activityPickNext();
+  }
 
   const t = ACTIVITY.phase;
 
