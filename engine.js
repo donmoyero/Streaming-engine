@@ -772,15 +772,12 @@ function _placeVRMOnFloor() {
   // feetOffset was measured after the rest pose so feet sit exactly at Y=0.
   // Adding it to floorY lifts the origin up so feet land ON the floor surface.
   const feetOffset = vrm._feetOffset ?? 0;
-  // Safety: if feetOffset is suspiciously small (< 0.05), the matrix measurement
-  // failed. Fall back to half of VRM_TARGET_HEIGHT as a safe estimate.
-  const safeFeetOffset = feetOffset < 0.05 ? 0.82 : feetOffset;
-  const finalY = _houseFloorY + safeFeetOffset;
+  const finalY = _houseFloorY + feetOffset;
 
   vrm.scene.position.set(_houseSpawnX, finalY, _houseSpawnZ);
   vrm._restPosY = finalY;
   vrm.scene.rotation.y = Math.PI;
-  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${safeFeetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
+  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${feetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
 }
 
 _gltfLoader.load(
@@ -1543,12 +1540,10 @@ gltfLoader.load(
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-    // ── Skin tone: rich deep brown ────────────────────────────────
-    const SKIN_HEX = 0x7B3F00; // deep warm brown
     const MESH_COLOURS = {
-      Julie_Figure: SKIN_HEX,
+      Julie_Figure: 0xc68642,
       Brow:         0x1a0a00,
-      Teargum:      SKIN_HEX,
+      Teargum:      0xc68642,
       Ear_Jewel:    0xFFD700,
       Eye_R:        0x3b2314,
       Eyes_L:       0x3b2314,
@@ -1608,8 +1603,8 @@ gltfLoader.load(
           roughness:        isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
           metalness:        isMetallic ? 0.88 : 0.0,
           // Emissive floor prevents skin going black under harsh neon swings
-          emissive:         isSkin ? new THREE.Color(0x7B3F00) : new THREE.Color(0x000000),
-          emissiveIntensity: isSkin ? 0.15 : 0.0,
+          emissive:         isSkin ? new THREE.Color(0xc68642) : new THREE.Color(0x000000),
+          emissiveIntensity: isSkin ? 0.18 : 0.0,
           side:             THREE.FrontSide,
           depthWrite:       true,
         });
@@ -1619,12 +1614,12 @@ gltfLoader.load(
     VRMUtils.rotateVRM0(vrm);
     vrm.scene.scale.set(1,1,1);
     vrm.scene.position.set(0,0,0);
+    // rotateVRM0 sets a base Y rotation so the model faces the camera.
+    // Store it so pacing can apply offsets on top rather than overwriting it.
     VRM_BASE_ROT_Y = vrm.scene.rotation.y;
     scene.add(vrm.scene);
 
-    // ── Scale VRM to target height ───────────────────────────────
-    // Force matrix update BEFORE measuring so Box3 gets real values.
-    vrm.scene.updateMatrixWorld(true);
+    // Measure at scale=1, position=0
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
@@ -1632,47 +1627,53 @@ gltfLoader.load(
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
     vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
+    // feetOffset will be measured AFTER setRestPose() below, once legs are posed
 
     cacheBones();
 
-    // ── Set natural girly resting pose (out of T-pose) ───────────
+    // ── Set natural girly resting pose (out of T-pose) ───────
     function setRestPose() {
+      // Arms slightly in, not full T-pose
       if (boneLUpperArm) { boneLUpperArm.rotation.z =  1.0; boneLUpperArm.rotation.x = 0.05; }
       if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0; boneRUpperArm.rotation.x = 0.05; }
       if (boneLLowerArm) { boneLLowerArm.rotation.z =  0.35; boneLLowerArm.rotation.x = 0.05; }
       if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = 0.05; }
+      // Soft limp wrists — feminine hand droop
       if (boneLHand) { boneLHand.rotation.z =  0.18; boneLHand.rotation.x = 0.08; }
       if (boneRHand) { boneRHand.rotation.z = -0.18; boneRHand.rotation.x = 0.08; }
+      // Slight hip shift right — weight on one leg
       if (boneHips) { boneHips.rotation.z = 0.06; boneHips.rotation.x = 0.01; }
+      // Left knee slightly bent (weight-bearing)
       if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; }
       if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; }
+      // Feet natural — slight toe point
       if (boneLFoot) { boneLFoot.rotation.x = -0.05; boneLFoot.rotation.z = -0.03; }
       if (boneRFoot) { boneRFoot.rotation.x = -0.05; boneRFoot.rotation.z =  0.04; }
       if (boneLToes) { boneLToes.rotation.x =  0.08; }
       if (boneRToes) { boneRToes.rotation.x =  0.08; }
+      // Gentle spine lean
       if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
 
-    // ── Measure feet offset with FULL matrix commit ───────────────
-    // updateMatrixWorld(true) forces Three.js to recompute every bone's
-    // world transform so Box3 sees the posed skeleton, not the T-pose.
-    vrm.update(0);                        // tick VRM internals once
-    vrm.scene.updateMatrixWorld(true);    // commit all world matrices
-    const boxPosed      = new THREE.Box3().setFromObject(vrm.scene);
-    // feetToOrigin = how far to push her UP so her lowest point is at Y=0
-    const feetToOrigin  = Math.max(0, -boxPosed.min.y);
-    vrm._feetOffset     = feetToOrigin;
+    // Measure feet position AFTER pose is applied (bent legs sit lower).
+    // Force a matrix update so Box3 sees the posed skeleton positions.
+    vrm.scene.updateMatrixWorld(true);
+    const boxPosed = new THREE.Box3().setFromObject(vrm.scene);
+    const feetToOrigin = -boxPosed.min.y; // how far to lift so feet are at Y=0
+    vrm._feetOffset = feetToOrigin;
     vrm.scene.position.y = feetToOrigin;
     console.log('[VRM] feetOffset after pose:', feetToOrigin.toFixed(4));
 
-    // ── Place avatar on house floor ───────────────────────────────
+    // ── Place avatar on the house floor ─────────────────────────
+    // Defer by one frame so all world matrices are committed before raycasting.
     if (_houseLoaded) {
       requestAnimationFrame(() => _placeVRMOnFloor());
     } else {
+      // Temporary: stand at origin until house loads and repositions her
       vrmPos.x = 0; vrmPos.z = 0;
-      vrm.scene.position.set(0, feetToOrigin, 0);
-      vrm._restPosY = feetToOrigin;
+      vrm.scene.position.set(0, vrm.scene.position.y, 0);
+      vrm._restPosY = vrm.scene.position.y;
       vrm.scene.rotation.y = Math.PI;
     }
 
@@ -2161,9 +2162,6 @@ function activityUpdate(delta) {
         if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.4 + bounce * 0.3);
         if (boneLHand)     { boneLHand.rotation.z = 0.2 + bounce * 0.15; boneLHand.rotation.x = 0.05; }
         if (boneRHand)     { boneRHand.rotation.z = -(0.2 + bounce * 0.15); boneRHand.rotation.x = 0.05; }
-        // Feet: little bounce step
-        if (boneLFoot)     boneLFoot.rotation.x = -0.05 + Math.abs(Math.sin(cycle * 7)) * 0.06;
-        if (boneRFoot)     boneRFoot.rotation.x = -0.05 + Math.abs(Math.sin(cycle * 7 + 1)) * 0.06;
         setExpression('neutral');
       } else if (cycle < 2.3) {
         // Set shot: hands rise, she bends knees, hip dips
@@ -2232,14 +2230,13 @@ function activityUpdate(delta) {
       if (boneLHand) { boneLHand.rotation.z = 0.25 + Math.sin(t*9)*0.18; boneLHand.rotation.x = 0.08 + Math.sin(t*7)*0.06; boneLHand.rotation.y = Math.sin(t*5)*0.08; }
       if (boneRHand) { boneRHand.rotation.z = -(0.25 + Math.sin(t*9+1)*0.18); boneRHand.rotation.x = 0.08 + Math.sin(t*7+1)*0.06; boneRHand.rotation.y = Math.sin(t*5+1)*0.08; }
 
-      // Legs: step-touch weight shift
-      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = shimmy * 0.08; boneLUpperLeg.rotation.x = bob * 0.3; }
-      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = -shimmy * 0.08; boneRUpperLeg.rotation.x = bob * 0.3; }
-      // Heel lifts alternate with shimmy
-      if (boneLFoot) { boneLFoot.rotation.x = -0.04 + Math.max(0, shimmy) * 0.12; }
-      if (boneRFoot) { boneRFoot.rotation.x = -0.04 + Math.max(0, -shimmy) * 0.12; }
-      if (boneLToes) boneLToes.rotation.x = 0.08 + Math.max(0, shimmy) * 0.08;
-      if (boneRToes) boneRToes.rotation.x = 0.08 + Math.max(0, -shimmy) * 0.08;
+      // Legs: planted — no movement during dance (legs only move when walking)
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; boneLUpperLeg.rotation.x = 0; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; boneRUpperLeg.rotation.x = 0; }
+      if (boneLFoot) { boneLFoot.rotation.x = -0.04; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.04; }
+      if (boneLToes) boneLToes.rotation.x = 0.08;
+      if (boneRToes) boneRToes.rotation.x = 0.08;
 
       // Head bobs and tilts with the music
       if (boneHead) { boneHead.rotation.z = Math.sin(t * 3.25) * 0.06; boneHead.rotation.y = shimmy * 0.05; }
@@ -2254,26 +2251,20 @@ function activityUpdate(delta) {
     case 'stretch': {
       const cycle = t % 6.0;
       if (cycle < 1.2) {
-        // Arms rise overhead — she reaches up, hips counter-shift, toes point
+        // Arms rise overhead — she reaches up
         const p = Math.min(cycle / 1.0, 1);
         if (boneLUpperArm) { boneLUpperArm.rotation.z = 1.0 - p * 1.08; boneLUpperArm.rotation.x = p * 0.18; }
         if (boneRUpperArm) { boneRUpperArm.rotation.z = -(1.0 - p * 1.08); boneRUpperArm.rotation.x = p * 0.18; }
         if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.35 - p * 0.3; }
         if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - p * 0.3); }
-        // Hands: fingers reach up, wrists extend
         if (boneLHand) { boneLHand.rotation.z = 0.2 - p * 0.3; boneLHand.rotation.x = -p * 0.12; }
         if (boneRHand) { boneRHand.rotation.z = -(0.2 - p * 0.3); boneRHand.rotation.x = -p * 0.12; }
         if (boneSpine) { boneSpine.rotation.x = -p * 0.08; boneSpine.rotation.z = Math.sin(p*2)*0.02; }
-        if (boneHips)  { boneHips.rotation.z = Math.sin(p*3)*0.04; } // hip shifts as she reaches
-        // Heel lift: she rises onto toes
-        if (boneLFoot) boneLFoot.rotation.x = -0.05 - p * 0.15;
-        if (boneRFoot) boneRFoot.rotation.x = -0.05 - p * 0.15;
-        if (boneLToes) boneLToes.rotation.x = 0.08 + p * 0.1;
-        if (boneRToes) boneRToes.rotation.x = 0.08 + p * 0.1;
+        if (boneHips)  { boneHips.rotation.z = Math.sin(p*3)*0.04; }
         setExpression('neutral');
-        setBS('O', p * 0.15); // soft "ooh" as she stretches
+        setBS('O', p * 0.15);
       } else if (cycle < 4.0) {
-        // Hold the stretch + gentle sway — feels good
+        // Hold the stretch + gentle sway
         const sway = Math.sin(t * 1.2) * 0.04;
         if (boneLUpperArm) { boneLUpperArm.rotation.z = -0.08 + sway; boneLUpperArm.rotation.x = 0.18; }
         if (boneRUpperArm) { boneRUpperArm.rotation.z = -(- 0.08 + sway); boneRUpperArm.rotation.x = 0.18; }
@@ -2281,28 +2272,18 @@ function activityUpdate(delta) {
         if (boneRHand) { boneRHand.rotation.z = 0.1 - Math.sin(t*1.8)*0.05; boneRHand.rotation.x = -0.12; }
         if (boneSpine) { boneSpine.rotation.x = -0.08 + Math.sin(t * 0.7) * 0.02; boneSpine.rotation.z = sway * 0.5; }
         if (boneHips)  { boneHips.rotation.z = Math.sin(t * 0.9) * 0.05; }
-        // Stay on toes
-        if (boneLFoot) boneLFoot.rotation.x = -0.2;
-        if (boneRFoot) boneRFoot.rotation.x = -0.2;
-        if (boneLToes) boneLToes.rotation.x = 0.18;
-        if (boneRToes) boneRToes.rotation.x = 0.18;
-        setBS('O', 0.12); // soft held breath
+        setBS('O', 0.12);
       } else {
-        // Arms come back down — she exhales, settles, hip pops
+        // Arms come back down — she exhales, settles
         const p = (cycle - 4.0) / 2.0;
         if (boneLUpperArm) { boneLUpperArm.rotation.z = -0.08 + p * 1.08; boneLUpperArm.rotation.x = 0.18 - p * 0.13; }
         if (boneRUpperArm) { boneRUpperArm.rotation.z = -((-0.08 + p * 1.08)); boneRUpperArm.rotation.x = 0.18 - p * 0.13; }
         if (boneLHand) { boneLHand.rotation.z = -0.1 + p * 0.3; boneLHand.rotation.x = -0.12 + p * 0.2; }
         if (boneRHand) { boneRHand.rotation.z = 0.1 - p * 0.3; boneRHand.rotation.x = -0.12 + p * 0.2; }
         if (boneSpine) { boneSpine.rotation.x = -0.08 + p * 0.1; }
-        if (boneHips)  { boneHips.rotation.z = 0.06 * Math.sin(p * Math.PI); } // satisfying hip pop on settle
-        // Heels lower back down
-        if (boneLFoot) boneLFoot.rotation.x = -0.2 + p * 0.15;
-        if (boneRFoot) boneRFoot.rotation.x = -0.2 + p * 0.15;
-        if (boneLToes) boneLToes.rotation.x = 0.18 - p * 0.1;
-        if (boneRToes) boneRToes.rotation.x = 0.18 - p * 0.1;
+        if (boneHips)  { boneHips.rotation.z = 0.06 * Math.sin(p * Math.PI); }
         setExpression('neutral');
-        setBS('O', 0.12 - p * 0.12); // exhale
+        setBS('O', 0.12 - p * 0.12);
       }
       break;
     }
@@ -3410,37 +3391,16 @@ function render() {
         boneNeck.rotation.y = Math.sin(idleTime * 0.32) * 0.04;
       }
 
-      // Legs — weight shift, one leg slightly bent, foot tap
-      const legShift = Math.sin(idleTime * 1.1); // synced to hip sway
-      if (boneLUpperLeg) {
-        boneLUpperLeg.rotation.z = -0.04 + legShift * 0.04;
-        boneLUpperLeg.rotation.x =  0.01;
-      }
-      if (boneRUpperLeg) {
-        boneRUpperLeg.rotation.z =  0.06 - legShift * 0.04;
-        boneRUpperLeg.rotation.x =  0.01;
-      }
-      // Lower legs — subtle knee flex on weight-bearing side
-      if (boneLLowerLeg) {
-        boneLLowerLeg.rotation.x = 0.04 + Math.max(0, legShift) * 0.04;
-      }
-      if (boneRLowerLeg) {
-        boneRLowerLeg.rotation.x = 0.04 + Math.max(0, -legShift) * 0.04;
-      }
-      // Foot tap — right foot does a little impatient tap every ~4s
-      const tapCycle = idleTime % 4.2;
-      const tapAmt   = tapCycle < 0.5 ? Math.sin(tapCycle * Math.PI / 0.5) * 0.12 : 0;
-      if (boneLFoot) {
-        boneLFoot.rotation.x = -0.05 + Math.sin(idleTime * 1.1) * 0.02;
-        boneLFoot.rotation.z = -0.03 + legShift * 0.02;
-      }
-      if (boneRFoot) {
-        boneRFoot.rotation.x = -0.05 + tapAmt;
-        boneRFoot.rotation.z =  0.04 - legShift * 0.02;
-      }
-      // Toe point — toes follow foot
-      if (boneLToes) boneLToes.rotation.x =  0.08 + Math.sin(idleTime * 1.1) * 0.03;
-      if (boneRToes) boneRToes.rotation.x =  0.08 + tapAmt * 0.5;
+      // Legs — completely still when not walking. Held in natural stand pose.
+      // Walk system (updateWalk) handles all leg animation when walk.active.
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; boneLUpperLeg.rotation.x = 0; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; boneRUpperLeg.rotation.x = 0; }
+      if (boneLLowerLeg) { boneLLowerLeg.rotation.x = 0.04; }
+      if (boneRLowerLeg) { boneRLowerLeg.rotation.x = 0.04; }
+      if (boneLFoot) { boneLFoot.rotation.x = -0.05; boneLFoot.rotation.z = -0.03; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.05; boneRFoot.rotation.z =  0.04; }
+      if (boneLToes) boneLToes.rotation.x = 0.08;
+      if (boneRToes) boneRToes.rotation.x = 0.08;
 
       // Arms & hands — only idle pose when no activity animating them
       if (ACTIVITY.current === 'idle') {
