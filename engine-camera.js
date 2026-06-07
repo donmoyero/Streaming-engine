@@ -4,7 +4,7 @@
 //  Reads vrm world position + _camFacingY, writes camera.position.
 // ================================================================
 
-import { camera, vrm } from './engine-scene.js';
+import { camera, getVrm } from './engine-scene.js';
 import { walk } from './engine-life.js';
 
 // ── Camera mode ──────────────────────────────────────────────────
@@ -24,19 +24,16 @@ export const camCurrent = { x: 0, y: 1.50, z: 2.6, lookX: 0, lookY: 1.10, lookZ:
 
 // Smoothed facing angle used by camera (separate from VRM rotation to avoid jitter)
 export let _camFacingY = Math.PI; // starts facing +Z
+export function setCamFacingY(y) { _camFacingY = y; }
 
 export function setCamMode(mode) {
   if (!['IDLE','SPEAK','THINK','WALK'].includes(mode)) return;
   camMode = mode;
 }
 
-// Allow engine-scene to reset the facing angle when placing VRM
-export function resetCamFacingY(angle = Math.PI) {
-  _camFacingY = angle;
-}
-
 // Instantly snap camera to orbit in front of her face.
 export function _snapCameraToVRM() {
+  const vrm = getVrm();
   if (!vrm) return;
   const vx = vrm.scene.position.x;
   const vy = vrm.scene.position.y;
@@ -55,13 +52,14 @@ export function _snapCameraToVRM() {
 
 // Called every frame from render loop
 export function updateCamera(delta) {
+  const vrm = getVrm();
   if (!vrm) return;
   const vx = vrm.scene.position.x;
   const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
 
   // Smooth facing angle to avoid camera jitter
-  let rawFacing = vrm.scene.rotation.y;
+  const rawFacing = vrm.scene.rotation.y;
   let df = rawFacing - _camFacingY;
   while (df >  Math.PI) df -= Math.PI * 2;
   while (df < -Math.PI) df += Math.PI * 2;
