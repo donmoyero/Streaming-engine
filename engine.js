@@ -3410,37 +3410,15 @@ function render() {
         boneNeck.rotation.y = Math.sin(idleTime * 0.32) * 0.04;
       }
 
-      // Legs — weight shift, one leg slightly bent, foot tap
-      const legShift = Math.sin(idleTime * 1.1); // synced to hip sway
-      if (boneLUpperLeg) {
-        boneLUpperLeg.rotation.z = -0.04 + legShift * 0.04;
-        boneLUpperLeg.rotation.x =  0.01;
-      }
-      if (boneRUpperLeg) {
-        boneRUpperLeg.rotation.z =  0.06 - legShift * 0.04;
-        boneRUpperLeg.rotation.x =  0.01;
-      }
-      // Lower legs — subtle knee flex on weight-bearing side
-      if (boneLLowerLeg) {
-        boneLLowerLeg.rotation.x = 0.04 + Math.max(0, legShift) * 0.04;
-      }
-      if (boneRLowerLeg) {
-        boneRLowerLeg.rotation.x = 0.04 + Math.max(0, -legShift) * 0.04;
-      }
-      // Foot tap — right foot does a little impatient tap every ~4s
-      const tapCycle = idleTime % 4.2;
-      const tapAmt   = tapCycle < 0.5 ? Math.sin(tapCycle * Math.PI / 0.5) * 0.12 : 0;
-      if (boneLFoot) {
-        boneLFoot.rotation.x = -0.05 + Math.sin(idleTime * 1.1) * 0.02;
-        boneLFoot.rotation.z = -0.03 + legShift * 0.02;
-      }
-      if (boneRFoot) {
-        boneRFoot.rotation.x = -0.05 + tapAmt;
-        boneRFoot.rotation.z =  0.04 - legShift * 0.02;
-      }
-      // Toe point — toes follow foot
-      if (boneLToes) boneLToes.rotation.x =  0.08 + Math.sin(idleTime * 1.1) * 0.03;
-      if (boneRToes) boneRToes.rotation.x =  0.08 + tapAmt * 0.5;
+      // Legs — still when not walking, walk system handles all leg movement
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = -0.04; boneLUpperLeg.rotation.x = 0; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z =  0.06; boneRUpperLeg.rotation.x = 0; }
+      if (boneLLowerLeg) { boneLLowerLeg.rotation.x = 0.04; }
+      if (boneRLowerLeg) { boneRLowerLeg.rotation.x = 0.04; }
+      if (boneLFoot) { boneLFoot.rotation.x = -0.05; boneLFoot.rotation.z = -0.03; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.05; boneRFoot.rotation.z =  0.04; }
+      if (boneLToes) boneLToes.rotation.x = 0.08;
+      if (boneRToes) boneRToes.rotation.x = 0.08;
 
       // Arms & hands — only idle pose when no activity animating them
       if (ACTIVITY.current === 'idle') {
