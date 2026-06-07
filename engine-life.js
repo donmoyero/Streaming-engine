@@ -64,12 +64,12 @@ function setStageLight(mood, durationMs = 4000) {
 
 // ── Chat bubble ──────────────────────────────────────────────────
 let bubbleTimeout = null;
-export function showBubble(text, speaker = 'Miss OG Tinz') {
+export function showBubble(text, speaker = 'Miss OG Tinz', durationMs = 0) {
   bubbleTxt.textContent = text;
   bubble.querySelector('.speaker').textContent = speaker;
   bubble.classList.add('visible');
   clearTimeout(bubbleTimeout);
-  const displayTime = Math.max(4000, text.length * 60);
+  const displayTime = durationMs > 0 ? durationMs : Math.max(4000, text.length * 60);
   bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
 }
 
@@ -470,9 +470,8 @@ function goToSpot(spot) {
   });
 }
 
-function lifeUpdate() {
+function lifeUpdate(delta) {
   if (!_vrm() || walk.active) return;
-  const delta = 1/60;
   famUpdate(delta);
   if (_apiOverride) {
     _apiOverrideTimer -= delta;
@@ -694,11 +693,11 @@ export function _initDeadAir() {
 
 // ── Twitch chat ──────────────────────────────────────────────────
 export function initTwitchChat() {
-  if (typeof tmi === 'undefined') {
+  if (typeof window.tmi === 'undefined') {
     console.warn('[Twitch] tmi.js not available — check the <script> tag in index.html');
     return;
   }
-  const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
+  const client = new window.tmi.Client({ channels: [TWITCH_CHANNEL] });
   client.connect()
     .then(() => { console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`); setStatus('Live ✦', 'ready'); })
     .catch(err => console.warn('[Twitch] Chat connect failed:', err));
@@ -785,9 +784,17 @@ async function sendMessage(message, displayName = 'Viewer') {
       body.vision_context = `This is a screenshot of Miss OG Tinz's live 3D avatar standing in her ${_currentRoom.replace('-', ' ')}. Use what you see to make your reply feel grounded and self-aware.`;
     }
 
-    const res = await fetch(API_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    });
+    const _msgCtrl    = new AbortController();
+    const _msgTimeout = setTimeout(() => _msgCtrl.abort(), 15_000); // 15s timeout
+    let res;
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: _msgCtrl.signal,
+      });
+    } finally {
+      clearTimeout(_msgTimeout);
+    }
 
     if (res.status === 429) {
       let retryMs = 5000;
@@ -936,7 +943,7 @@ function render() {
 
     // ── Walk / life scheduler ──────────────────────────────────
     updateWalk(delta);
-    lifeUpdate();
+    lifeUpdate(delta);
 
     // ── Facing — smoothly rotate toward _targetFacing ─────────
     const cur  = vrm.scene.rotation.y;
