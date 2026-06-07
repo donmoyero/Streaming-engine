@@ -995,6 +995,13 @@ gltfLoader.load(
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
     vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
 
+    // Sync the scale slider to the actual computed value so it doesn't
+    // snap the VRM on first interaction (fixes HTML default mismatch)
+    const scaleSlider = document.getElementById('scale');
+    const scaleValEl  = document.getElementById('scale-val');
+    if (scaleSlider) { scaleSlider.value = scaleVal; }
+    if (scaleValEl)  { scaleValEl.textContent = scaleVal.toFixed(2); }
+
     cacheBones();
 
     // ── Set natural girly resting pose (out of T-pose) ───────────
@@ -3179,21 +3186,12 @@ chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.clic
 
 
 // ── Twitch Chat Integration ──────────────────────────────
+// tmi.js is loaded via <script> in index.html before this module runs.
+// Dynamic injection inside a module can't assign to global scope reliably,
+// so we rely solely on the HTML script tag.
 function initTwitchChat() {
   if (typeof tmi === 'undefined') {
-    // Dynamically load tmi.js then retry
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js';
-    s.onload  = () => { console.log('[Twitch] tmi.js loaded'); initTwitchChat(); };
-    s.onerror = () => {
-      // fallback to unpkg
-      const s2 = document.createElement('script');
-      s2.src = 'https://unpkg.com/tmi.js@1.8.5/build/tmi.min.js';
-      s2.onload  = () => { console.log('[Twitch] tmi.js loaded via unpkg'); initTwitchChat(); };
-      s2.onerror = () => console.warn('[Twitch] Failed to load tmi.js from all CDNs');
-      document.head.appendChild(s2);
-    };
-    document.head.appendChild(s);
+    console.warn('[Twitch] tmi.js not available — check the <script> tag in index.html');
     return;
   }
   const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
