@@ -1293,7 +1293,7 @@ function applyOutfit(outfitName) {
     m.emissiveIntensity = def.emissiveIntensity;
     m.needsUpdate = true;
   });
-  console.log(\`[Outfit] Changed to: \${OUTFITS[outfitName].label}\`);
+  console.log(`[Outfit] Changed to: ${OUTFITS[outfitName].label}`);
 }
 
 // Called when she enters a new room — maybe changes outfit
