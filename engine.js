@@ -3133,10 +3133,10 @@ function _snapCameraToVRM() {
   const p   = STREAMER_CAM.IDLE;
   const fy  = vrm.scene.rotation.y;
   _camFacingY = fy;
-  // Camera sits in the direction she faces (+dist along her front vector)
-  const cx = vx + Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
+  // Camera sits OPPOSITE to her facing direction (in front of her face)
+  const cx = vx - Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
   const cy = vy + p.height;
-  const cz = vz + Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
+  const cz = vz - Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
   camCurrent.x     = cx;
   camCurrent.y     = cy;
   camCurrent.z     = cz;
@@ -3170,10 +3170,10 @@ function updateCamera(delta) {
   const camPreset = walk.active ? STREAMER_CAM.WALK : (STREAMER_CAM[camMode] || STREAMER_CAM.IDLE);
   const fy = _camFacingY;
 
-  // Compute target camera position in her facing direction
-  const tx = vx + Math.sin(fy) * camPreset.dist + Math.cos(fy) * camPreset.sideShift;
+  // Camera sits OPPOSITE to her facing direction (in front of her face)
+  const tx = vx - Math.sin(fy) * camPreset.dist + Math.cos(fy) * camPreset.sideShift;
   const ty = vy + camPreset.height;
-  const tz = vz + Math.cos(fy) * camPreset.dist - Math.sin(fy) * camPreset.sideShift;
+  const tz = vz - Math.cos(fy) * camPreset.dist - Math.sin(fy) * camPreset.sideShift;
   const lx = vx;
   const ly = vy + camPreset.lookHeight;
   const lz = vz;
