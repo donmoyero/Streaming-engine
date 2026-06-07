@@ -666,13 +666,39 @@ function _placeVRMOnFloor() {
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
 
-  // Try raycast first for exact floor surface
-  const rayFloor = _detectFloorByRaycast(_houseSpawnX, _houseSpawnZ);
-  if (rayFloor !== null && rayFloor >= 0) {
-    _houseFloorY = rayFloor;
+  // Fire a grid of raycasts from high above to find the real walkable floor.
+  // We pick the LOWEST hit that is plausibly a floor (not a ceiling or roof).
+  const offsets = [[0,0],[0.3,0],[-0.3,0],[0,0.3],[0,-0.3]];
+  let floorCandidates = [];
+  for (const [ox, oz] of offsets) {
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(_houseSpawnX + ox, 50, _houseSpawnZ + oz),
+      new THREE.Vector3(0, -1, 0),
+      0, 100
+    );
+    const hits = ray.intersectObjects(scene.children, true)
+      .filter(h => h.object.isMesh && h.object !== vrm?.scene);
+    for (const h of hits) {
+      floorCandidates.push(h.point.y);
+    }
   }
-  // Clamp: never let her spawn below 0
-  if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
+
+  if (floorCandidates.length > 0) {
+    // Sort ascending; the lowest candidates near the bottom of the house are floor meshes.
+    // Filter out anything below -0.5 (outside building) or above 8 (ceiling/roof).
+    const valid = floorCandidates.filter(y => y > -0.5 && y < 8).sort((a, b) => a - b);
+    if (valid.length > 0) {
+      // Pick the lowest valid surface — that is the floor, not a table-top or ceiling.
+      _houseFloorY = valid[0];
+      console.log(`[VRM] Raycast floor Y=${_houseFloorY.toFixed(4)} (from ${valid.length} candidates)`);
+    }
+  }
+
+  // Final clamp — must be >= 0
+  if (_houseFloorY < 0 || isNaN(_houseFloorY)) {
+    _houseFloorY = 0;
+    console.warn('[VRM] Raycast gave no good floor — defaulting to Y=0');
+  }
 
   vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
   vrm._restPosY = _houseFloorY;
@@ -696,23 +722,17 @@ _gltfLoader.load(
     const sCenter = sBox.getCenter(new THREE.Vector3());
     house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z);
 
-    // ── Compute real world floor Y from scaled+centered geometry ─────────────
-    // Raw GLB floor (strop a podlaha) sits at Y=0.430 in native units.
-    // After scaling by hScale, floor is at 0.430×hScale.
-    // After house.position.y = -sBox.min.y the whole scene is lifted so
-    // the raw bottom (sBox.min.y before position set) becomes world Y=0.
-    // The floor mesh is NOT at the raw bottom — it sits above the sokl/slab.
-    // We measure it directly: find the scaled world Y of the floor.
-    const floorMeshY = 0.430 * hScale; // raw floor Y × scale
-    // sBox.min.y (before position applied) is the bottom of the entire house including foundations
-    // position.y offsets everything up by -sBox.min.y, so world floor = floorMeshY - sBox.min.y + ... 
-    // Simpler: after position is applied, ray down from centre to find actual world floor.
-    // Use a direct Box3 re-measure which accounts for the position offset:
+    // ── Compute real world floor Y ────────────────────────────────────────────
+    // After house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z) the very
+    // bottom of the house bounding box is at world Y=0. The actual walkable
+    // floor sits some distance above that bottom (foundations/slab).
+    // We use a raycast fired straight down from the spawn point — the highest
+    // mesh hit IS the floor. A one-frame delay is needed so Three.js has
+    // committed the new world matrices before raycasting.
     const finalBox = new THREE.Box3().setFromObject(house);
-    // The "floor" is not the absolute bottom — find it as floorMeshY offset from sBox
-    _houseFloorY = floorMeshY + (finalBox.min.y - sBox.min.y * hScale);
-    // Clamp: floor should never be negative (house is anchored above Y=0)
-    if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = finalBox.min.y + 0.430 * hScale;
+    // Rough fallback: midpoint between absolute bottom and 20% of house height
+    _houseFloorY = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
+    if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
 
     // Update wall bounds using actual hScale
     HOUSE_BOUNDS.minX = -5.195 * hScale * 0.92;
@@ -726,10 +746,12 @@ _gltfLoader.load(
     _houseLoaded = true;
 
     // Spawn coords confirmed from GLB mesh analysis — living room centre
-    // No raycasting needed; values are hardcoded from real geometry data
+    // Defer by one frame so house world matrices are committed before raycasting.
     if (vrm) {
-      _placeVRMOnFloor();
-      _snapCameraToVRM();
+      requestAnimationFrame(() => {
+        _placeVRMOnFloor();
+        _snapCameraToVRM();
+      });
     }
 
     console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  spawn=(${_houseSpawnX}, ${_houseFloorY}, ${_houseSpawnZ})`);
@@ -1571,11 +1593,9 @@ gltfLoader.load(
     // vrm._restPosY = vrm.scene.position.y;  ← this captured Y=0, causing floor sink
 
     // ── Place avatar on the house floor ─────────────────────────
-    // If house already loaded, use detected floor coords.
-    // If house is still loading, _placeVRMOnFloor will be called
-    // from the house loader callback when it finishes.
+    // Defer by one frame so all world matrices are committed before raycasting.
     if (_houseLoaded) {
-      _placeVRMOnFloor();
+      requestAnimationFrame(() => _placeVRMOnFloor());
     } else {
       // Temporary: stand at origin until house loads and repositions her
       vrmPos.x = 0; vrmPos.z = 0;
