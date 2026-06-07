@@ -10,14 +10,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
-import { cacheBones, setRestPose } from './engine-bones.js';
+import { cacheBones, setRestPose, ACTIVITY } from './engine-bones.js';
 import { _snapCameraToVRM, setCamFacingY } from './engine-camera.js';
 import {
   startTopicPolling, _initDeadAir, initTwitchChat,
   setProgress, setStatus, loader_el,
   HOUSE, ROOM_WAYPOINT_DEFS,
   setTargetFacing,
-  vrmPos, ACTIVITY, showBubble,
+  vrmPos, showBubble,
 } from './engine-life.js';
 
 // ── Config ─────────────────────────────────────────────────────
@@ -156,9 +156,12 @@ export function _placeVRMOnFloor() {
     console.log(`[VRM] Floor cluster Y=${_houseFloorY.toFixed(4)} (${bestCount}/${floorCandidates.length} rays agreed)`);
   }
 
-  if (_houseFloorY < 0 || isNaN(_houseFloorY)) {
+  // Keep the box-detected floor as fallback — never fall to 0 unless house says so
+  if (_houseFloorY < -1 || isNaN(_houseFloorY)) {
     _houseFloorY = 0;
     console.warn('[VRM] Raycast gave no good floor — defaulting to Y=0');
+  } else if (floorCandidates.length === 0) {
+    console.warn(`[VRM] No raycast hits — using box floor Y=${_houseFloorY.toFixed(4)}`);
   }
 
   const feetOffset    = vrm._feetOffset ?? 0;
@@ -197,10 +200,11 @@ _gltfLoader.load(
     _houseFloorY   = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
     if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
 
-    HOUSE_BOUNDS.minX = -5.195 * hScale * 0.92;
-    HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.92;
-    HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.92;
-    HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.92;
+    // Tighter bounds — keep avatar well away from wall geometry
+    HOUSE_BOUNDS.minX = -5.195 * hScale * 0.72;
+    HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.72;
+    HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.72;
+    HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.72;
 
     console.log(`[House] hScale=${hScale.toFixed(3)} floorY=${_houseFloorY.toFixed(4)}`);
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
@@ -210,13 +214,24 @@ _gltfLoader.load(
       window._houseScaled = true;
       for (const roomDef of Object.values(HOUSE)) {
         if (!roomDef.spots) continue;
-        for (const spot of roomDef.spots) { spot.x *= hScale; spot.z *= hScale; }
+        for (const spot of roomDef.spots) {
+          spot.x *= hScale;
+          spot.z *= hScale;
+          // Clamp each spot inside the walkable bounds with extra margin
+          const margin = AVATAR_RADIUS + 0.3;
+          spot.x = Math.max(HOUSE_BOUNDS.minX + margin, Math.min(HOUSE_BOUNDS.maxX - margin, spot.x));
+          spot.z = Math.max(HOUSE_BOUNDS.minZ + margin, Math.min(HOUSE_BOUNDS.maxZ - margin, spot.z));
+        }
         if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
       }
       for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
       _houseSpawnX *= hScale;
       _houseSpawnZ *= hScale;
-      console.log(`[House] Spot coords scaled by hScale=${hScale.toFixed(3)}`);
+      // Clamp spawn inside bounds too
+      const spawnMargin = AVATAR_RADIUS + 0.5;
+      _houseSpawnX = Math.max(HOUSE_BOUNDS.minX + spawnMargin, Math.min(HOUSE_BOUNDS.maxX - spawnMargin, _houseSpawnX));
+      _houseSpawnZ = Math.max(HOUSE_BOUNDS.minZ + spawnMargin, Math.min(HOUSE_BOUNDS.maxZ - spawnMargin, _houseSpawnZ));
+      console.log(`[House] Spot coords scaled by hScale=${hScale.toFixed(3)}, spawn=(${_houseSpawnX.toFixed(2)},${_houseSpawnZ.toFixed(2)})`);
     }
 
     if (vrm) {
