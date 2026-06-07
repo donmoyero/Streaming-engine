@@ -618,6 +618,128 @@ function buildGameRoom() {
 
 const roomLights = buildGameRoom();
 
+// ================================================================
+//  ROOM SYSTEM — GLB loader + scene switcher
+//  Loads the 8 hand-picked props for each room on first visit,
+//  then shows/hides the right set when moveToRoom() is called.
+//  All models live under:
+//    /Streaming-engine/models/kitchen/
+//    /Streaming-engine/models/living-room/
+// ================================================================
+
+const _gltfLoader = new GLTFLoader();
+
+// ── Per-room prop definitions ──────────────────────────────────
+// Each entry: { file, pos:[x,y,z], rot:[x,y,z], scale }
+const ROOM_PROPS = {
+  kitchen: [
+    { file: 'kitchen/kitchenStove.glb',       pos: [-2.5, 0, -5.5], rot: [0, 0,    0], scale: 1.8 },
+    { file: 'kitchen/kitchenFridgeLarge.glb', pos: [-4.5, 0, -5.5], rot: [0, 0,    0], scale: 1.8 },
+    { file: 'kitchen/kitchenCabinet.glb',     pos: [ 0.5, 0, -6.0], rot: [0, 0,    0], scale: 1.8 },
+    { file: 'kitchen/kitchenSink.glb',        pos: [ 2.8, 0, -5.8], rot: [0, 0,    0], scale: 1.8 },
+    { file: 'kitchen/pot.glb',                pos: [-2.5, 1.05,-5.2],rot:[0,0,    0], scale: 1.2 },
+    { file: 'kitchen/frying-pan.glb',         pos: [-1.8, 1.05,-5.2],rot:[0,0.4,  0], scale: 1.2 },
+    { file: 'kitchen/cutting-board.glb',      pos: [ 1.0, 1.0, -5.5],rot:[0,-0.3, 0], scale: 1.0 },
+    { file: 'kitchen/tajine.glb',             pos: [ 0.2, 0.95,-5.5],rot:[0, 0.5, 0], scale: 1.0 },
+  ],
+  'living-room': [
+    { file: 'living-room/loungeSofaLong.glb',     pos: [-1.5, 0, -4.5], rot: [0, 0,    0], scale: 1.8 },
+    { file: 'living-room/cabinetTelevision.glb',  pos: [ 0.0, 0, -7.0], rot: [0, 0,    0], scale: 2.0 },
+    { file: 'living-room/rugRectangle.glb',       pos: [-1.5, 0.01,-5.5],rot:[0,0,   0], scale: 2.5 },
+    { file: 'living-room/lampRoundFloor.glb',     pos: [ 3.0, 0, -4.5], rot: [0, 0,    0], scale: 1.6 },
+    { file: 'living-room/pottedPlant.glb',        pos: [-4.5, 0, -6.0], rot: [0, 0.3,  0], scale: 1.5 },
+    { file: 'living-room/bookcaseOpen.glb',       pos: [ 4.5, 0, -6.5], rot: [0,-0.15, 0], scale: 1.8 },
+    { file: 'living-room/loungeSofaCorner.glb',   pos: [ 2.5, 0, -4.5], rot: [0,-1.57, 0], scale: 1.8 },
+    { file: 'living-room/lampSquareTable.glb',    pos: [-3.8, 0, -4.5], rot: [0, 0,    0], scale: 1.5 },
+  ],
+};
+
+// ── Room waypoints — where she stands in each room ────────────
+// These extend the existing WAYPOINTS object (added after it's declared below)
+const ROOM_WAYPOINT_DEFS = {
+  studio:       { x:  0.6, z: -1.2 }, // streaming desk — already 'desk'
+  kitchen:      { x: -1.5, z: -4.0 },
+  'living-room':{ x: -0.5, z: -3.5 },
+  office:       { x:  0.6, z: -1.2 }, // reuse studio for now
+  beauty:       { x:  0.6, z: -1.2 }, // reuse studio for now
+};
+
+// ── State ────────────────────────────────────────────────────
+let _currentRoom   = 'studio';  // which room she's in
+const _roomObjects = {};         // room name → array of loaded THREE.Object3D
+
+// ── Load a room's props (lazy — only on first visit) ─────────
+function loadRoomProps(roomName, onDone) {
+  if (_roomObjects[roomName]) { onDone?.(); return; } // already loaded
+
+  const defs = ROOM_PROPS[roomName];
+  if (!defs) { onDone?.(); return; } // no props defined (studio, office, beauty)
+
+  _roomObjects[roomName] = [];
+  let pending = defs.length;
+
+  defs.forEach(def => {
+    const url = `/Streaming-engine/models/${def.file}`;
+    _gltfLoader.load(
+      url,
+      (gltf) => {
+        const obj = gltf.scene;
+        obj.position.set(...def.pos);
+        obj.rotation.set(...def.rot);
+        obj.scale.setScalar(def.scale);
+        obj.visible = false; // hidden until room is active
+        // Shadow casting
+        obj.traverse(n => {
+          if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
+        });
+        scene.add(obj);
+        _roomObjects[roomName].push(obj);
+        pending--;
+        if (pending === 0) onDone?.();
+      },
+      null,
+      (err) => {
+        console.warn(`[Room] Failed to load ${def.file}:`, err.message || err);
+        pending--;
+        if (pending === 0) onDone?.();
+      }
+    );
+  });
+}
+
+// ── Show/hide props for a room ────────────────────────────────
+function setRoomVisible(roomName, visible) {
+  (_roomObjects[roomName] || []).forEach(obj => { obj.visible = visible; });
+}
+
+// ── Transition to a room ──────────────────────────────────────
+// Called with the location string from the API response.
+// She walks to the right spot; props fade in on arrival.
+function moveToRoom(roomName) {
+  if (!roomName || roomName === _currentRoom) return;
+
+  console.log(`[Room] Moving to: ${roomName}`);
+
+  // Hide current room props
+  setRoomVisible(_currentRoom, false);
+  _currentRoom = roomName;
+
+  // Work out her waypoint destination
+  const wpDef = ROOM_WAYPOINT_DEFS[roomName];
+  if (!wpDef) return;
+
+  // Temporarily add/overwrite a waypoint for this room
+  WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName };
+
+  // Walk her there — props appear when she arrives
+  walkTo('_room_dest', () => {
+    // Load props (lazy) then show them
+    loadRoomProps(roomName, () => {
+      setRoomVisible(roomName, true);
+    });
+  });
+}
+
 // Animate room neon lights (gentle pulse)
 let _roomTime = 0;
 function animateRoomLights(delta) {
@@ -2484,6 +2606,7 @@ async function _triggerProactive() {
     const data = await res.json();
     const text = data?.response || '';
     if (!text) return;
+    if (data.location) moveToRoom(data.location);
     setCamMode('SPEAK');
     showBubble(text, 'Miss OG Tinz');
     setStatus('Live ✦', 'ready');
@@ -2533,6 +2656,9 @@ async function sendMessage(message, displayName='Viewer') {
     const sentences = reply.match(/[^.!?]+[.!?]+/g) || [reply];
     if (sentences.length > 2) reply = sentences.slice(0,2).join(' ').trim();
     const mood = data.viewer?.mood || 'neutral';
+
+    // Move her to the room the API detected
+    if (data.location) moveToRoom(data.location);
 
     chatHistory.push({ role:'assistant', content: reply });
     if (chatHistory.length > 20) chatHistory.splice(0,2);
