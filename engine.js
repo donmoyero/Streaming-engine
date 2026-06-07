@@ -621,24 +621,24 @@ function buildGameRoom() {
   return { neonPink, neonBlue, neonPurple };
 }
 
-// Keep studio neon lights active
-const roomLights = buildGameRoom();
+// Old game room removed — house GLB is the environment now
+const roomLights = {};
 
 // ================================================================
 //  HOUSE GLB — single file replaces all procedural room geometry
 // ================================================================
 const _gltfLoader = new GLTFLoader();
 
-  let _houseLoaded = false;
+let _houseLoaded = false;
 _gltfLoader.load(
   '/Streaming-engine/House.glb',
   (gltf) => {
     const house = gltf.scene;
     // House is in Blender metres — scale down so avatar (1.7 units) fits inside
     // Typical Blender house room = ~4m wide → we want ~4 Three.js units wide
-    house.scale.setScalar(0.1);
-    // Centre the house so avatar starts in the living room area
-    house.position.set(0, 0, 0);
+    house.scale.setScalar(0.6);
+    // Offset so avatar starts inside the living room
+    house.position.set(-1, 0, 2);
     house.traverse(n => {
       if (n.isMesh) {
         n.castShadow    = true;
