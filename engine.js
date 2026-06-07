@@ -621,187 +621,109 @@ function buildGameRoom() {
   return { neonPink, neonBlue, neonPurple };
 }
 
+// Keep studio neon lights active
 const roomLights = buildGameRoom();
 
 // ================================================================
-//  ROOM SYSTEM — GLB loader + scene switcher
-//  Loads the 8 hand-picked props for each room on first visit,
-//  then shows/hides the right set when moveToRoom() is called.
-//  All models live under:
-//    /Streaming-engine/models/kitchen/
-//    /Streaming-engine/models/living-room/
+//  HOUSE GLB — single file replaces all procedural room geometry
 // ================================================================
+const _gltfLoader = new GLTFLoader();
 
-// LoadingManager — logs GLB load failures, lets textures load normally
-const _propManager = new THREE.LoadingManager();
-_propManager.onError = url => {
-  if (/\.glb$/i.test(url)) console.warn('[Props] Failed to load GLB:', url);
-};
-
-const _gltfLoader = new GLTFLoader(_propManager);
+let _houseLoaded = false;
+_gltfLoader.load(
+  '/Streaming-engine/House.glb',
+  (gltf) => {
+    const house = gltf.scene;
+    // Scale: VRM avatar is ~1.7 units tall. Adjust if she looks tiny/huge.
+    house.scale.setScalar(1.0);
+    house.position.set(0, 0, 0);
+    house.traverse(n => {
+      if (n.isMesh) {
+        n.castShadow    = true;
+        n.receiveShadow = true;
+      }
+    });
+    scene.add(house);
+    _houseLoaded = true;
+    console.log('[House] GLB loaded ✓');
+  },
+  (xhr) => {
+    const pct = Math.round(xhr.loaded / xhr.total * 100);
+    setProgress(pct);
+  },
+  (err) => {
+    console.warn('[House] GLB load failed:', err);
+  }
+);
 
 // ================================================================
-//  REAL HOUSE — each room is a self-contained world-space box.
-//  Rooms are laid out side by side so she actually walks between them.
+//  HOUSE ROOM DEFINITIONS
+//  Spots are inside the real house. All coordinates are relative
+//  to the house origin (0,0,0). Tweak X/Z after first test in browser.
 //
-//  Layout (top-down, X = right, Z = back):
-//
-//    [ BEDROOM  ] [ BATHROOM ]
-//    [ KITCHEN  ] [ LIVING RM]
-//    [ STUDIO   ] [ OFFICE   ]
-//
-//  Each room has:
-//    - origin: world-space centre of the room floor
-//    - size:   width (X) × depth (Z)
-//    - door:   where she stands when leaving/entering (world space)
-//    - spots:  named spots within the room she wanders between
-//
+//  The house has: living room, kitchen, bedroom, bathroom, hallway
+//  She stays inside — no separate worlds, one real building.
 // ================================================================
 
 const HOUSE = {
-  studio: {
-    origin: { x:  0,   z:  0  }, size: { w: 10, d: 9  },
-    door:   { x:  5,   z: -3  },
-    ambientColor: 0x1a0a2e,
+  'living-room': {
+    origin: { x:  2,   z: -3  }, size: { w: 6, d: 5 },
+    door:   { x:  0,   z:  0  },
+    ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Desk',         x:  0.6, z: -1.2, facingY: Math.PI,        activities: ['typing','monitor','noseCover','idle'] },
-      { label: 'Centre Stage', x:  0.0, z:  0.5, facingY: Math.PI,        activities: ['dance','stretch','hairflick','hiponhip','idle'] },
-      { label: 'Bean Bags',    x: -4.5, z:  0.8, facingY: Math.PI * 0.6,  activities: ['sofaSit','phoneScroll','idle'] },
-      { label: 'Dartboard',   x: -4.5, z: -1.0, facingY: Math.PI / 2,    activities: ['darts','idle'] },
-      { label: 'Basketball',   x:  4.0, z: -0.8, facingY: -Math.PI / 2,   activities: ['basketball','idle'] },
+      { label: 'Sofa',      x:  2.0, z: -3.5, facingY: 0,           activities: ['sofaSit','phoneScroll','idle','tvReact'] },
+      { label: 'TV',        x:  2.0, z: -5.0, facingY: 0,           activities: ['tvReact','idle','dance'] },
+      { label: 'Centre',    x:  2.0, z: -3.0, facingY: Math.PI,     activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      { label: 'Window',    x:  4.5, z: -2.5, facingY: -Math.PI/2,  activities: ['idle','stretch','hairflick'] },
     ]
   },
   kitchen: {
-    origin: { x:  0,   z: -18 }, size: { w: 10, d: 8  },
-    door:   { x:  4,   z: -14 },
-    ambientColor: 0x0a1505,
+    origin: { x: -3,   z: -3  }, size: { w: 5, d: 4 },
+    door:   { x:  0,   z: -2  },
+    ambientColor: 0x0a1005,
     spots: [
-      { label: 'Stove',     x: -2.0, z: -20.5, facingY: 0,             activities: ['stirring','chopping','idle'] },
-      { label: 'Counter',   x:  0.5, z: -20.5, facingY: 0,             activities: ['chopping','tasting','idle'] },
-      { label: 'Sink',      x:  2.8, z: -20.5, facingY: 0,             activities: ['idle','hairflick'] },
-      { label: 'Centre',    x:  0.0, z: -18.5, facingY: Math.PI,       activities: ['tasting','hiponhip','idle'] },
-    ]
-  },
-  'living-room': {
-    origin: { x: 15,   z: -9  }, size: { w: 11, d: 10 },
-    door:   { x:  9.5, z: -9  },
-    ambientColor: 0x0d0a05,
-    spots: [
-      { label: 'Main Sofa',     x: 14.5, z: -9.5,  facingY: 0.3,         activities: ['sofaSit','phoneScroll','idle'] },
-      { label: 'Corner Sofa',   x: 18.0, z: -9.0,  facingY: -Math.PI/2,  activities: ['sofaSit','idle'] },
-      { label: 'TV Area',       x: 15.0, z:-11.5,  facingY: 0,           activities: ['tvReact','idle'] },
-      { label: 'Reading Chair', x: 10.5, z:-11.0,  facingY: Math.PI/3,   activities: ['phoneScroll','idle','hairflick'] },
+      { label: 'Stove',   x: -4.5, z: -4.5, facingY: Math.PI/2,   activities: ['stirring','chopping','idle'] },
+      { label: 'Counter', x: -3.0, z: -5.0, facingY: 0,           activities: ['chopping','tasting','idle'] },
+      { label: 'Sink',    x: -1.5, z: -5.0, facingY: 0,           activities: ['idle','hairflick'] },
+      { label: 'Centre',  x: -3.0, z: -3.5, facingY: Math.PI,     activities: ['tasting','hiponhip','idle'] },
     ]
   },
   bedroom: {
-    origin: { x: -14,  z: -9  }, size: { w: 10, d: 10 },
-    door:   { x: -9,   z: -9  },
+    origin: { x:  4,   z:  3  }, size: { w: 5, d: 5 },
+    door:   { x:  2,   z:  1  },
     ambientColor: 0x05050d,
     spots: [
-      { label: 'Bed',         x:-14.5, z:-11.0,  facingY: Math.PI/4,    activities: ['sofaSit','idle','phoneScroll'] },
-      { label: 'Bedside',     x:-12.0, z:-11.0,  facingY: Math.PI,      activities: ['idle','hairflick'] },
-      { label: 'Window',      x:-17.5, z: -8.5,  facingY: -Math.PI/2,   activities: ['idle','stretch'] },
-      { label: 'Dresser',     x:-17.0, z:-11.5,  facingY: Math.PI/2,    activities: ['mirrorPose','hairflick','idle'] },
+      { label: 'Bed',     x:  5.0, z:  4.0, facingY: Math.PI/4,   activities: ['sofaSit','idle','phoneScroll'] },
+      { label: 'Dresser', x:  6.5, z:  2.5, facingY: -Math.PI/2,  activities: ['mirrorPose','hairflick','idle'] },
+      { label: 'Window',  x:  3.5, z:  5.5, facingY: 0,           activities: ['idle','stretch'] },
+      { label: 'Centre',  x:  4.5, z:  3.5, facingY: Math.PI,     activities: ['dance','stretch','idle'] },
     ]
   },
   bathroom: {
-    origin: { x: -14,  z: -21 }, size: { w: 7,  d: 7  },
-    door:   { x: -10,  z: -19 },
+    origin: { x: -3,   z:  3  }, size: { w: 4, d: 4 },
+    door:   { x: -1,   z:  1  },
     ambientColor: 0x05100f,
     spots: [
-      { label: 'Mirror',   x:-14.0, z:-23.0,  facingY: 0,              activities: ['mirrorPose','hairflick','idle'] },
-      { label: 'Sink',     x:-14.0, z:-22.0,  facingY: 0,              activities: ['idle','tasting'] },
-      { label: 'Bath',     x:-17.0, z:-22.5,  facingY: Math.PI/2,      activities: ['sofaSit','idle'] },
+      { label: 'Mirror',  x: -3.5, z:  4.5, facingY: 0,           activities: ['mirrorPose','hairflick','idle'] },
+      { label: 'Sink',    x: -2.5, z:  4.5, facingY: 0,           activities: ['idle'] },
+      { label: 'Bath',    x: -4.5, z:  3.5, facingY: Math.PI/2,   activities: ['sofaSit','idle'] },
     ]
   },
-  office: {
-    origin: { x: 15,   z: -21 }, size: { w: 9,  d: 8  },
-    door:   { x:  9.5, z: -21 },
-    ambientColor: 0x050a10,
+  studio: {
+    origin: { x:  0,   z:  0  }, size: { w: 4, d: 3 },
+    door:   { x:  0,   z:  1  },
+    ambientColor: 0x1a0a2e,
     spots: [
-      { label: 'Desk',       x: 15.0, z:-23.0,  facingY: 0,             activities: ['typing','monitor','idle'] },
-      { label: 'Bookcase',   x: 19.0, z:-23.5,  facingY: Math.PI/2,     activities: ['idle','hairflick'] },
-      { label: 'Think spot', x: 13.0, z:-22.0,  facingY: Math.PI,       activities: ['stretch','idle','noseCover'] },
+      { label: 'Desk',    x:  0.6, z: -1.2, facingY: Math.PI,     activities: ['typing','monitor','noseCover','idle'] },
+      { label: 'Centre',  x:  0.0, z:  0.0, facingY: Math.PI,     activities: ['dance','stretch','hairflick','hiponhip','idle'] },
     ]
   },
 };
 
-// ── Room geometry builder ─────────────────────────────────────────────────────
-// Builds walls, floor, ceiling for a room at its world-space origin.
-// Returns the room group so lights can be toggled per-room later.
-function buildRoomShell(key) {
-  const r = HOUSE[key];
-  const ox = r.origin.x, oz = r.origin.z;
-  const hw = r.size.w / 2, hd = r.size.d / 2;
-  const h  = 3.2; // room height
+// House is loaded as GLB above — no procedural room shells needed
 
-  // Palette per room
-  const palettes = {
-    studio:       { floor: 0x1a1005, wall: 0x0d0818, ceil: 0x080510 },
-    kitchen:      { floor: 0xc8b89a, wall: 0xe8e0d0, ceil: 0xf0ece4 },
-    'living-room':{ floor: 0x6b4c2a, wall: 0x2a1f14, ceil: 0x1a140e },
-    bedroom:      { floor: 0x3a2a4a, wall: 0x1a1028, ceil: 0x100c1a },
-    bathroom:     { floor: 0xd4e8e0, wall: 0xe8f4f0, ceil: 0xf0f8f6 },
-    office:       { floor: 0x2a3020, wall: 0x1a2018, ceil: 0x111510 },
-  };
-  const pal = palettes[key] || palettes.studio;
-
-  const g = new THREE.Group();
-
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(r.size.w, r.size.d),
-    new THREE.MeshStandardMaterial({ color: pal.floor, roughness: 0.7 })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(ox, 0, oz);
-  g.add(floor);
-
-  // Ceiling
-  const ceil = new THREE.Mesh(
-    new THREE.PlaneGeometry(r.size.w, r.size.d),
-    new THREE.MeshStandardMaterial({ color: pal.ceil, roughness: 1 })
-  );
-  ceil.rotation.x = Math.PI / 2;
-  ceil.position.set(ox, h, oz);
-  g.add(ceil);
-
-  // Walls: back, front, left, right
-  const wallMat = new THREE.MeshStandardMaterial({ color: pal.wall, roughness: 0.85 });
-  const wallData = [
-    { w: r.size.w, pos: [ox, h/2, oz - hd],      ry: 0           }, // back
-    { w: r.size.w, pos: [ox, h/2, oz + hd],       ry: Math.PI     }, // front
-    { w: r.size.d, pos: [ox - hw, h/2, oz],       ry:  Math.PI/2  }, // left
-    { w: r.size.d, pos: [ox + hw, h/2, oz],       ry: -Math.PI/2  }, // right
-  ];
-  wallData.forEach(({ w: ww, pos, ry }) => {
-    const wall = new THREE.Mesh(
-      new THREE.PlaneGeometry(ww, h),
-      wallMat
-    );
-    wall.position.set(...pos);
-    wall.rotation.y = ry;
-    g.add(wall);
-  });
-
-  // Ambient light local to this room
-  const amb = new THREE.PointLight(r.ambientColor, 1.5, r.size.w * 2);
-  amb.position.set(ox, h * 0.8, oz);
-  g.add(amb);
-
-  scene.add(g);
-  return g;
-}
-
-// Build all room shells
-Object.keys(HOUSE).forEach(k => buildRoomShell(k));
-
-// Studio still gets its full game-room dressing from buildGameRoom()
-// Other rooms get their props from ROOM_PROPS via loadRoomProps()
-
-// ── Per-room prop definitions ─────────────────────────────────────────────────
-// Positions are in WORLD space (matching HOUSE origins above)
-const ROOM_PROPS = {
+// ── ROOM_PROPS removed — house GLB contains all furniture ────────────────────
+const ROOM_PROPS_DISABLED = {
 
   kitchen: [
     { file: 'living-room/kitchenStove.glb',          pos: [-2.5, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
@@ -912,62 +834,21 @@ const ROOM_PROPS = {
   ],
 };
 
-// ── Load all room props at startup — preload everything ───────────────────────
-// Rather than lazy-loading on first visit, we load everything upfront.
-// Props start hidden and become visible when she enters the room.
-const _roomObjects = {};   // room name → array of THREE.Object3D
-
-function loadRoomProps(roomName, onDone) {
-  if (_roomObjects[roomName]) { onDone?.(); return; }
-
-  const defs = ROOM_PROPS[roomName];
-  if (!defs || !defs.length) { onDone?.(); return; }
-
-  _roomObjects[roomName] = [];
-  let pending = defs.length;
-
-  defs.forEach(def => {
-    _gltfLoader.load(
-      `./models/${def.file}`,
-      (gltf) => {
-        const obj = gltf.scene;
-        obj.position.set(...def.pos);
-        obj.rotation.set(...def.rot);
-        obj.scale.setScalar(def.scale);
-        obj.visible = false;
-        obj.traverse(n => {
-          if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
-        });
-        scene.add(obj);
-        _roomObjects[roomName].push(obj);
-        if (--pending === 0) onDone?.();
-      },
-      null,
-      () => { if (--pending === 0) onDone?.(); }
-    );
-  });
-}
-
+// setRoomVisible: with GLB house we just update ambient colour on room change
 function setRoomVisible(roomName, visible) {
-  (_roomObjects[roomName] || []).forEach(obj => { obj.visible = visible; });
-  // Sync ambient colour whenever a room becomes visible
   if (visible) {
     const h = HOUSE[roomName];
     if (h && ambient) ambient.color.setHex(h.ambientColor);
   }
 }
 
-// Preload all rooms in background
-['kitchen','living-room','bedroom','bathroom','office'].forEach(r => loadRoomProps(r, () => console.log(`[Room] Loaded: ${r}`)));
-
 // ── Room waypoints — used by moveToRoom() ─────────────────────────────────────
 const ROOM_WAYPOINT_DEFS = {
-  studio:         { x:  0.6, z: -1.2,  facingY: Math.PI },
-  kitchen:        { x:  0.0, z:-19.5,  facingY: 0        },
-  'living-room':  { x: 14.5, z: -9.5,  facingY: 0.3      },
-  bedroom:        { x:-14.0, z:-10.0,  facingY: Math.PI/4 },
-  bathroom:       { x:-14.0, z:-22.0,  facingY: 0        },
-  office:         { x: 15.0, z:-23.0,  facingY: 0        },
+  studio:         { x:  0.6, z: -1.2,  facingY: Math.PI  },
+  'living-room':  { x:  2.0, z: -3.5,  facingY: 0.3      },
+  kitchen:        { x: -3.0, z: -3.5,  facingY: 0        },
+  bedroom:        { x:  4.5, z:  3.5,  facingY: Math.PI/4 },
+  bathroom:       { x: -3.5, z:  4.5,  facingY: 0        },
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1267,7 +1148,6 @@ const _familiarity = {
   'living-room': { room: 0, activities: {} },
   bedroom:       { room: 0, activities: {} },
   bathroom:      { room: 0, activities: {} },
-  office:        { room: 0, activities: {} },
 };
 // How many seconds spent before she's "comfortable" in a room (unlocks more activities)
 const FAM_THRESHOLD_BASIC    = 60;    // 1 min → she's been here a few times
