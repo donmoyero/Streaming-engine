@@ -632,7 +632,17 @@ const roomLights = buildGameRoom();
 //    /Streaming-engine/models/living-room/
 // ================================================================
 
-const _gltfLoader = new GLTFLoader();
+// LoadingManager with graceful fallback for missing textures (e.g. colormap.png)
+const _propManager = new THREE.LoadingManager();
+_propManager.setURLModifier(url => url); // pass-through
+// Fallback: replace 404 textures with a 1×1 neutral grey
+const _fallbackCanvas = document.createElement('canvas');
+_fallbackCanvas.width = _fallbackCanvas.height = 1;
+_fallbackCanvas.getContext('2d').fillStyle = '#888';
+_fallbackCanvas.getContext('2d').fillRect(0, 0, 1, 1);
+const _fallbackTexture = new THREE.CanvasTexture(_fallbackCanvas);
+
+const _gltfLoader = new GLTFLoader(_propManager);
 
 // ================================================================
 //  REAL HOUSE — each room is a self-contained world-space box.
@@ -929,7 +939,19 @@ function loadRoomProps(roomName, onDone) {
         obj.rotation.set(...def.rot);
         obj.scale.setScalar(def.scale);
         obj.visible = false;
-        obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+        obj.traverse(n => {
+          if (n.isMesh) {
+            n.castShadow = true;
+            n.receiveShadow = true;
+            // Replace any broken/null texture maps with fallback
+            if (n.material) {
+              const mats = Array.isArray(n.material) ? n.material : [n.material];
+              mats.forEach(m => {
+                if (m.map && m.map.image === undefined) m.map = _fallbackTexture;
+              });
+            }
+          }
+        });
         scene.add(obj);
         _roomObjects[roomName].push(obj);
         if (--pending === 0) onDone?.();
@@ -3353,7 +3375,12 @@ chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.clic
 // ── Twitch Chat Integration ──────────────────────────────
 function initTwitchChat() {
   if (typeof tmi === 'undefined') {
-    console.warn('[Twitch] tmi.js not loaded');
+    // Dynamically load tmi.js then retry
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/build/tmi.min.js';
+    s.onload  = () => { console.log('[Twitch] tmi.js loaded dynamically'); initTwitchChat(); };
+    s.onerror = () => console.warn('[Twitch] Failed to load tmi.js');
+    document.head.appendChild(s);
     return;
   }
   const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
