@@ -950,6 +950,11 @@ function loadRoomProps(roomName, onDone) {
 
 function setRoomVisible(roomName, visible) {
   (_roomObjects[roomName] || []).forEach(obj => { obj.visible = visible; });
+  // Sync ambient colour whenever a room becomes visible
+  if (visible) {
+    const h = HOUSE[roomName];
+    if (h && ambient) ambient.color.setHex(h.ambientColor);
+  }
 }
 
 // Preload all rooms in background
@@ -980,6 +985,9 @@ function moveToRoom(roomName) {
   if (roomName !== _currentRoom) {
     setRoomVisible(_currentRoom, false);
     _currentRoom = roomName;
+    // Update ambient immediately so colour doesn't snap on arrival
+    const hNew = HOUSE[roomName];
+    if (hNew && ambient) ambient.color.setHex(hNew.ambientColor);
   }
 
   const wpDef = ROOM_WAYPOINT_DEFS[roomName];
@@ -1139,12 +1147,7 @@ function goToSpot(spot) {
   if (needsRoomSwitch) {
     setRoomVisible(_currentRoom, false);
     _currentRoom = spot.room;
-    setRoomVisible(_currentRoom, true);
-    // Update ambient lighting for this room
-    const h = HOUSE[spot.room];
-    if (h) {
-      ambient.color.setHex(h.ambientColor);
-    }
+    setRoomVisible(_currentRoom, true);  // ambient colour updated inside setRoomVisible
   }
 
   WAYPOINTS['_life_dest'] = { x: spot.x, z: spot.z, label: spot.label };
