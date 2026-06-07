@@ -254,7 +254,7 @@ export function walkTo(waypointName, onArrive = null) {
   const dz = wp.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
   walk.duration     = Math.max(0.8, dist / 1.5);
-  walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // +PI so her FRONT faces travel direction
+  walk.targetFacing = Math.atan2(dx, dz); // VRM forward is -Z; atan2(dx,dz) faces her toward dest
   _targetFacing     = walk.targetFacing;
 }
 
@@ -445,19 +445,105 @@ function moveToRoom(roomName) {
   maybeChangeOutfit(roomName);
 }
 
+// ── Pathfinding: room-to-room door connection graph ──────────────
+// Each key = a room; values = rooms directly reachable and the
+// door-threshold waypoint (world-space x/z) to pass through first.
+// Coords match the existing HOUSE.hallway door spot positions.
+const ROOM_CONNECTIONS = {
+  'studio':      { 'hallway':      { x:  0.6, z: -1.2 } },
+  'living-room': { 'hallway':      { x:  0.2, z: -0.4 } },
+  'kitchen':     { 'hallway':      { x:  0.2, z:  0.9 } },
+  'dining':      { 'kitchen':      { x: -1.0, z:  2.2 } },
+  'bedroom':     { 'hallway':      { x:  1.59, z: -4.5 } },
+  'bathroom':    { 'hallway':      { x:  1.59, z: -4.5 } },
+  'hallway': {
+    'studio':      { x:  0.6,  z: -1.2  },
+    'living-room': { x:  0.2,  z: -0.4  },
+    'kitchen':     { x:  0.2,  z:  0.9  },
+    'bedroom':     { x:  1.59, z: -5.3  },
+    'bathroom':    { x:  1.59, z: -5.3  },
+  },
+};
+
+// BFS — returns ordered array of { throughRoom, waypoint } steps,
+// or [] if already in same room / no path found (fallback: direct walk).
+function findRoomPath(fromRoom, toRoom) {
+  if (fromRoom === toRoom) return [];
+  const visited = new Set([fromRoom]);
+  const queue   = [[fromRoom, []]];
+  while (queue.length) {
+    const [room, path] = queue.shift();
+    const connections  = ROOM_CONNECTIONS[room] || {};
+    for (const [nextRoom, doorWp] of Object.entries(connections)) {
+      if (visited.has(nextRoom)) continue;
+      const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
+      if (nextRoom === toRoom) return newPath;
+      visited.add(nextRoom);
+      queue.push([nextRoom, newPath]);
+    }
+  }
+  return [];
+}
+
+// Walk through an ordered list of door waypoints, then arrive at
+// finalX/finalZ and call onArrive. Recurses for each leg.
+function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
+  const vrm = _vrm();
+  if (!vrm) return;
+
+  if (!waypoints.length) {
+    // Final leg — walk straight to destination
+    const dx   = finalX - vrmPos.x;
+    const dz   = finalZ - vrmPos.z;
+    const dist = Math.sqrt(dx*dx + dz*dz);
+    walk.fromX    = vrmPos.x;
+    walk.fromZ    = vrmPos.z;
+    walk.toX      = finalX;
+    walk.toZ      = finalZ;
+    walk.progress = 0;
+    walk.active   = true;
+    walk.onArrive = onArrive;
+    walk.duration     = Math.max(0.6, dist / 1.5);
+    walk.targetFacing = Math.atan2(dx, dz); // VRM -Z forward; no +PI needed
+    _targetFacing     = walk.targetFacing;
+    return;
+  }
+
+  // Walk to the next door threshold, then continue recursively
+  const [first, ...rest] = waypoints;
+  const dx   = first.waypoint.x - vrmPos.x;
+  const dz   = first.waypoint.z - vrmPos.z;
+  const dist = Math.sqrt(dx*dx + dz*dz);
+  walk.fromX    = vrmPos.x;
+  walk.fromZ    = vrmPos.z;
+  walk.toX      = first.waypoint.x;
+  walk.toZ      = first.waypoint.z;
+  walk.progress = 0;
+  walk.active   = true;
+  walk.duration     = Math.max(0.5, dist / 1.5);
+  walk.targetFacing = Math.atan2(dx, dz);
+  _targetFacing     = walk.targetFacing;
+  walk.onArrive = () => {
+    vrmPos.x     = first.waypoint.x;
+    vrmPos.z     = first.waypoint.z;
+    _currentRoom = first.throughRoom;
+    setRoomVisible(_currentRoom, true);
+    walkThroughWaypoints(rest, finalX, finalZ, onArrive);
+  };
+}
+
 function goToSpot(spot) {
   const vrm = _vrm();
   if (!spot || !vrm) return;
   _currentSpot = spot;
-  const needsRoomSwitch = spot.room !== _currentRoom;
-  if (needsRoomSwitch) {
-    setRoomVisible(_currentRoom, false);
-    _currentRoom = spot.room;
-    setRoomVisible(_currentRoom, true);
-  }
   setCamMode('WALK');
-  WAYPOINTS['_life_dest'] = { x: spot.x, z: spot.z, label: spot.label };
-  walkTo('_life_dest', () => {
+
+  const targetRoom = spot.room;
+  const doorPath   = findRoomPath(_currentRoom, targetRoom);
+
+  walkThroughWaypoints(doorPath, spot.x, spot.z, () => {
+    _currentRoom = targetRoom;
+    setRoomVisible(_currentRoom, true);
     if (spot.facingY !== undefined) _targetFacing = spot.facingY;
     const spotActivities = spot.activities?.length
       ? spot.activities : getFamiliarActivityPool(_currentRoom);
@@ -470,14 +556,12 @@ function goToSpot(spot) {
   });
 }
 
-// ── Public room teleport — sends her to a random spot in the named room ──
+// ── Public room teleport — routes through doors automatically ────
 export function goToRoom(roomName) {
   const hDef = HOUSE[roomName];
   if (!hDef || !hDef.spots?.length) return;
-  // Pick a random spot in that room, tag it with room name for goToSpot
   const spot = { ...hDef.spots[Math.floor(Math.random() * hDef.spots.length)], room: roomName };
   goToSpot(spot);
-  // Reset life timer so she dwells properly after arriving
   _lifeTimer = 0;
   _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
 }
