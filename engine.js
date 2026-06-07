@@ -328,50 +328,290 @@ _gltfLoader.load(
 //  to print the exact X/Z. Paste those values into a new spot below.
 // ================================================================
 const HOUSE = {
-  // ── Living room — spawn-confirmed, all spots verified ──────────
+
+  // ── Living Room ──────────────────────────────────────────────────
+  // GLB props: sedacka (sofa), tv, skrinTV (TV unit), stolek konf
+  // (coffee table), krb (fireplace w/ glass panel), front window.
+  // Wood plank floor, cream rug. Spawn-confirmed area.
   'living-room': {
-    origin: { x: -2.7, z: -3.8 }, size: { w: 5, d: 4 },
+    origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',    x: -2.7, z: -4.5, facingY: 0,       activities: ['sofaSit','phoneScroll','idle','tvReact'] },
-      { label: 'Centre',  x: -2.7, z: -3.5, facingY: Math.PI, activities: ['dance','stretch','hairflick','hiponhip','idle'] },
-      { label: 'Side',    x: -1.5, z: -3.0, facingY: Math.PI, activities: ['idle','hairflick','hiponhip'] },
+      // sedacka — sofa node at (-4.159, -4.424)
+      { label: 'Sofa',
+        x: -4.159, z: -4.424, facingY: 0,
+        activities: ['sofaSit','phoneScroll','idle','tvReact','readBook'],
+        prop: 'sedacka' },
+      // sofa arm — stand beside sofa
+      { label: 'Sofa Side',
+        x: -3.200, z: -4.200, facingY: Math.PI * 0.15,
+        activities: ['idle','hairflick','hiponhip','phoneScroll'],
+        prop: 'sedacka' },
+      // tv at (-1.930, -4.460) — faces into room
+      { label: 'TV Wall',
+        x: -2.500, z: -5.000, facingY: 0,
+        activities: ['tvReact','idle','dance','hiponhip'],
+        prop: 'tv' },
+      // stolek konf — coffee table at (-3.040, -3.679)
+      { label: 'Coffee Table',
+        x: -3.040, z: -3.300, facingY: Math.PI,
+        activities: ['idle','phoneScroll','tasting','readBook'],
+        prop: 'stolek konf' },
+      // krb — fireplace at (-1.141, -1.453) — biggest personality prop
+      { label: 'Fireplace',
+        x: -1.800, z: -1.700, facingY: Math.PI * 0.5,
+        activities: ['fireGaze','idle','stretch','sofaSit'],
+        prop: 'krb' },
+      // open floor — dancing/stretching
+      { label: 'Centre',
+        x: -3.200, z: -2.800, facingY: Math.PI,
+        activities: ['dance','stretch','hairflick','hiponhip','idle'] },
+      // parapet.005 — front window sill at (-3.147, -5.406)
+      { label: 'Front Window',
+        x: -3.800, z: -5.200, facingY: 0,
+        activities: ['windowLook','idle','hairflick','stretch'],
+        prop: 'parapet.005' },
     ]
   },
 
-  // ── Other rooms — coordinates UNVERIFIED, commented out until mapped ──
-  // Uncomment a room only after running missOgTinz.logPos() to confirm coords.
-  //
-  // kitchen: {
-  //   ambientColor: 0x0a1005,
-  //   spots: [
-  //     { label: 'Stove',  x: -5.3, z:  0.3, facingY: Math.PI/2, activities: ['stirring','chopping','idle'] },
-  //     { label: 'Centre', x: -4.5, z:  0.5, facingY: Math.PI,   activities: ['tasting','hiponhip','idle'] },
-  //   ]
-  // },
-  // dining: {
-  //   ambientColor: 0x0a0a05,
-  //   spots: [
-  //     { label: 'Table',  x: -3.0, z:  2.3, facingY: Math.PI/2, activities: ['idle','tasting','phoneScroll'] },
-  //     { label: 'Centre', x: -2.5, z:  2.8, facingY: Math.PI,   activities: ['dance','idle','hiponhip'] },
-  //   ]
-  // },
-  // bedroom: {
-  //   ambientColor: 0x05050d,
-  //   spots: [
-  //     { label: 'Wardrobe', x: 3.3, z: -0.7, facingY: -Math.PI/2, activities: ['mirrorPose','hairflick','idle'] },
-  //     { label: 'Centre',   x: 4.0, z:  0.5, facingY: Math.PI,    activities: ['dance','stretch','idle','phoneScroll'] },
-  //   ]
-  // },
+  // ── Kitchen ──────────────────────────────────────────────────────
+  // GLB props: sporak (gas cooker), varna deska (second hob),
+  // drez (stainless sink), linka (fitted cabinets), linka.001 (island).
+  // Terracotta tile floor. She cooks barefoot — house rule.
+  kitchen: {
+    origin: { x: -3.8, z:  1.0 }, size: { w: 4.5, d: 4.5 },
+    ambientColor: 0x0a1005,
+    spots: [
+      // sporak — gas cooker at (-4.18, -0.031)
+      { label: 'Hob',
+        x: -4.180, z:  0.300, facingY: Math.PI * 0.5,
+        activities: ['stirring','chopping','tasting','idle','noseCover'],
+        prop: 'sporak' },
+      // varna deska — second hob at (-4.185, -0.031)
+      // jollof AND stew simultaneously
+      { label: 'Second Hob',
+        x: -4.185, z: -0.300, facingY: Math.PI * 0.5,
+        activities: ['stirring','idle','tasting'],
+        prop: 'varna deska' },
+      // drez — sink at (-4.849, -0.933)
+      { label: 'Sink',
+        x: -4.849, z: -0.650, facingY: Math.PI * 0.5,
+        activities: ['washingUp','idle','stretch'],
+        prop: 'drez' },
+      // linka — cabinets along west wall
+      { label: 'Cabinets',
+        x: -4.000, z:  1.000, facingY: Math.PI * 0.5,
+        activities: ['cabinetOpen','idle','noseCover','hairflick'],
+        prop: 'linka' },
+      // linka.001 — island at (-1.004, 2.185) — social hub of kitchen
+      { label: 'Island',
+        x: -1.004, z:  2.185, facingY: Math.PI,
+        activities: ['chopping','tasting','phoneScroll','idle','hiponhip','readBook'],
+        prop: 'linka.001' },
+      // open floor
+      { label: 'Kitchen Centre',
+        x: -2.800, z:  1.200, facingY: Math.PI,
+        activities: ['dance','stretch','idle','hairflick'] },
+      // parapet.004 — kitchen window sill at (-5.151, -3.160)
+      { label: 'Kitchen Window',
+        x: -5.000, z: -2.800, facingY: Math.PI * 0.5,
+        activities: ['windowLook','idle','stretch'],
+        prop: 'parapet.004' },
+    ]
+  },
 
-  // ── Studio — same origin as living-room (she streams from here) ─
+  // ── Dining Room ──────────────────────────────────────────────────
+  // GLB props: jidelni stul (main dining table at -2.286, 1.579),
+  // jidelni stul.001 (extended table at -2.132, 3.255),
+  // zidle x7 chairs. Terracotta tiles, flows into kitchen.
+  dining: {
+    origin: { x: -2.0, z:  2.5 }, size: { w: 3.5, d: 4.0 },
+    ambientColor: 0x0a0a05,
+    spots: [
+      // jidelni stul — main table head
+      { label: 'Table Head',
+        x: -2.286, z:  1.300, facingY: Math.PI,
+        activities: ['idle','tasting','phoneScroll','readBook','hiponhip'],
+        prop: 'jidelni stul' },
+      // zidle — chair at table side (-2.477, 2.369)
+      { label: 'Table Side',
+        x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,
+        activities: ['idle','readBook','phoneScroll','tasting'],
+        prop: 'zidle' },
+      // jidelni stul.001 — extended table end
+      { label: 'Table End',
+        x: -2.132, z:  3.500, facingY: 0,
+        activities: ['idle','dance','hairflick','hiponhip'],
+        prop: 'jidelni stul.001' },
+      // garden-facing window
+      { label: 'Dining Window',
+        x: -1.200, z:  3.800, facingY: 0,
+        activities: ['windowLook','idle','hairflick','stretch'],
+        prop: 'parapet' },
+      // open floor
+      { label: 'Dining Centre',
+        x: -1.800, z:  2.200, facingY: Math.PI,
+        activities: ['dance','stretch','idle','hiponhip'] },
+    ]
+  },
+
+  // ── Hallway ──────────────────────────────────────────────────────
+  // GLB props: 9× dvere (doors, all glass panel + wood frame),
+  // sokl (skirting boards full length). Marble tile floor (cold).
+  // NOTE: NO mirror in hallway — mirror is wardrobe in bedroom.
+  hallway: {
+    origin: { x:  0.6, z: -2.5 }, size: { w: 2.2, d: 6.5 },
+    ambientColor: 0x06060a,
+    spots: [
+      // dvere — front door at (1.59, -5.636)
+      { label: 'Front Door',
+        x:  1.590, z: -5.300, facingY: Math.PI,
+        activities: ['idle','stretch','hiponhip'],
+        prop: 'dvere' },
+      // centre corridor — transit zone
+      { label: 'Corridor',
+        x:  0.600, z: -3.000, facingY: Math.PI,
+        activities: ['idle','hairflick','hiponhip','stretch'] },
+      // dvere.001 — door to living room at (-0.920, -0.021)
+      { label: 'Living Room Door',
+        x:  0.200, z: -0.400, facingY: Math.PI,
+        activities: ['idle','stretch','noseCover'],
+        prop: 'dvere.001' },
+      // dvere.002 — door to kitchen at (-0.920, 1.222)
+      { label: 'Kitchen Door',
+        x:  0.200, z:  0.900, facingY: Math.PI,
+        activities: ['idle','hairflick'],
+        prop: 'dvere.002' },
+      // parapet.002 — hallway window sill at (5.148, -2.413)
+      { label: 'Hallway Window',
+        x:  1.600, z: -2.200, facingY: -Math.PI * 0.5,
+        activities: ['windowLook','idle','stretch'],
+        prop: 'parapet.002' },
+    ]
+  },
+
+  // ── Master Bedroom ───────────────────────────────────────────────
+  // GLB props: closet.003 (mirrored wardrobe — miror.001 material —
+  // THE mirror in the house), closet.006 (plain wardrobe),
+  // Plane.054 (bedroom chair), jidelni stul.003 (bedside table).
+  // Two upper windows: window.008 (-2.091) + window.010 (-4.241).
+  // Three carpet zones confirmed. Only carpeted room — deliberate.
+  bedroom: {
+    origin: { x:  3.8, z: -2.0 }, size: { w: 4.5, d: 6.0 },
+    ambientColor: 0x05050d,
+    spots: [
+      // closet.003 — mirrored wardrobe at (2.755, -0.845)
+      // THE mirror — outfit checks, edges, full-length poses
+      { label: 'Wardrobe Mirror',
+        x:  2.755, z: -0.845, facingY: -Math.PI * 0.5,
+        activities: ['mirrorPose','hairflick','idle','noseCover'],
+        prop: 'closet.003' },
+      // closet.006 — plain wardrobe at (4.356, 2.39)
+      { label: 'Wardrobe',
+        x:  4.356, z:  2.100, facingY: Math.PI,
+        activities: ['cabinetOpen','mirrorPose','idle','hairflick'],
+        prop: 'closet.006' },
+      // Plane.054 — bedroom chair at (3.214, 0.863)
+      // Clothes always on it. Sits, scrolls, puts shoes on.
+      { label: 'Bedroom Chair',
+        x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,
+        activities: ['sofaSit','phoneScroll','idle','stretch'],
+        prop: 'Plane.054' },
+      // bed — inferred centre of far wall (no bed mesh in GLB)
+      { label: 'Bed',
+        x:  5.200, z: -4.200, facingY: Math.PI,
+        activities: ['sofaSit','phoneScroll','stretch','idle','readBook'] },
+      // jidelni stul.003 — bedside table at (4.313, -1.125)
+      { label: 'Bedside',
+        x:  4.313, z: -1.125, facingY: Math.PI * 0.5,
+        activities: ['idle','phoneScroll','stretch'],
+        prop: 'jidelni stul.003' },
+      // window.008 — bedroom window at (5.365, -2.091)
+      { label: 'Window 1',
+        x:  5.000, z: -2.091, facingY: -Math.PI * 0.5,
+        activities: ['windowLook','idle','hairflick','stretch'],
+        prop: 'window.008' },
+      // window.010 — second bedroom window at (5.369, -4.241)
+      { label: 'Window 2',
+        x:  5.000, z: -4.241, facingY: -Math.PI * 0.5,
+        activities: ['windowLook','idle','hairflick'],
+        prop: 'window.010' },
+      // open floor centre
+      { label: 'Centre',
+        x:  3.800, z: -2.500, facingY: Math.PI,
+        activities: ['dance','stretch','idle','hiponhip','hairflick'] },
+    ]
+  },
+
+  // ── Bathroom ─────────────────────────────────────────────────────
+  // GLB: Handmade sand-brown mosaic tiles floor + walls confirmed.
+  // Decorative feature tiles on one wall. Stainless fixtures (nerez).
+  // window.002 at (5.368, 0.347). Large wall mirror.
+  bathroom: {
+    origin: { x:  3.8, z:  1.5 }, size: { w: 3.0, d: 3.0 },
+    ambientColor: 0x050a0d,
+    spots: [
+      // mirror wall — skincare, edge control, hair
+      { label: 'Mirror',
+        x:  3.200, z:  1.200, facingY: -Math.PI * 0.5,
+        activities: ['mirrorPose','hairflick','noseCover','idle'] },
+      // shower/bath area
+      { label: 'Shower',
+        x:  4.500, z:  2.200, facingY: Math.PI,
+        activities: ['idle','stretch','hairflick'] },
+      // window.002 at (5.368, 0.347)
+      { label: 'Window',
+        x:  5.000, z:  0.600, facingY: -Math.PI * 0.5,
+        activities: ['windowLook','idle','stretch'],
+        prop: 'window.002' },
+      // open floor
+      { label: 'Centre',
+        x:  3.800, z:  1.800, facingY: Math.PI,
+        activities: ['idle','stretch','hairflick','dance'] },
+    ]
+  },
+
+  // ── Streaming Studio ─────────────────────────────────────────────
+  // Overlaps living-room physically — desk setup in the living area.
+  // Dual monitors, mic, RGB lights. This is home base for the stream.
   studio: {
-    origin: { x: -2.7, z: -3.8 }, size: { w: 5, d: 4 },
+    origin: { x: -2.70, z: -4.00 }, size: { w: 2.5, d: 2.5 },
     ambientColor: 0x1a0a2e,
     spots: [
-      { label: 'Centre', x: -2.7, z: -3.5, facingY: Math.PI, activities: ['dance','stretch','hairflick','hiponhip','idle','typing','monitor'] },
+      { label: 'Desk',
+        x: -2.700, z: -3.500, facingY: Math.PI,
+        activities: ['typing','monitor','idle','dance','stretch',
+                     'hairflick','hiponhip','phoneScroll'] },
     ]
   },
+
+  // ── Back Garden / Terrace ─────────────────────────────────────────
+  // GLB: terasa (paved terrace), kacorek (gravel border),
+  // jidelni stul.002 (outdoor table at 4.759, 5.313),
+  // Plane.055 (garden chair at 2.560, 3.627), Stone wall feature.
+  // NOTE: NO BBQ mesh in GLB — do not reference it.
+  // Uncomment once outdoor navigation is confirmed working.
+  // garden: {
+  //   origin: { x:  0.00, z:  5.00 }, size: { w: 13.0, d: 3.5 },
+  //   ambientColor: 0x050d03,
+  //   spots: [
+  //     { label: 'Terrace',
+  //       x:  0.000, z:  4.000, facingY: 0,
+  //       activities: ['idle','hairflick','dance','hiponhip','stretch'],
+  //       prop: 'terasa' },
+  //     { label: 'Outdoor Table',
+  //       x:  4.759, z:  5.313, facingY: Math.PI,
+  //       activities: ['idle','tasting','phoneScroll','readBook'],
+  //       prop: 'jidelni stul.002' },
+  //     { label: 'Garden Chair',
+  //       x:  2.560, z:  3.627, facingY: Math.PI,
+  //       activities: ['sofaSit','idle','phoneScroll','stretch'],
+  //       prop: 'Plane.055' },
+  //     { label: 'Stone Wall',
+  //       x: -1.000, z:  5.500, facingY: 0,
+  //       activities: ['idle','windowLook','hairflick','stretch'] },
+  //   ]
+  // },
 };
 
 // House is loaded as GLB above — no procedural room shells needed
@@ -412,26 +652,31 @@ function moveToRoom(roomName) {
 }
 
 // ── Camera system ─────────────────────────────────────────────────────────────
-// STREAMER PORTRAIT CAM
-// Avatar is locked facing +Z. Camera always at a FIXED world position
-// in front of her — never reads her rotation, so it can never drift away.
+// ORBITAL FOLLOW CAM
+// Camera orbits around the avatar, always sitting in front of her face.
+// "Front" = opposite to her facing direction, so she always looks toward cam.
+// During walk: camera trails slightly behind travel direction for cinematic feel.
+// No walls — camera angle is computed from avatar rotation, not world axes.
 let camMode = 'IDLE';
-const CAM_LERP = 0.05;
+const CAM_LERP = 0.04;
 
-// Camera positions: avatar at (vx, 0, vz), facing +Z
-// Camera sits at (vx + sideShift, height, vz + dist) looking at (vx, lookH, vz)
+// Orbital presets: dist from avatar, height above feet, lookHeight, sideShift
 const STREAMER_CAM = {
-  IDLE:  { dist: 1.8,  height: 1.50, lookHeight: 1.10, sideShift: 0.0  },
-  SPEAK: { dist: 0.95, height: 1.60, lookHeight: 1.42, sideShift: 0.0  },
-  THINK: { dist: 1.4,  height: 1.55, lookHeight: 1.28, sideShift: 0.22 },
+  IDLE:  { dist: 1.80, height: 1.52, lookHeight: 1.12, sideShift: 0.0  },
+  SPEAK: { dist: 0.95, height: 1.62, lookHeight: 1.44, sideShift: 0.0  },
+  THINK: { dist: 1.40, height: 1.56, lookHeight: 1.30, sideShift: 0.22 },
+  WALK:  { dist: 2.20, height: 1.60, lookHeight: 1.15, sideShift: 0.0  },
 };
 
-// Smoothed camera state — lerps toward target each frame
+// Smoothed camera state
 const camCurrent = { x: 0, y: 1.50, z: 2.6, lookX: 0, lookY: 1.10, lookZ: 0 };
-const camSmooth  = camCurrent; // alias kept for compat
+const camSmooth  = camCurrent;
+
+// Smoothed facing angle used by camera (separate from VRM rotation to avoid jitter)
+let _camFacingY = Math.PI; // starts facing +Z
 
 function setCamMode(mode) {
-  if (!['IDLE','SPEAK','THINK'].includes(mode)) return;
+  if (!['IDLE','SPEAK','THINK','WALK'].includes(mode)) return;
   camMode = mode;
 }
 
@@ -476,9 +721,13 @@ function walkTo(waypointName, onArrive = null) {
   const dx = wp.x - vrmPos.x;
   const dz = wp.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
-  const WALK_SPEED = 1.5; // world units per second — natural walking pace
-  walk.duration = Math.max(0.8, dist / WALK_SPEED);
-  walk.targetFacing = Math.atan2(dx, dz) + Math.PI;
+  const WALK_SPEED = 1.5;
+  walk.duration     = Math.max(0.8, dist / WALK_SPEED);
+  // Travel direction: atan2(dx,dz) gives the angle she should face to walk there.
+  // +Math.PI rotates 180° so she faces TOWARD the destination (VRM0 front is -Z).
+  walk.targetFacing = Math.atan2(dx, dz);
+  // Set _targetFacing immediately so she starts turning right away
+  _targetFacing = walk.targetFacing;
 }
 
 // Walk animation time accumulator (keeps counting while walking)
@@ -524,12 +773,9 @@ function updateWalk(delta) {
   vrm.scene.position.x = vrmPos.x;
   vrm.scene.position.z = vrmPos.z;
 
-  // Smooth turn toward travel direction
-  const currentFacing = vrm.scene.rotation.y;
-  let diff = walk.targetFacing - currentFacing;
-  while (diff >  Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  vrm.scene.rotation.y += diff * Math.min(1, delta * 6);
+  // _targetFacing is set to travel direction in walkTo().
+  // The render loop smoothly rotates vrm.scene.rotation.y toward it.
+  // No duplicate facing code here.
 
   // ── WALK ANIMATION ──────────────────────────────────────────────
   // Speed: steps per second. A natural feminine walk ~2.2 steps/sec
@@ -834,34 +1080,41 @@ function goToSpot(spot) {
   _currentSpot = spot;
 
   const needsRoomSwitch = spot.room !== _currentRoom;
-
   if (needsRoomSwitch) {
     setRoomVisible(_currentRoom, false);
     _currentRoom = spot.room;
-    setRoomVisible(_currentRoom, true);  // ambient colour updated inside setRoomVisible
+    setRoomVisible(_currentRoom, true);
   }
+
+  // Switch to walk cam while moving
+  setCamMode('WALK');
 
   WAYPOINTS['_life_dest'] = { x: spot.x, z: spot.z, label: spot.label };
   walkTo('_life_dest', () => {
-    // Face the right direction for this spot
-    if (spot.facingY !== undefined && vrm) {
+    // Arrived — face the prop at this spot
+    if (spot.facingY !== undefined) {
       _targetFacing = spot.facingY;
     }
     // Pick an activity for this spot
-    const pool = getFamiliarActivityPool(_currentRoom);
-    const next = pool[Math.floor(Math.random() * pool.length)];
-    ACTIVITY.current = next;
-    ACTIVITY.timer   = 0;
-    ACTIVITY.phase   = 0;
+    const spotActivities = spot.activities && spot.activities.length
+      ? spot.activities
+      : getFamiliarActivityPool(_currentRoom);
+    const next = spotActivities[Math.floor(Math.random() * spotActivities.length)];
+    ACTIVITY.current  = next;
+    ACTIVITY.timer    = 0;
+    ACTIVITY.phase    = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
-    // Maybe change outfit when she arrives somewhere new
     maybeChangeOutfit(_currentRoom);
+    // Switch back to idle cam once she settles
+    setCamMode('IDLE');
   });
 }
 
-// Facing target — render loop lerps toward this
-// _targetFacing locked to Math.PI so she always faces the camera (+Z)
-// Activities that try to set other facing values are ignored
+// Facing target — render loop smoothly rotates her toward this each frame.
+// Default is Math.PI (facing toward camera spawn +Z direction).
+// Spots set their own facingY so she faces props naturally.
+// During walk: walk system sets this to travel direction.
+// After arriving: spot.facingY takes over so she faces the prop.
 let _targetFacing = Math.PI;
 
 function lifeUpdate() {
@@ -873,12 +1126,22 @@ function lifeUpdate() {
   // API override: after a viewer message, she stays put for a bit
   if (_apiOverride) {
     _apiOverrideTimer -= delta;
-    if (_apiOverrideTimer <= 0) _apiOverride = false;
+    if (_apiOverrideTimer <= 0) {
+      _apiOverride = false;
+      // When override ends, gently turn her back toward camera
+      _targetFacing = Math.PI;
+    }
     return;
   }
 
   // Count down the dwell timer at the current spot
   _lifeTimer += delta;
+
+  // 3 seconds before she moves: turn back toward camera so viewer sees her face
+  if (_lifeTimer >= _nextDwell - 3 && _lifeTimer < _nextDwell) {
+    _targetFacing = Math.PI;
+  }
+
   if (_lifeTimer < _nextDwell) return;
 
   // Time to move — pick the next spot and go there
@@ -2812,22 +3075,28 @@ function triggerGiftPop() {
 //  Avatar is locked facing +Z, camera always at +Z from her.
 // ================================================================
 
-// Instantly snap camCurrent (and the real camera) to sit in front of
-// wherever the VRM currently stands. Call this after spawn or teleport.
+// Instantly snap camCurrent to orbit in front of her face.
+// "In front" = she faces facingY, so camera is at facingY direction from her.
 function _snapCameraToVRM() {
   if (!vrm) return;
-  const vx = vrm.scene.position.x;
-  const vy = vrm.scene.position.y;
-  const vz = vrm.scene.position.z;
-  const p  = STREAMER_CAM.IDLE;
-  camCurrent.x     = vx + p.sideShift;
-  camCurrent.y     = vy + p.height;
-  camCurrent.z     = vz + p.dist;
+  const vx  = vrm.scene.position.x;
+  const vy  = vrm.scene.position.y;
+  const vz  = vrm.scene.position.z;
+  const p   = STREAMER_CAM.IDLE;
+  const fy  = vrm.scene.rotation.y;
+  _camFacingY = fy;
+  // Camera sits in the direction she faces (+dist along her front vector)
+  const cx = vx + Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
+  const cy = vy + p.height;
+  const cz = vz + Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
+  camCurrent.x     = cx;
+  camCurrent.y     = cy;
+  camCurrent.z     = cz;
   camCurrent.lookX = vx;
   camCurrent.lookY = vy + p.lookHeight;
   camCurrent.lookZ = vz;
-  camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
-  camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+  camera.position.set(cx, cy, cz);
+  camera.lookAt(vx, vy + p.lookHeight, vz);
 }
 
 function updateCamera(delta) {
@@ -2837,21 +3106,37 @@ function updateCamera(delta) {
   const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
 
-  const p  = STREAMER_CAM[camMode] || STREAMER_CAM.IDLE;
-  const tx = vx + p.sideShift;
-  const ty = vy + p.height;
-  const tz = vz + p.dist;
+  // Smooth the facing angle to avoid camera jitter when she turns
+  let rawFacing = vrm.scene.rotation.y;
+  // Handle angle wrap-around
+  let df = rawFacing - _camFacingY;
+  while (df >  Math.PI) df -= Math.PI * 2;
+  while (df < -Math.PI) df += Math.PI * 2;
+  const facingLerp = walk.active ? 0.025 : 0.035;
+  _camFacingY += df * Math.min(1, delta / facingLerp * delta);
+  // Clamp again after lerp
+  _camFacingY = ((_camFacingY % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+
+  // During walk: camera trails slightly — offset toward where she came FROM
+  // so we see her face as she walks. After arriving: snap to her new facing.
+  const camPreset = walk.active ? STREAMER_CAM.WALK : (STREAMER_CAM[camMode] || STREAMER_CAM.IDLE);
+  const fy = _camFacingY;
+
+  // Compute target camera position in her facing direction
+  const tx = vx + Math.sin(fy) * camPreset.dist + Math.cos(fy) * camPreset.sideShift;
+  const ty = vy + camPreset.height;
+  const tz = vz + Math.cos(fy) * camPreset.dist - Math.sin(fy) * camPreset.sideShift;
   const lx = vx;
-  const ly = vy + p.lookHeight;
+  const ly = vy + camPreset.lookHeight;
   const lz = vz;
 
-  const L = camMode === 'SPEAK' ? 0.08 : CAM_LERP;
-  camCurrent.x     += (tx - camCurrent.x)     * L;
-  camCurrent.y     += (ty - camCurrent.y)     * L;
-  camCurrent.z     += (tz - camCurrent.z)     * L;
-  camCurrent.lookX += (lx - camCurrent.lookX) * L;
-  camCurrent.lookY += (ly - camCurrent.lookY) * L;
-  camCurrent.lookZ += (lz - camCurrent.lookZ) * L;
+  const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : CAM_LERP;
+  camCurrent.x     += (tx - camCurrent.x)     * Math.min(1, L * 60 * delta);
+  camCurrent.y     += (ty - camCurrent.y)     * Math.min(1, L * 60 * delta);
+  camCurrent.z     += (tz - camCurrent.z)     * Math.min(1, L * 60 * delta);
+  camCurrent.lookX += (lx - camCurrent.lookX) * Math.min(1, L * 60 * delta * 1.5);
+  camCurrent.lookY += (ly - camCurrent.lookY) * Math.min(1, L * 60 * delta * 1.5);
+  camCurrent.lookZ += (lz - camCurrent.lookZ) * Math.min(1, L * 60 * delta * 1.5);
 
   camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
   camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
@@ -2899,17 +3184,18 @@ function render() {
     // ── Walk / room movement ───────────────────────────
     updateWalk(delta);
     lifeUpdate();
-    // Show the walk — use IDLE/world camera mode while she's moving
-    if (walk.active && camMode === 'IDLE') {
-      // camMode stays IDLE (world cam) so we can see her walk
-    }
+    // Camera switches to WALK preset automatically via updateCamera when walk.active
+    // After arriving, goToSpot() calls setCamMode('IDLE') to return to portrait cam
 
-    // ── Facing — always face the camera (+Z). Never rotate away. ──
+    // ── Facing — smoothly turn toward _targetFacing (set by spot or walk) ──
     if (vrm) {
-      const cur = vrm.scene.rotation.y;
-      const diff = Math.PI - cur;
-      const norm = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
-      vrm.scene.rotation.y += norm * Math.min(delta * 4, 1);
+      const cur  = vrm.scene.rotation.y;
+      let   diff = _targetFacing - cur;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      // Faster turn during walk so she starts facing travel direction immediately
+      const turnSpeed = walk.active ? 6.0 : 3.5;
+      vrm.scene.rotation.y += diff * Math.min(1, delta * turnSpeed);
     }
 
     // ── Idle body sway (only when not mid-gesture AND not walking) ────
@@ -3280,6 +3566,8 @@ async function sendMessage(message, displayName='Viewer') {
   // Pause autonomous roaming while she's responding to a viewer
   _apiOverride      = true;
   _apiOverrideTimer = API_OVERRIDE_DURATION;
+  // Turn her to face the camera so viewer sees her face while she speaks
+  _targetFacing = Math.PI;
 
   // Camera: go to THINK while processing
   setCamMode('THINK');
