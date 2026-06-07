@@ -632,18 +632,11 @@ const roomLights = buildGameRoom();
 //    /Streaming-engine/models/living-room/
 // ================================================================
 
-// LoadingManager that silences missing-texture 404s by serving a fallback data-URI.
-// This stops the colormap.png spam without needing the file on the server.
-const _GREY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+// LoadingManager — logs GLB load failures, lets textures load normally
 const _propManager = new THREE.LoadingManager();
-_propManager.setURLModifier(url => {
-  // Only intercept texture paths (not GLBs)
-  if (/\.(png|jpg|jpeg|webp|bmp|tga)(\?.*)?$/i.test(url)) {
-    // Silently substitute a grey 1×1 PNG — no network request, no 404
-    return _GREY_PNG;
-  }
-  return url;
-});
+_propManager.onError = url => {
+  if (/\.glb$/i.test(url)) console.warn('[Props] Failed to load GLB:', url);
+};
 
 const _gltfLoader = new GLTFLoader(_propManager);
 
@@ -943,17 +936,7 @@ function loadRoomProps(roomName, onDone) {
         obj.scale.setScalar(def.scale);
         obj.visible = false;
         obj.traverse(n => {
-          if (n.isMesh) {
-            n.castShadow = true;
-            n.receiveShadow = true;
-            // Replace any broken/null texture maps with fallback
-            if (n.material) {
-              const mats = Array.isArray(n.material) ? n.material : [n.material];
-              mats.forEach(m => {
-                // textures are already handled by the LoadingManager URL interceptor
-              });
-            }
-          }
+          if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
         });
         scene.add(obj);
         _roomObjects[roomName].push(obj);
