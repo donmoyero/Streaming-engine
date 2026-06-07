@@ -167,518 +167,6 @@ let keyboardMesh = null;
 let chairMesh = null;
 
 function buildGameRoom() {
-  const woodTex = (() => {
-    const c = document.createElement('canvas');
-    c.width = 256; c.height = 256;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#2a1a08';
-    ctx.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 40; i++) {
-      ctx.strokeStyle = `rgba(${60+Math.random()*30},${30+Math.random()*20},${5+Math.random()*10},0.4)`;
-      ctx.lineWidth = 1 + Math.random() * 2;
-      ctx.beginPath();
-      ctx.moveTo(0, i * 7 + Math.random() * 4);
-      ctx.lineTo(256, i * 7 + Math.random() * 4);
-      ctx.stroke();
-    }
-    return new THREE.CanvasTexture(c);
-  })();
-
-  const wallTex = (() => {
-    const c = document.createElement('canvas');
-    c.width = 256; c.height = 256;
-    const ctx = c.getContext('2d');
-    const g = ctx.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, '#0d0818');
-    g.addColorStop(1, '#1a0f2e');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 256);
-    // subtle panel lines
-    ctx.strokeStyle = 'rgba(120,60,200,0.15)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < 256; x += 64) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
-    }
-    return new THREE.CanvasTexture(c);
-  })();
-
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6, metalness: 0.05 })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0;
-  scene.add(floor);
-
-  // Floor reflection strip
-  const reflectionMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.06,
-    roughness: 0.1, metalness: 0.8,
-  });
-  const reflection = new THREE.Mesh(new THREE.PlaneGeometry(3, 20), reflectionMat);
-  reflection.rotation.x = -Math.PI / 2;
-  reflection.position.set(0, 0.001, 0);
-  scene.add(reflection);
-
-  // Back wall
-  const backWall = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 10),
-    new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 })
-  );
-  backWall.position.set(0, 5, -8);
-  scene.add(backWall);
-
-  // Left wall
-  const leftWall = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 10),
-    new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 })
-  );
-  leftWall.rotation.y = Math.PI / 2;
-  leftWall.position.set(-8, 5, 0);
-  scene.add(leftWall);
-
-  // Right wall
-  const rightWall = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 10),
-    new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 })
-  );
-  rightWall.rotation.y = -Math.PI / 2;
-  rightWall.position.set(8, 5, 0);
-  scene.add(rightWall);
-
-  // Ceiling
-  const ceiling = new THREE.Mesh(
-    new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ color: 0x080510, roughness: 1 })
-  );
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.y = 9.9;
-  scene.add(ceiling);
-
-  // ── Neon LED strips on walls ──────────────────────────
-  function addLedStrip(x1, y, z1, x2, z2, color) {
-    const pts = [new THREE.Vector3(x1, y, z1), new THREE.Vector3(x2, y, z2)];
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
-    scene.add(new THREE.Line(geo, mat));
-    // glow tube
-    const len = Math.sqrt((x2-x1)**2 + (z2-z1)**2);
-    const tube = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.025, len, 6),
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 3, roughness: 1 })
-    );
-    tube.position.set((x1+x2)/2, y, (z1+z2)/2);
-    if (x1 !== x2) tube.rotation.z = Math.PI / 2;
-    scene.add(tube);
-  }
-
-  // Back wall LED strips
-  addLedStrip(-7, 0.15, -7.8,  7, -7.8, 0xff2d78); // floor-level pink
-  addLedStrip(-7, 3.5,  -7.8,  7, -7.8, 0x00aaff); // mid blue
-  addLedStrip(-7, 7.0,  -7.8,  7, -7.8, 0x9b30ff); // top purple
-  // Left wall strips
-  addLedStrip(-7.8, 0.15, -7, -7.8,  7, 0xff2d78);
-  addLedStrip(-7.8, 3.5,  -7, -7.8,  7, 0x00aaff);
-  // Right wall strips
-  addLedStrip(7.8, 0.15, -7,  7.8,  7, 0xff2d78);
-  addLedStrip(7.8, 3.5,  -7,  7.8,  7, 0x00aaff);
-
-  // ── Dart Board (left wall) ────────────────────────────
-  function buildDartBoard(px, py, pz, ry) {
-    const g = new THREE.Group();
-
-    // Board backing (dark cork)
-    const backing = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.55, 0.55, 0.08, 32),
-      new THREE.MeshStandardMaterial({ color: 0x3b1f08, roughness: 0.9 })
-    );
-    backing.rotation.x = Math.PI / 2;
-    g.add(backing);
-
-    // Rings (alternating black/cream, then colours)
-    const ringData = [
-      { r: 0.52, color: 0x1a1a1a },
-      { r: 0.44, color: 0xf5e6c8 },
-      { r: 0.36, color: 0x1a1a1a },
-      { r: 0.22, color: 0xf5e6c8 },
-      { r: 0.14, color: 0x1a1a1a },
-      { r: 0.05, color: 0x00aa44 }, // bullseye green
-    ];
-    ringData.forEach(({ r, color }) => {
-      const ring = new THREE.Mesh(
-        new THREE.CylinderGeometry(r, r, 0.09, 32),
-        new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
-      );
-      ring.rotation.x = Math.PI / 2;
-      ring.position.z = 0.001;
-      g.add(ring);
-    });
-
-    // Bull centre red
-    const bull = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 0.1, 16),
-      new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.7, emissive: 0x330000 })
-    );
-    bull.rotation.x = Math.PI / 2;
-    bull.position.z = 0.002;
-    g.add(bull);
-
-    g.position.set(px, py, pz);
-    g.rotation.y = ry;
-    scene.add(g);
-  }
-  buildDartBoard(-7.6, 2.0, -2, Math.PI / 2);
-
-  // ── Basketball Hoop (right wall) ───────────────────────
-  function buildBasketballHoop(px, py, pz) {
-    const g = new THREE.Group();
-
-    // Backboard
-    const board = new THREE.Mesh(
-      new THREE.BoxGeometry(1.0, 0.7, 0.06),
-      new THREE.MeshStandardMaterial({ color: 0xeef5ff, roughness: 0.4, transparent: true, opacity: 0.85 })
-    );
-    board.position.set(0, 0, 0);
-    g.add(board);
-
-    // Red square on backboard
-    const sq = new THREE.Mesh(
-      new THREE.BoxGeometry(0.38, 0.28, 0.07),
-      new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.5, wireframe: true })
-    );
-    sq.position.set(0, -0.04, 0);
-    g.add(sq);
-
-    // Rim (torus)
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(0.23, 0.025, 8, 24),
-      new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.3, metalness: 0.5, emissive: 0x331100, emissiveIntensity: 0.5 })
-    );
-    rim.rotation.x = Math.PI / 2;
-    rim.position.set(0, -0.42, 0.28);
-    g.add(rim);
-
-    // Net (simple cylinder cage)
-    const netMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, wireframe: true, transparent: true, opacity: 0.7 });
-    const net = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.14, 0.35, 12, 1, true), netMat);
-    net.position.set(0, -0.62, 0.28);
-    g.add(net);
-
-    // Support arm
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.06, 0.35),
-      new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 })
-    );
-    arm.position.set(0, -0.35, 0.17);
-    g.add(arm);
-
-    g.position.set(px, py, pz);
-    g.rotation.y = -Math.PI / 2;
-    scene.add(g);
-  }
-  buildBasketballHoop(7.3, 3.2, -1.5);
-
-  // ── Trophy shelf (back wall, right side) ──────────────
-  function buildShelf(px, py, pz) {
-    const shelf = new THREE.Mesh(
-      new THREE.BoxGeometry(1.8, 0.06, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0x3d2008, roughness: 0.7 })
-    );
-    shelf.position.set(px, py, pz);
-    scene.add(shelf);
-
-    // Trophies
-    const trophyColors = [0xFFD700, 0xC0C0C0, 0xCD7F32];
-    trophyColors.forEach((col, i) => {
-      const base = new THREE.Mesh(
-        new THREE.BoxGeometry(0.12, 0.06, 0.12),
-        new THREE.MeshStandardMaterial({ color: col, metalness: 0.8, roughness: 0.2 })
-      );
-      base.position.set(px - 0.5 + i * 0.5, py + 0.06, pz);
-      scene.add(base);
-      const cup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.04, 0.18, 10),
-        new THREE.MeshStandardMaterial({ color: col, metalness: 0.9, roughness: 0.15, emissive: col, emissiveIntensity: 0.2 })
-      );
-      cup.position.set(px - 0.5 + i * 0.5, py + 0.18, pz);
-      scene.add(cup);
-    });
-  }
-  buildShelf(3.5, 1.8, -7.6);
-
-  // ── Foosball table ─────────────────────────────────────
-  function buildFoosball(px, py, pz) {
-    const g = new THREE.Group();
-    // Table body
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(1.2, 0.08, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0x2d1a08, roughness: 0.7 })
-    );
-    body.position.y = 0;
-    g.add(body);
-    // Green felt surface
-    const felt = new THREE.Mesh(
-      new THREE.BoxGeometry(1.05, 0.02, 0.55),
-      new THREE.MeshStandardMaterial({ color: 0x1a7a2a, roughness: 0.9 })
-    );
-    felt.position.y = 0.05;
-    g.add(felt);
-    // Legs
-    [[-0.52, -0.52], [-0.52, 0.52], [0.52, -0.52], [0.52, 0.52]].forEach(([lx, lz]) => {
-      const leg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, 0.6, 0.07),
-        new THREE.MeshStandardMaterial({ color: 0x1a0d04, roughness: 0.8 })
-      );
-      leg.position.set(lx, -0.34, lz);
-      g.add(leg);
-    });
-    // Rods
-    for (let i = 0; i < 4; i++) {
-      const rod = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.018, 0.018, 0.75, 8),
-        new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
-      );
-      rod.rotation.z = Math.PI / 2;
-      rod.position.set(0, 0.1, -0.2 + i * 0.135);
-      g.add(rod);
-    }
-    g.position.set(px, py, pz);
-    scene.add(g);
-  }
-  buildFoosball(-4.5, 0.7, -4);
-
-  // ── Streaming Desk (centre-right, angled slightly) ─────
-  // She stands in front of it; camera is behind her shoulder
-  function buildStreamingSetup() {
-    const g = new THREE.Group();
-
-    // ── Desk surface ──
-    const deskMat = new THREE.MeshStandardMaterial({ color: 0x1a1005, roughness: 0.55, metalness: 0.05 });
-    const deskTop = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.07, 1.0), deskMat);
-    deskTop.position.set(0, 0, 0);
-    g.add(deskTop);
-
-    // Gold trim on front edge
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0xFFB830, metalness: 0.9, roughness: 0.15, emissive: 0xffb830, emissiveIntensity: 0.4 });
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(2.82, 0.012, 0.012), trimMat);
-    trim.position.set(0, 0.041, 0.506);
-    g.add(trim);
-
-    // Desk legs
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.7, roughness: 0.3 });
-    [[-1.25, -0.42], [1.25, -0.42], [-1.25, 0.42], [1.25, 0.42]].forEach(([lx, lz]) => {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), legMat);
-      leg.position.set(lx, -0.46, lz);
-      g.add(leg);
-    });
-
-    // ── RGB LED strip under desk edge ──
-    const ledMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 2.5, roughness: 1 });
-    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.018, 0.018), ledMat);
-    ledStrip.position.set(0, -0.048, 0.492);
-    g.add(ledStrip);
-
-    // ── Dual Monitors ──
-    const monitorBodyMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.6, metalness: 0.5 });
-    const screenMat = new THREE.MeshStandardMaterial({
-      color: 0x0a1a2e, emissive: 0x0a3a6e, emissiveIntensity: 1.2, roughness: 0.1, metalness: 0
-    });
-    monitorMesh = screenMat; // store ref for glow updates
-
-    // Main monitor (centre)
-    function buildMonitor(xOff, rotY) {
-      const mg = new THREE.Group();
-      const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.56, 0.04), monitorBodyMat);
-      mg.add(bezel);
-      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.49, 0.041), screenMat);
-      mg.add(screen);
-
-      // Screen content — pink/purple gradient overlay
-      const contentMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 0.25, transparent: true, opacity: 0.18, roughness: 1 });
-      const contentPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.47), contentMat);
-      contentPlane.position.z = 0.022;
-      mg.add(contentPlane);
-
-      // Monitor stand
-      const standPole = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), monitorBodyMat);
-      standPole.position.set(0, -0.39, 0);
-      mg.add(standPole);
-      const standBase = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.14), monitorBodyMat);
-      standBase.position.set(0, -0.5, 0);
-      mg.add(standBase);
-
-      mg.position.set(xOff, 0.62, -0.32);
-      mg.rotation.y = rotY;
-      g.add(mg);
-    }
-    buildMonitor(-0.35, 0.08);  // main monitor, slight angle
-    buildMonitor( 0.72, -0.35); // side monitor, more angled
-
-    // Glow from monitors onto scene
-    monitorGlowLight = new THREE.PointLight(0x0a3aff, 0.8, 3);
-    monitorGlowLight.position.set(0, 1.1, 0.1);
-    g.add(monitorGlowLight);
-
-    // ── Gaming Keyboard ──
-    const kbMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.7, metalness: 0.3 });
-    keyboardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.025, 0.2), kbMat);
-    keyboardMesh.position.set(-0.3, 0.05, 0.18);
-    g.add(keyboardMesh);
-    // RGB backlight on keyboard
-    const kbLedMat = new THREE.MeshStandardMaterial({ color: 0xff2d78, emissive: 0xff2d78, emissiveIntensity: 1.5, roughness: 1, transparent: true, opacity: 0.7 });
-    const kbLed = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.003, 0.17), kbLedMat);
-    kbLed.position.set(-0.3, 0.064, 0.18);
-    g.add(kbLed);
-
-    // ── Mouse ──
-    const mouseMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.4 });
-    const mouse = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.028, 0.12), mouseMat);
-    mouse.position.set(0.2, 0.05, 0.2);
-    g.add(mouse);
-
-    // ── Stream Mic on arm ──
-    const micArmMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.6 });
-    // Boom arm
-    const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), micArmMat);
-    arm1.rotation.z = Math.PI / 2;
-    arm1.position.set(0.85, 0.28, -0.1);
-    g.add(arm1);
-    const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 8), micArmMat);
-    arm2.rotation.z = Math.PI / 6;
-    arm2.position.set(0.62, 0.44, -0.1);
-    g.add(arm2);
-    // Mic capsule
-    const micBodyMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
-    const micCap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.16, 12), micBodyMat);
-    micCap.position.set(0.52, 0.6, -0.1);
-    micCap.rotation.z = 0.3;
-    g.add(micCap);
-    // Pop filter
-    const popMat = new THREE.MeshStandardMaterial({ color: 0x222222, transparent: true, opacity: 0.55, roughness: 0.9, wireframe: true });
-    const pop = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.01, 16), popMat);
-    pop.position.set(0.46, 0.6, -0.1);
-    pop.rotation.z = Math.PI / 2;
-    g.add(pop);
-
-    // ── Stream light (ring light suggestion) ──
-    const ringMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff5e0, emissiveIntensity: 2.0, roughness: 1 });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.018, 8, 24), ringMat);
-    ring.position.set(-1.1, 1.55, 0.3);
-    g.add(ring);
-    const ringLight = new THREE.PointLight(0xfff5e0, 2.5, 3.5);
-    ringLight.position.set(-1.1, 1.55, 0.3);
-    g.add(ringLight);
-
-    // ── Water bottle ──
-    const bottleMat = new THREE.MeshStandardMaterial({ color: 0x1a3a5c, transparent: true, opacity: 0.7, roughness: 0.1, metalness: 0.2 });
-    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.034, 0.22, 12), bottleMat);
-    bottle.position.set(0.85, 0.15, 0.28);
-    g.add(bottle);
-
-    // ── Headphones resting on desk ──
-    const hpMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0.5 });
-    const hpBand = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 18, Math.PI), hpMat);
-    hpBand.position.set(-0.85, 0.12, 0.15);
-    hpBand.rotation.x = -0.2;
-    g.add(hpBand);
-
-    // ── Chair (behind and below desk position) ──
-    const chairBodyMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.7 });
-    const chairAccMat  = new THREE.MeshStandardMaterial({ color: 0xff2d78, roughness: 0.5, emissive: 0xff1060, emissiveIntensity: 0.3 });
-    const cg = new THREE.Group();
-
-    // Seat
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.52), chairBodyMat);
-    cg.add(seat);
-    // Back rest
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.08), chairBodyMat);
-    back.position.set(0, 0.39, -0.22);
-    cg.add(back);
-    // Lumbar stripe (pink accent)
-    const lumbar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.09), chairAccMat);
-    lumbar.position.set(0, 0.1, -0.22);
-    cg.add(lumbar);
-    // Head rest
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.22, 0.08), chairBodyMat);
-    head.position.set(0, 0.82, -0.22);
-    cg.add(head);
-    // Arm rests
-    [-0.28, 0.28].forEach(ax => {
-      const ar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.3), chairBodyMat);
-      ar.position.set(ax, 0.15, -0.05);
-      cg.add(ar);
-    });
-    // Gas cylinder
-    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.38, 8), new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7 }));
-    cyl.position.set(0, -0.23, 0);
-    cg.add(cyl);
-    // Wheel base (star)
-    for (let i = 0; i < 5; i++) {
-      const ang = (i / 5) * Math.PI * 2;
-      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.025, 0.04), chairBodyMat);
-      spoke.position.set(Math.cos(ang)*0.12, -0.44, Math.sin(ang)*0.12);
-      spoke.rotation.y = ang;
-      cg.add(spoke);
-    }
-
-    // Chair is NOT added to the desk group — desk group is raised to y=0.9
-    // but the chair needs to sit on the floor. We add it directly to scene.
-    chairMesh = cg;
-
-    // Position whole setup: slightly right of centre, pushed back
-    g.position.set(0.6, 0.9, -1.6);
-    g.rotation.y = -0.12; // slight angle so it reads well in 3/4 view
-    scene.add(g);
-
-    // Chair: world-space position behind the desk, on the floor (y=0.44 = seat height)
-    cg.position.set(0.6, 0.44, -0.88); // world x matches desk, y = floor + half-seat height, z behind desk
-    cg.rotation.y = -0.12;             // same slight angle as the desk group
-    scene.add(cg);
-
-    // Point light from desk LED strip
-    const deskGlow = new THREE.PointLight(0xff2d78, 1.2, 4);
-    deskGlow.position.set(0.6, 0.88, -1.2);
-    scene.add(deskGlow);
-  }
-  buildStreamingSetup();
-
-  // ── Bean bags / seating ────────────────────────────────
-  function buildBeanBag(px, py, pz, color) {
-    const bag = new THREE.Mesh(
-      new THREE.SphereGeometry(0.35, 12, 8),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.95 })
-    );
-    bag.scale.y = 0.65;
-    bag.position.set(px, py, pz);
-    scene.add(bag);
-  }
-  buildBeanBag(-5.5, 0.22, 0,   0x9b30ff);
-  buildBeanBag(-5.0, 0.22, 1.2, 0xff2d78);
-
-  // ── Ceiling spot lights ────────────────────────────────
-  function addSpotLight(x, z, color) {
-    const spot = new THREE.SpotLight(color, 1.5, 12, Math.PI/7, 0.5);
-    spot.position.set(x, 9, z);
-    spot.target.position.set(x * 0.3, 0, z * 0.3);
-    scene.add(spot);
-    scene.add(spot.target);
-    // Fixture cylinder
-    const fix = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.12, 0.2, 8),
-      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 })
-    );
-    fix.position.set(x, 9.7, z);
-    scene.add(fix);
-  }
-  addSpotLight(-2.5, -2, 0xff2d78);
-  addSpotLight( 2.5, -2, 0x00aaff);
-  addSpotLight( 0,   -1, 0xfff5e0);
-
-  // Animated neon refs for pulsing
-  return { neonPink, neonBlue, neonPurple };
-}
-
 // Old game room removed — house GLB is the environment now
 const roomLights = {};
 
@@ -703,21 +191,6 @@ const AVATAR_RADIUS = 0.25; // capsule radius — NOT mesh half-width
 
 // Raycast downward from above spawn point to find the actual floor surface
 function _detectFloorByRaycast(x, z) {
-  const ray = new THREE.Raycaster(
-    new THREE.Vector3(x, 20, z),
-    new THREE.Vector3(0, -1, 0),
-    0, 40
-  );
-  const hits = ray.intersectObjects(scene.children, true)
-    .filter(h => h.object.isMesh && h.object !== vrm?.scene)
-    .sort((a, b) => b.point.y - a.point.y); // highest hit = top floor surface
-  if (hits.length > 0) {
-    console.log(`[Floor] Raycast found floor at Y=${hits[0].point.y.toFixed(4)}`);
-    return hits[0].point.y;
-  }
-  return null;
-}
-
 // Place the VRM standing exactly on the house floor at spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
@@ -907,117 +380,6 @@ const HOUSE = {
 
 // House is loaded as GLB above — no procedural room shells needed
 
-// ── ROOM_PROPS removed — house GLB contains all furniture ────────────────────
-const ROOM_PROPS_DISABLED = {
-
-  kitchen: [
-    { file: 'living-room/kitchenStove.glb',          pos: [-2.5, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
-    { file: 'living-room/kitchenFridgeLarge.glb',    pos: [-4.8, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
-    { file: 'living-room/kitchenCabinet.glb',        pos: [ 0.5, 0, -21.5], rot: [0,0,0],    scale: 1.8 },
-    { file: 'living-room/kitchenSink.glb',           pos: [ 2.8, 0, -21.2], rot: [0,0,0],    scale: 1.8 },
-    { file: 'living-room/kitchenCabinetDrawer.glb',  pos: [-1.0, 0, -21.5], rot: [0,0,0],    scale: 1.8 },
-    { file: 'living-room/hoodLarge.glb',             pos: [-2.5, 2.2,-21.5],rot: [0,0,0],    scale: 1.8 },
-    { file: 'kitchen/pot.glb',                       pos: [-2.5,1.05,-21.0],rot: [0,0,0],    scale: 1.2 },
-    { file: 'kitchen/pot-lid.glb',                   pos: [-2.5,1.22,-21.0],rot: [0,0.3,0],  scale: 1.2 },
-    { file: 'kitchen/frying-pan.glb',                pos: [-1.7,1.05,-21.0],rot: [0,0.4,0],  scale: 1.2 },
-    { file: 'kitchen/cutting-board.glb',             pos: [ 1.0, 1.0,-21.2],rot: [0,-0.3,0], scale: 1.0 },
-    { file: 'kitchen/tajine.glb',                    pos: [ 0.2,0.95,-21.2],rot: [0,0.5,0],  scale: 1.0 },
-    { file: 'kitchen/tajine-lid.glb',                pos: [ 0.2,1.18,-21.2],rot: [0,0.5,0],  scale: 1.0 },
-    { file: 'kitchen/knife-block.glb',               pos: [ 2.0, 1.0,-21.1],rot: [0,0.2,0],  scale: 1.0 },
-    { file: 'kitchen/cooking-spoon.glb',             pos: [-1.2, 1.0,-21.2],rot: [0,-0.4,0], scale: 1.0 },
-    { file: 'kitchen/whisk.glb',                     pos: [-0.9, 1.0,-21.2],rot: [0,0.3,0],  scale: 1.0 },
-    { file: 'kitchen/shaker-salt.glb',               pos: [ 0.6, 1.0,-21.1],rot: [0,0,0],    scale: 1.0 },
-    { file: 'kitchen/shaker-pepper.glb',             pos: [ 0.75,1.0,-21.1],rot: [0,0,0],    scale: 1.0 },
-    { file: 'kitchen/cup-coffee.glb',                pos: [ 3.2, 1.0,-21.0],rot: [0,-0.5,0], scale: 1.0 },
-    { file: 'kitchen/bowl.glb',                      pos: [ 1.6, 1.0,-21.2],rot: [0,0,0],    scale: 1.0 },
-    { file: 'kitchen/rollingPin.glb',                pos: [ 2.4, 1.0,-21.1],rot: [0,0.6,0],  scale: 1.0 },
-    { file: 'kitchen/tomato.glb',                    pos: [ 0.9, 1.0,-21.1],rot: [0,0,0],    scale: 0.8 },
-    { file: 'kitchen/carrot.glb',                    pos: [ 1.1, 1.0,-21.05],rot:[0,0.8,0],  scale: 0.8 },
-    { file: 'kitchen/egg.glb',                       pos: [-0.6, 1.0,-21.2],rot: [0,0.2,0],  scale: 0.8 },
-    { file: 'kitchen/bread.glb',                     pos: [ 3.4, 1.0,-21.0],rot: [0,-0.3,0], scale: 0.9 },
-    { file: 'kitchen/steamer.glb',                   pos: [-3.2,1.05,-21.0],rot: [0,0,0],    scale: 1.0 },
-    { file: 'living-room/rugRectangle.glb',          pos: [ 0.0,0.01,-18.5],rot: [0,0,0],    scale: 2.0 },
-    { file: 'kitchen/cooking-knife.glb',             pos: [ 1.8, 1.0,-21.05],rot:[0,-0.2,0], scale: 1.0 },
-  ],
-
-  'living-room': [
-    { file: 'living-room/loungeSofaLong.glb',        pos: [13.5, 0, -9.5],   rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/loungeSofaCorner.glb',      pos: [18.5, 0, -8.5],   rot: [0,-Math.PI/2,0], scale: 1.8 },
-    { file: 'living-room/loungeChairRelax.glb',      pos: [10.2, 0,-11.0],   rot: [0,0.5,0],    scale: 1.8 },
-    { file: 'living-room/cabinetTelevision.glb',     pos: [15.0, 0,-13.8],   rot: [0,0,0],      scale: 2.0 },
-    { file: 'living-room/rugRectangle.glb',          pos: [14.5,0.01,-10.5], rot: [0,0,0],      scale: 2.8 },
-    { file: 'living-room/bookcaseOpen.glb',          pos: [19.8, 0,-13.0],   rot: [0,-Math.PI/2,0], scale: 1.8 },
-    { file: 'living-room/bookcaseClosed.glb',        pos: [10.0, 0,-13.0],   rot: [0,Math.PI/2,0],  scale: 1.8 },
-    { file: 'living-room/books.glb',                 pos: [19.8,1.4,-12.8],  rot: [0,-Math.PI/2,0], scale: 1.5 },
-    { file: 'living-room/lampRoundFloor.glb',        pos: [19.5, 0, -7.8],   rot: [0,0,0],      scale: 1.6 },
-    { file: 'living-room/lampSquareTable.glb',       pos: [10.2,0.82,-9.5],  rot: [0,0,0],      scale: 1.3 },
-    { file: 'living-room/lampRoundTable.glb',        pos: [13.5,0.82,-8.5],  rot: [0,0,0],      scale: 1.3 },
-    { file: 'living-room/pottedPlant.glb',           pos: [ 9.5, 0, -7.5],   rot: [0,0.3,0],    scale: 1.6 },
-    { file: 'living-room/plantSmall1.glb',           pos: [19.8,1.4,-13.2],  rot: [0,0,0],      scale: 1.4 },
-    { file: 'living-room/laptop.glb',                pos: [14.0,0.85, -9.2], rot: [0,0.3,0],    scale: 1.4 },
-    { file: 'living-room/radio.glb',                 pos: [10.0,1.55,-13.0], rot: [0,Math.PI/2,0],  scale: 1.3 },
-    { file: 'living-room/pillow.glb',                pos: [12.5,0.85, -9.2], rot: [0,0.4,0],    scale: 1.4 },
-    { file: 'living-room/pillowBlue.glb',            pos: [17.0,0.85, -8.5], rot: [0,-0.5,0],   scale: 1.4 },
-    { file: 'living-room/pillowLong.glb',            pos: [14.8,0.85, -9.2], rot: [0,0,0],      scale: 1.3 },
-    { file: 'living-room/bear.glb',                  pos: [12.0,0.85, -9.2], rot: [0,0.5,0],    scale: 1.2 },
-    { file: 'living-room/rugDoormat.glb',            pos: [ 9.5,0.01, -9.0], rot: [0,0,0],      scale: 1.5 },
-    { file: 'living-room/coatRackStanding.glb',      pos: [ 9.5, 0,  -7.5],  rot: [0,-0.3,0],   scale: 1.6 },
-    { file: 'living-room/desk.glb',                  pos: [19.5, 0, -9.0],   rot: [0,-Math.PI/2,0], scale: 1.8 },
-    { file: 'living-room/lampSquareFloor.glb',       pos: [ 9.5, 0,-12.5],   rot: [0,0,0],      scale: 1.5 },
-  ],
-
-  bedroom: [
-    { file: 'living-room/bedDouble.glb',             pos: [-14.5, 0,-12.0],  rot: [0,0,0],      scale: 2.0 },
-    { file: 'living-room/cabinetBed.glb',            pos: [-11.5, 0,-12.0],  rot: [0,0,0],      scale: 1.6 },
-    { file: 'living-room/cabinetBedDrawer.glb',      pos: [-17.5, 0,-12.0],  rot: [0,Math.PI,0], scale: 1.6 },
-    { file: 'living-room/pillowBlue.glb',            pos: [-14.5,0.85,-11.2],rot: [0,0,0],      scale: 1.4 },
-    { file: 'living-room/pillow.glb',                pos: [-13.5,0.85,-11.2],rot: [0,0.1,0],    scale: 1.4 },
-    { file: 'living-room/pillowLong.glb',            pos: [-14.5,0.85,-11.8],rot: [0,0,0],      scale: 1.5 },
-    { file: 'living-room/bookcaseClosed.glb',        pos: [-19.0, 0, -8.5],  rot: [0,Math.PI/2,0],  scale: 1.8 },
-    { file: 'living-room/books.glb',                 pos: [-19.0,1.4, -8.3], rot: [0,Math.PI/2,0],  scale: 1.5 },
-    { file: 'living-room/lampRoundTable.glb',        pos: [-11.5,0.6,-12.0], rot: [0,0,0],      scale: 1.3 },
-    { file: 'living-room/lampRoundTable.glb',        pos: [-17.5,0.6,-12.0], rot: [0,0,0],      scale: 1.3 },
-    { file: 'living-room/rugRectangle.glb',          pos: [-14.5,0.01,-10.5],rot: [0,0,0],      scale: 2.2 },
-    { file: 'living-room/chairModernCushion.glb',    pos: [-11.5, 0, -8.2],  rot: [0,-0.5,0],   scale: 1.6 },
-    { file: 'living-room/pottedPlant.glb',           pos: [-19.0, 0,-12.5],  rot: [0,0.3,0],    scale: 1.5 },
-    { file: 'living-room/coatRack.glb',              pos: [-10.0, 0, -8.5],  rot: [0,-0.3,0],   scale: 1.5 },
-    { file: 'living-room/laptop.glb',                pos: [-11.5,0.68,-12.0],rot: [0,0.5,0],    scale: 1.4 },
-    { file: 'living-room/lampSquareFloor.glb',       pos: [-19.0, 0, -9.8],  rot: [0,0,0],      scale: 1.5 },
-    { file: 'living-room/bear.glb',                  pos: [-12.8,0.85,-11.2],rot: [0,-0.5,0],   scale: 1.2 },
-  ],
-
-  bathroom: [
-    { file: 'living-room/bathroomMirror.glb',        pos: [-14.0, 0,-24.5],  rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/bathroomSinkSquare.glb',    pos: [-14.0, 0,-24.5],  rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/bathroomCabinet.glb',       pos: [-12.0, 0,-24.8],  rot: [0,0.3,0],    scale: 1.8 },
-    { file: 'living-room/bathroomCabinetDrawer.glb', pos: [-16.0, 0,-24.8],  rot: [0,-0.3,0],   scale: 1.8 },
-    { file: 'living-room/bathtub.glb',               pos: [-17.5, 0,-22.5],  rot: [0,Math.PI/2,0],  scale: 1.8 },
-    { file: 'living-room/bench.glb',                 pos: [-14.0, 0,-22.5],  rot: [0,0,0],      scale: 1.6 },
-    { file: 'living-room/benchCushion.glb',          pos: [-14.0,0.42,-22.5],rot: [0,0,0],      scale: 1.6 },
-    { file: 'living-room/rugRound.glb',              pos: [-14.0,0.01,-22.5],rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/plantSmall2.glb',           pos: [-11.0, 0,-24.5],  rot: [0,0.4,0],    scale: 1.4 },
-    { file: 'living-room/lampSquareTable.glb',       pos: [-11.5,0.82,-22.5],rot: [0,0,0],      scale: 1.3 },
-  ],
-
-  office: [
-    { file: 'living-room/deskCorner.glb',            pos: [15.0, 0,-24.0],   rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/desk.glb',                  pos: [12.8, 0,-23.5],   rot: [0,Math.PI/2,0],  scale: 1.8 },
-    { file: 'living-room/chairDesk.glb',             pos: [15.0, 0,-22.5],   rot: [0,0,0],      scale: 1.8 },
-    { file: 'living-room/computerScreen.glb',        pos: [15.0,0.9,-24.0],  rot: [0,0,0],      scale: 1.5 },
-    { file: 'living-room/computerKeyboard.glb',      pos: [15.0,0.82,-23.5], rot: [0,0,0],      scale: 1.4 },
-    { file: 'living-room/computerMouse.glb',         pos: [15.5,0.82,-23.5], rot: [0,0,0],      scale: 1.4 },
-    { file: 'living-room/laptop.glb',                pos: [12.8,0.85,-23.5], rot: [0,Math.PI/2,0],  scale: 1.4 },
-    { file: 'living-room/bookcaseClosed.glb',        pos: [19.5, 0,-24.5],   rot: [0,-Math.PI/2,0], scale: 1.8 },
-    { file: 'living-room/bookcaseClosedWide.glb',    pos: [10.5, 0,-24.5],   rot: [0,Math.PI/2,0],  scale: 1.8 },
-    { file: 'living-room/books.glb',                 pos: [19.5,1.4,-24.3],  rot: [0,-Math.PI/2,0], scale: 1.5 },
-    { file: 'living-room/lampSquareCeiling.glb',     pos: [15.0,3.0,-23.5],  rot: [0,0,0],      scale: 1.6 },
-    { file: 'living-room/lampSquareTable.glb',       pos: [12.8,0.85,-23.0], rot: [0,Math.PI/2,0],  scale: 1.3 },
-    { file: 'living-room/rugRectangle.glb',          pos: [15.0,0.01,-23.0], rot: [0,0,0],      scale: 2.0 },
-    { file: 'living-room/plantSmall3.glb',           pos: [19.5, 0,-22.5],   rot: [0,0.5,0],    scale: 1.5 },
-    { file: 'living-room/cardboardBoxClosed.glb',    pos: [18.5, 0,-24.5],   rot: [0,0.3,0],    scale: 1.4 },
-    { file: 'living-room/coatRack.glb',              pos: [10.5, 0,-21.5],   rot: [0,-0.5,0],   scale: 1.5 },
-  ],
-};
 
 // setRoomVisible: with GLB house we just update ambient colour on room change
 function setRoomVisible(roomName, visible) {
@@ -1827,6 +1189,7 @@ function setBS(name, value) {
 
 // ── Lip Sync ────────────────────────────────────────────
 let lipSyncActive = false;
+let _isSpeaking   = false; // true while TTS audio is playing
 let lipRafId      = null;
 const MOUTH_BS    = ['A','I','U','E','O'];
 
@@ -3547,6 +2910,7 @@ document.addEventListener('touchstart', _unlockAudio, { once: true });
 
 // ── TTS ─────────────────────────────────────────────────
 async function speak(text, mood='neutral') {
+  _isSpeaking = true;
   setExpression(mood);
   setStageLight('speak', text.length * 65 + 2000);
 
@@ -3583,12 +2947,14 @@ async function speak(text, mood='neutral') {
       });
       stopLipSync();
       setExpression('neutral');
+      _isSpeaking = false;
       return;
     }
   } catch(_) {}
 
   await runLipSync(text);
   setExpression('neutral');
+  _isSpeaking = false;
 }
 
 function runLipSync(text) {
@@ -3668,6 +3034,7 @@ function startTopicPolling() {
 // ── Dead air timer (declared at top of file) ───────────
 
 async function _triggerProactive() {
+  if (_isSpeaking) return; // don't talk over herself
   try {
     setStatus('Thinking...', 'thinking');
     setCamMode('THINK');
@@ -3719,6 +3086,9 @@ async function sendMessage(message, displayName='Viewer') {
       user_id:      USER_ID,
       message,
       display_name: displayName,
+      // NOTE: chatHistory holds up to 20 entries for local context continuity,
+      // but we only send the last 6 to the API. This is intentional — it keeps
+      // token costs low while giving the model enough recent context.
       history:      chatHistory.slice(-6),
       system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
       current_room: _currentRoom,
@@ -3733,6 +3103,21 @@ async function sendMessage(message, displayName='Viewer') {
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify(body)
     });
+    if (res.status === 429) {
+      let retryMs = 5000;
+      try {
+        const errData = await res.json();
+        if (errData?.retry_after_ms) retryMs = errData.retry_after_ms;
+      } catch(_) {}
+      const fallback = `Hold on, I'm getting too many messages! Try again in ${Math.ceil(retryMs/1000)} seconds.`;
+      showBubble(fallback, 'Miss OG Tinz');
+      await speak(fallback, 'neutral');
+      setStatus('Ready ✦', 'ready');
+      setCamMode('IDLE');
+      sendBtn.disabled = false;
+      await new Promise(r => setTimeout(r, retryMs));
+      return;
+    }
     if (!res.ok) throw new Error('API error ' + res.status);
 
     const data = await res.json();
@@ -3827,13 +3212,13 @@ function initTwitchChat() {
     setStageLight('sub', 6000);
     doGesture('excited', 5000);
     const event = `${username} just subscribed! Omo thank you so much! Welcome to the family!`;
-    sendMessage(event, 'StreamEvent');
+    queueTwitchMessage('StreamEvent', event);
   });
 
   client.on('resub', (channel, username, months) => {
     setStageLight('sub', 5000);
     const event = `${username} has been here for ${months} months! ${months >= 6 ? 'A real OG!' : 'Thank you!'} We see you!`;
-    sendMessage(event, 'StreamEvent');
+    queueTwitchMessage('StreamEvent', event);
   });
 
   client.on('cheer', (channel, tags, message) => {
@@ -3841,21 +3226,21 @@ function initTwitchChat() {
     const bits     = tags.bits || '?';
     setStageLight('bits', 5000);
     const event = `${username} just sent ${bits} bits! Ayyyy thank you! The support is real!`;
-    sendMessage(event, 'StreamEvent');
+    queueTwitchMessage('StreamEvent', event);
   });
 
   client.on('raided', (channel, username, viewers) => {
     setStageLight('raid', 8000);
     doGesture('excited', 6000);
     const event = `We are being raided by ${username} with ${viewers} viewers! Welcome welcome welcome! Come in, come in!`;
-    sendMessage(event, 'StreamEvent');
+    queueTwitchMessage('StreamEvent', event);
   });
 
   client.on('subgift', (channel, username, streakMonths, recipient) => {
     setStageLight('sub', 4000);
     doGesture('wave', 2500);
     const event = `${username} just gifted a sub to ${recipient}! Omo that is so generous! Big love!`;
-    sendMessage(event, 'StreamEvent');
+    queueTwitchMessage('StreamEvent', event);
   });
 }
 
