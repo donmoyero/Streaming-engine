@@ -698,7 +698,7 @@ function getFamiliarActivityPool(roomName) {
   const base = {
     studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover','darts','basketball'],
     kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting'],
-    'living-room': ['idle','hairflick','hiponhip','stretch','sofaSit','phoneScroll','tvReact','dance'],
+    'living-room': ['idle','hairflick','hiponhip','stretch','sofaSit','phoneScroll','tvReact','dance','readBook'],
     bedroom:       ['idle','hairflick','noseCover','sofaSit','phoneScroll','stretch'],
     bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
     office:        ['idle','hairflick','noseCover','typing','monitor','stretch'],
@@ -706,7 +706,7 @@ function getFamiliarActivityPool(roomName) {
   const advanced = {
     studio:        ['darts','basketball','dance'],
     kitchen:       ['stirring','chopping','tasting'],
-    'living-room': ['tvReact','sofaSit','phoneScroll','dance'],
+    'living-room': ['tvReact','sofaSit','phoneScroll','dance','readBook'],
     bedroom:       ['sofaSit','phoneScroll'],
     bathroom:      ['mirrorPose'],
     office:        ['typing','monitor'],
@@ -861,29 +861,10 @@ function goToSpot(spot) {
 // Activities that try to set other facing values are ignored
 let _targetFacing = Math.PI;
 
-// ── Living room life loop ─────────────────────────────────────────
-// Cycles her through every living-room spot: Sofa → TV → Centre → Fireplace
-// _LR_SPOT_DWELL: seconds per spot. 90s = ~6 min total loop.
-// Set to a higher value (e.g. 300) for a slower tour once confirmed working.
-const _lrSpotOrder = ['Sofa', 'TV', 'Centre', 'Fireplace'];
-let   _lrSpotIdx   = 0;
-let   _lrSpotTimer = 0;
-const _LR_SPOT_DWELL = 90; // seconds per spot
-
 function lifeUpdate() {
+  // Room-walking disabled — avatar stays at (0,0,0) doing in-place activities.
+  // Calling famUpdate keeps the familiarity scores ticking for activity variety.
   famUpdate(1/60);
-
-  if (!vrm || walk.active) return; // don't interrupt a walk
-
-  _lrSpotTimer += 1/60;
-  if (_lrSpotTimer < _LR_SPOT_DWELL) return;
-
-  _lrSpotTimer = 0;
-  _lrSpotIdx   = (_lrSpotIdx + 1) % _lrSpotOrder.length;
-
-  const targetLabel = _lrSpotOrder[_lrSpotIdx];
-  const spot = HOUSE['living-room'].spots.find(s => s.label === targetLabel);
-  if (spot) goToSpot({ ...spot, room: 'living-room' });
 }
 
 // Animate room neon lights (very slow ambient breathing — not a flicker)
@@ -1206,6 +1187,60 @@ function setBS(name, value) {
   }
 }
 
+// ── Thought Bubbles — Sims-style internal monologue ─────────────
+// Fires randomly when she's not speaking, showing a brief thought
+// in the chat bubble UI. Room-aware content.
+const THOUGHT_BUBBLES = {
+  'living-room': [
+    "*stares at the TV* wait did they just—",
+    "ugh why is this rug never straight",
+    "I need to water that plant. I keep forgetting.",
+    "...is that a mark on the sofa?? when did that happen",
+    "*sighs* I should really reorganise this bookshelf",
+    "my phone is at 12% and the charger is allll the way over there",
+    "I wonder if chat is watching me right now lol",
+    "okay one more episode and then I'm being productive",
+  ],
+  kitchen: [
+    "this pot is NOT going to stir itself",
+    "abeg who used the last of the palm oil and didn't replace it",
+    "I should call my mum. I've been saying that for three days.",
+    "*sniffs* okay something smells amazing though",
+    "I need to write a shopping list. Mental note: write a shopping list.",
+    "plantain is ready. plantain is ALWAYS ready in this house.",
+    "I keep meaning to organise this spice rack",
+  ],
+  bedroom: [
+    "okay but this outfit is actually giving",
+    "I have too many pillows and I refuse to apologise",
+    "the diffuser is doing its thing, I'm at peace",
+    "*checks mirror* yeah we're going out tonight",
+  ],
+  studio: [
+    "chat is so quiet rn... hello?? is anyone there??",
+    "okay what should I talk about next",
+    "the ring light is giving me a headache ngl",
+    "I need to reorganise these Post-its, it's getting chaotic",
+    "okay one of these monitors has been flickering. noted.",
+  ],
+};
+
+let _thoughtTimer    = 0;
+let _thoughtInterval = 45 + Math.random() * 60; // 45–105s between thoughts
+
+function maybeShowThought(delta) {
+  if (_isSpeaking) { _thoughtTimer = 0; return; } // reset if she's talking
+  _thoughtTimer += delta;
+  if (_thoughtTimer < _thoughtInterval) return;
+
+  _thoughtTimer    = 0;
+  _thoughtInterval = 45 + Math.random() * 60;
+
+  const pool = THOUGHT_BUBBLES[_currentRoom] || THOUGHT_BUBBLES['studio'];
+  const thought = pool[Math.floor(Math.random() * pool.length)];
+  showBubble(thought, 'Miss OG Tinz', 4000);
+}
+
 // ── Lip Sync ────────────────────────────────────────────
 let lipSyncActive = false;
 let _isSpeaking   = false; // true while TTS audio is playing
@@ -1446,7 +1481,7 @@ const ACTIVITY = {
 const ACTIVITY_POOLS = {
   studio:        ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor', 'noseCover'],
   kitchen:       ['stirring', 'chopping', 'tasting', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
-  'living-room': ['sofaSit', 'tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'idle', 'dance', 'stretch'],
+  'living-room': ['sofaSit', 'tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'readBook', 'dance', 'stretch', 'idle'],
   office:        ['typing', 'monitor', 'stretch', 'hairflick', 'idle', 'noseCover'],
   beauty:        ['mirrorPose', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
   bedroom:       ['sofaSit', 'phoneScroll', 'stretch', 'hairflick', 'idle', 'noseCover'],
@@ -1591,6 +1626,104 @@ function activityUpdate(delta) {
         if (boneHips)      boneHips.rotation.z = 0.08; // hip pop
         setExpression('happy');
         setBS('O', 0);
+      }
+      break;
+    }
+
+    // ── IDLE — Sims-style: always doing something small ──────────
+    // Never just stands there. Cycles through: weight shift, nail check,
+    // phone glance, hair touch, look around, sigh. 12s loop.
+    case 'idle': {
+      const cycle = t % 12.0;
+
+      if (cycle < 2.5) {
+        // Weight shift — hip pops to one side, arms relax
+        const p = Math.min(cycle / 0.8, 1);
+        if (boneHips)      { boneHips.rotation.z = p * 0.12 + Math.sin(t * 0.4) * 0.02; }
+        if (boneSpine)     { boneSpine.rotation.z = -p * 0.06; }
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.88 + Math.sin(t * 0.5) * 0.03; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.82 + Math.sin(t * 0.4) * 0.03); }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.5;
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.5;
+        if (boneHead)      { boneHead.rotation.z = Math.sin(t * 0.3) * 0.04; }
+        setExpression('neutral');
+      } else if (cycle < 4.5) {
+        // Nail check — holds one hand up, tilts head, inspects
+        const p = Math.min((cycle - 2.5) / 0.6, 1);
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.5 - p * 0.2); boneRUpperArm.rotation.x = p * 0.35; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 + p * 0.25); boneRLowerArm.rotation.x = p * 0.1; }
+        if (boneRHand)     { boneRHand.rotation.z = -0.1; boneRHand.rotation.x = p * 0.2; }
+        if (boneHead)      { boneHead.rotation.x = p * 0.08; boneHead.rotation.z = p * 0.05; }
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.9;
+        setExpression('happy');
+        setBS('U', 0.06);
+      } else if (cycle < 6.5) {
+        // Look around the room — slow head scan, disinterested
+        const scan = Math.sin((cycle - 4.5) * 1.5);
+        if (boneHead)  { boneHead.rotation.y = scan * 0.22; boneHead.rotation.x = Math.sin(t * 0.3) * 0.04; }
+        if (boneSpine) { boneSpine.rotation.y = scan * 0.06; }
+        if (boneHips)  { boneHips.rotation.z = 0.1 + Math.sin(t * 0.5) * 0.02; }
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.88;
+        if (boneRUpperArm) boneRUpperArm.rotation.z = -0.82;
+        setExpression('neutral');
+        setBS('U', 0);
+      } else if (cycle < 8.5) {
+        // Phone glance — reaches to hip, checks phone briefly
+        const p = Math.min((cycle - 6.5) / 0.5, 1);
+        const put = cycle > 8.0 ? Math.min((cycle - 8.0) / 0.4, 1) : 0;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.82 - p * 0.3 + put * 0.3); boneRUpperArm.rotation.x = p * 0.25 - put * 0.25; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.5 + p * 0.3 - put * 0.3); }
+        if (boneRHand)     { boneRHand.rotation.x = p * 0.15 - put * 0.15; }
+        if (boneHead)      { boneHead.rotation.x = p * 0.18 - put * 0.18; boneHead.rotation.z = Math.sin(t * 0.4) * 0.03; }
+        setExpression(cycle > 7.2 ? 'happy' : 'neutral');
+        setBS('U', 0);
+      } else {
+        // Tiny sigh / reset — exhales, settles back to neutral
+        const p = (cycle - 8.5) / 3.5;
+        if (boneHips)      { boneHips.rotation.z = 0.1 - p * 0.04; }
+        if (boneChest)     { boneChest.rotation.x = Math.sin(t * 0.5) * 0.03; } // breathing sigh
+        if (boneLUpperArm) boneLUpperArm.rotation.z = 0.88 + Math.sin(t * 0.3) * 0.02;
+        if (boneRUpperArm) boneRUpperArm.rotation.z = -(0.82 + Math.sin(t * 0.3) * 0.02);
+        if (boneHead)      { boneHead.rotation.z = Math.sin(t * 0.35) * 0.03; boneHead.rotation.x = 0.02; }
+        setExpression('neutral');
+        setBS('U', 0.04 * Math.sin(t * 0.4)); // soft relaxed lips
+      }
+      break;
+    }
+
+    // ── READ BOOK (living room / bedroom) ────────────────────────
+    // She holds a book up, eyes down, turns pages occasionally.
+    // Head tilts with interest, occasional smile at something she read.
+    case 'readBook': {
+      const pageCycle = t % 18.0;
+
+      // Both arms raised holding book
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.55; boneLUpperArm.rotation.x = 0.35 + Math.sin(t * 0.2) * 0.02; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.55; boneRUpperArm.rotation.x = 0.35 + Math.sin(t * 0.2) * 0.02; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.65; boneLLowerArm.rotation.x = 0.1; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.65; boneRLowerArm.rotation.x = 0.1; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.15; boneLHand.rotation.x = 0.12; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.12; }
+
+      // Head: looking down at book with gentle bob
+      if (boneHead)  { boneHead.rotation.x = 0.28 + Math.sin(t * 0.25) * 0.03; boneHead.rotation.z = Math.sin(t * 0.18) * 0.04; }
+      if (boneSpine) { boneSpine.rotation.x = 0.06; boneSpine.rotation.z = Math.sin(t * 0.3) * 0.02; }
+      if (boneHips)  boneHips.rotation.z = 0.07 + Math.sin(t * 0.4) * 0.02;
+
+      if (pageCycle > 14.0 && pageCycle < 15.5) {
+        // Page turn — right hand briefly sweeps across
+        const p = Math.min((pageCycle - 14.0) / 0.8, 1);
+        const ret = pageCycle > 14.8 ? Math.min((pageCycle - 14.8) / 0.7, 1) : 0;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.55 - p * 0.3 + ret * 0.3); boneRUpperArm.rotation.y = p * 0.2 - ret * 0.2; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.65 - p * 0.35 + ret * 0.35); }
+        setExpression('neutral');
+      } else if (pageCycle > 8.0 && pageCycle < 11.0) {
+        // Smiles at something she read
+        setExpression('happy');
+        setBS('U', 0.08 + Math.sin(t * 0.6) * 0.04);
+      } else {
+        setExpression('neutral');
+        setBS('U', 0.04);
       }
       break;
     }
@@ -2732,6 +2865,9 @@ function render() {
 
   if (vrm) {
     idleTime   += delta;
+
+    // Sims-style thought bubbles
+    maybeShowThought(delta);
     blinkTimer += delta;
 
     // ── Activity system ────────────────────────────────
@@ -2877,10 +3013,38 @@ function render() {
 
     vrm.update(delta);
 
-    // ── Eye look-at — reads chat, looks at camera ────────
+    // ── Eye look-at — looks around the room naturally, not at camera ────────
     if (vrm.lookAt) {
-      vrm.lookAt.yaw   = Math.sin(idleTime * 0.22) * 6 + Math.sin(idleTime * 0.67) * 2;
-      vrm.lookAt.pitch = Math.sin(idleTime * 0.18) * 3 - 2;
+      if (_isSpeaking) {
+        // While speaking — slight camera engagement but with natural drift
+        vrm.lookAt.yaw   = Math.sin(idleTime * 0.3) * 8 + Math.sin(idleTime * 0.9) * 3;
+        vrm.lookAt.pitch = Math.sin(idleTime * 0.2) * 4 - 2;
+      } else {
+        // Not speaking — look around the room like a real person
+        // Slow drift to different "objects" in the room
+        const lookCycle = idleTime % 12.0;
+        if (lookCycle < 3.0) {
+          // Look left — at sofa/window
+          vrm.lookAt.yaw   = -18 + Math.sin(idleTime * 0.4) * 3;
+          vrm.lookAt.pitch = -2  + Math.sin(idleTime * 0.3) * 2;
+        } else if (lookCycle < 5.0) {
+          // Glance down — at phone/floor/hands
+          vrm.lookAt.yaw   = Math.sin(idleTime * 0.3) * 5;
+          vrm.lookAt.pitch = -12 + Math.sin(idleTime * 0.4) * 2;
+        } else if (lookCycle < 7.5) {
+          // Look right — at TV/wall
+          vrm.lookAt.yaw   = 15 + Math.sin(idleTime * 0.5) * 4;
+          vrm.lookAt.pitch = -1 + Math.sin(idleTime * 0.3) * 2;
+        } else if (lookCycle < 9.0) {
+          // Brief glance toward camera — like she remembered she's streaming
+          vrm.lookAt.yaw   = Math.sin(idleTime * 0.2) * 4;
+          vrm.lookAt.pitch = Math.sin(idleTime * 0.15) * 2 - 1;
+        } else {
+          // Look up/around — thinking, spacing out
+          vrm.lookAt.yaw   = Math.sin(idleTime * 0.6) * 10;
+          vrm.lookAt.pitch = 4 + Math.sin(idleTime * 0.4) * 3;
+        }
+      }
     }
 
     // ── Blink ─────────────────────────────────────────
@@ -3115,9 +3279,8 @@ async function sendMessage(message, displayName='Viewer') {
       // but we only send the last 6 to the API. This is intentional — it keeps
       // token costs low while giving the model enough recent context.
       history:      chatHistory.slice(-6),
-      system_hint:      'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
-      current_room:     _currentRoom,
-      current_activity: ACTIVITY.current,
+      system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
+      current_room: _currentRoom,
     };
     if (sceneSnapshot) {
       body.scene_image    = sceneSnapshot;   // base64 JPEG
