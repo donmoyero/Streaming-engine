@@ -666,61 +666,20 @@ _gltfLoader.load(
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
 
-    // ── Auto floor-finder ──────────────────────────────────────────
-    // Cast rays downward from a grid of candidate positions.
-    // Pick the candidate with a real floor hit AND the most open
-    // horizontal space around it (fewest wall hits in 4 directions).
-    // This means she always spawns in a real room, never a wall/hallway.
-    const _raycaster = new THREE.Raycaster();
-    const _down      = new THREE.Vector3(0, -1, 0);
+    // ── Find floor Y by single downward raycast at spawn X/Z ──────
+    // We know (-3, 0, -3) is in the living room from visual testing.
+    // Just cast straight down to find the exact floor surface Y.
+    _houseSpawnX = -3;
+    _houseSpawnZ = -3;
+
+    const _spawnRay = new THREE.Raycaster(
+      new THREE.Vector3(_houseSpawnX, 20, _houseSpawnZ),
+      new THREE.Vector3(0, -1, 0)
+    );
     const _houseMeshes = [];
     house.traverse(n => { if (n.isMesh) _houseMeshes.push(n); });
-
-    // Candidate grid: every 1 unit across the interior
-    const GRID_STEP = 1.0;
-    const SEARCH_R  = 6;   // search ±6 units from centre
-    let bestSpawn   = null;
-    let bestScore   = -1;
-
-    for (let gx = -SEARCH_R; gx <= SEARCH_R; gx += GRID_STEP) {
-      for (let gz = -SEARCH_R; gz <= SEARCH_R; gz += GRID_STEP) {
-        // Cast down from high up
-        _raycaster.set(new THREE.Vector3(gx, 20, gz), _down);
-        const hits = _raycaster.intersectObjects(_houseMeshes, false);
-        if (!hits.length) continue;
-        const floorY = hits[0].point.y;
-        if (floorY < -1) continue; // skip basement-level hits
-
-        // Score: count how many of 4 horizontal directions are open (no wall within 1.2m)
-        let openSides = 0;
-        const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
-        for (const [dx, dz] of DIRS) {
-          _raycaster.set(new THREE.Vector3(gx, floorY + 1.0, gz), new THREE.Vector3(dx, 0, dz));
-          _raycaster.far = 1.2;
-          const wHits = _raycaster.intersectObjects(_houseMeshes, false);
-          if (!wHits.length) openSides++;
-        }
-        _raycaster.far = Infinity; // reset
-
-        if (openSides > bestScore) {
-          bestScore = openSides;
-          bestSpawn = { x: gx, y: floorY, z: gz };
-        }
-      }
-    }
-
-    if (bestSpawn) {
-      _houseSpawnX = bestSpawn.x;
-      _houseSpawnZ = bestSpawn.z;
-      _houseFloorY = bestSpawn.y;
-      console.log(`[House] auto-spawn → (${bestSpawn.x.toFixed(2)}, ${bestSpawn.y.toFixed(2)}, ${bestSpawn.z.toFixed(2)})  openSides=${bestScore}`);
-    } else {
-      // Fallback: living room area which we know is visible
-      _houseSpawnX = -3;
-      _houseSpawnZ = -3;
-      _houseFloorY = 0;
-      console.warn('[House] floor-finder found no candidate, using fallback (-3, 0, -3)');
-    }
+    const _floorHits = _spawnRay.intersectObjects(_houseMeshes, false);
+    _houseFloorY = (_floorHits.length > 0) ? _floorHits[0].point.y : 0;
 
     // If the VRM is already loaded, reposition it now
     if (vrm) {
@@ -728,7 +687,7 @@ _gltfLoader.load(
       _snapCameraToVRM();
     }
 
-    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  span=${(rawSize.x*hScale).toFixed(1)}×${(rawSize.z*hScale).toFixed(1)}`);
+    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  spawn=(-3, ${_houseFloorY.toFixed(3)}, -3)`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
