@@ -564,14 +564,19 @@ function buildGameRoom() {
       cg.add(spoke);
     }
 
-    cg.position.set(0, 0.49, 0.62);
+    // Chair is NOT added to the desk group — desk group is raised to y=0.9
+    // but the chair needs to sit on the floor. We add it directly to scene.
     chairMesh = cg;
-    g.add(cg);
 
     // Position whole setup: slightly right of centre, pushed back
     g.position.set(0.6, 0.9, -1.6);
     g.rotation.y = -0.12; // slight angle so it reads well in 3/4 view
     scene.add(g);
+
+    // Chair: world-space position behind the desk, on the floor (y=0.44 = seat height)
+    cg.position.set(0.6, 0.44, -0.88); // world x matches desk, y = floor + half-seat height, z behind desk
+    cg.rotation.y = -0.12;             // same slight angle as the desk group
+    scene.add(cg);
 
     // Point light from desk LED strip
     const deskGlow = new THREE.PointLight(0xff2d78, 1.2, 4);
@@ -632,36 +637,130 @@ const _gltfLoader = new GLTFLoader();
 // ── Per-room prop definitions ──────────────────────────────────
 // Each entry: { file, pos:[x,y,z], rot:[x,y,z], scale }
 const ROOM_PROPS = {
+
+  // ── KITCHEN ─────────────────────────────────────────────────────────────────
+  // Appliances live in living-room/ folder (path fix from handover notes)
+  // Countertop dressing from kitchen/ folder
+  // Activity anchors: pot (stirring), cutting-board (chopping), cooking-spoon (tasting)
   kitchen: [
-    { file: 'kitchen/kitchenStove.glb',       pos: [-2.5, 0, -5.5], rot: [0, 0,    0], scale: 1.8 },
-    { file: 'kitchen/kitchenFridgeLarge.glb', pos: [-4.5, 0, -5.5], rot: [0, 0,    0], scale: 1.8 },
-    { file: 'kitchen/kitchenCabinet.glb',     pos: [ 0.5, 0, -6.0], rot: [0, 0,    0], scale: 1.8 },
-    { file: 'kitchen/kitchenSink.glb',        pos: [ 2.8, 0, -5.8], rot: [0, 0,    0], scale: 1.8 },
-    { file: 'kitchen/pot.glb',                pos: [-2.5, 1.05,-5.2],rot:[0,0,    0], scale: 1.2 },
-    { file: 'kitchen/frying-pan.glb',         pos: [-1.8, 1.05,-5.2],rot:[0,0.4,  0], scale: 1.2 },
-    { file: 'kitchen/cutting-board.glb',      pos: [ 1.0, 1.0, -5.5],rot:[0,-0.3, 0], scale: 1.0 },
-    { file: 'kitchen/tajine.glb',             pos: [ 0.2, 0.95,-5.5],rot:[0, 0.5, 0], scale: 1.0 },
+    // Big appliances — correct path: they live in living-room/ folder
+    { file: 'living-room/kitchenStove.glb',         pos: [-2.5, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/kitchenFridgeLarge.glb',   pos: [-4.8, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/kitchenCabinet.glb',       pos: [ 0.5, 0,    -6.8], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/kitchenSink.glb',          pos: [ 2.8, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/kitchenCabinetDrawer.glb', pos: [-1.0, 0,    -6.8], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/hoodLarge.glb',            pos: [-2.5, 2.2,  -6.8], rot: [0, 0,     0], scale: 1.8 },
+    // Countertop — activity anchors
+    { file: 'kitchen/pot.glb',                      pos: [-2.5, 1.05, -6.2], rot: [0, 0,     0], scale: 1.2 },
+    { file: 'kitchen/pot-lid.glb',                  pos: [-2.5, 1.22, -6.2], rot: [0, 0.3,   0], scale: 1.2 },
+    { file: 'kitchen/frying-pan.glb',               pos: [-1.7, 1.05, -6.2], rot: [0, 0.4,   0], scale: 1.2 },
+    { file: 'kitchen/cutting-board.glb',            pos: [ 1.0, 1.0,  -6.5], rot: [0,-0.3,   0], scale: 1.0 },
+    { file: 'kitchen/tajine.glb',                   pos: [ 0.2, 0.95, -6.5], rot: [0, 0.5,   0], scale: 1.0 },
+    { file: 'kitchen/tajine-lid.glb',               pos: [ 0.2, 1.18, -6.5], rot: [0, 0.5,   0], scale: 1.0 },
+    // Dressing — utensils and small items
+    { file: 'kitchen/knife-block.glb',              pos: [ 2.0, 1.0,  -6.4], rot: [0, 0.2,   0], scale: 1.0 },
+    { file: 'kitchen/cooking-spoon.glb',            pos: [-1.2, 1.0,  -6.5], rot: [0,-0.4,   0], scale: 1.0 },
+    { file: 'kitchen/whisk.glb',                    pos: [-0.9, 1.0,  -6.5], rot: [0, 0.3,   0], scale: 1.0 },
+    { file: 'kitchen/shaker-salt.glb',              pos: [ 0.6, 1.0,  -6.4], rot: [0, 0,     0], scale: 1.0 },
+    { file: 'kitchen/shaker-pepper.glb',            pos: [ 0.75,1.0,  -6.4], rot: [0, 0,     0], scale: 1.0 },
+    { file: 'kitchen/cup-coffee.glb',               pos: [ 3.2, 1.0,  -6.2], rot: [0,-0.5,   0], scale: 1.0 },
+    { file: 'kitchen/bowl.glb',                     pos: [ 1.6, 1.0,  -6.5], rot: [0, 0,     0], scale: 1.0 },
+    { file: 'kitchen/rollingPin.glb',               pos: [ 2.4, 1.0,  -6.4], rot: [0, 0.6,   0], scale: 1.0 },
+    // Food scatter — makes it look like she's mid-cook
+    { file: 'kitchen/tomato.glb',                   pos: [ 0.9, 1.0,  -6.4], rot: [0, 0,     0], scale: 0.8 },
+    { file: 'kitchen/carrot.glb',                   pos: [ 1.1, 1.0,  -6.35],rot: [0, 0.8,   0], scale: 0.8 },
+    { file: 'kitchen/egg.glb',                      pos: [-0.6, 1.0,  -6.5], rot: [0, 0.2,   0], scale: 0.8 },
+    { file: 'kitchen/bread.glb',                    pos: [ 3.4, 1.0,  -6.3], rot: [0,-0.3,   0], scale: 0.9 },
+    { file: 'kitchen/steamer.glb',                  pos: [-3.2, 1.05, -6.2], rot: [0, 0,     0], scale: 1.0 },
   ],
+
+  // ── LIVING ROOM ──────────────────────────────────────────────────────────────
+  // Full lounge layout: sofa zone, TV wall, reading corner, plant corner
+  // Activity anchors: sofa-long (sitting), cabinetTelevision (TV react)
   'living-room': [
-    { file: 'living-room/loungeSofaLong.glb',     pos: [-1.5, 0, -4.5], rot: [0, 0,    0], scale: 1.8 },
-    { file: 'living-room/cabinetTelevision.glb',  pos: [ 0.0, 0, -7.0], rot: [0, 0,    0], scale: 2.0 },
-    { file: 'living-room/rugRectangle.glb',       pos: [-1.5, 0.01,-5.5],rot:[0,0,   0], scale: 2.5 },
-    { file: 'living-room/lampRoundFloor.glb',     pos: [ 3.0, 0, -4.5], rot: [0, 0,    0], scale: 1.6 },
-    { file: 'living-room/pottedPlant.glb',        pos: [-4.5, 0, -6.0], rot: [0, 0.3,  0], scale: 1.5 },
-    { file: 'living-room/bookcaseOpen.glb',       pos: [ 4.5, 0, -6.5], rot: [0,-0.15, 0], scale: 1.8 },
-    { file: 'living-room/loungeSofaCorner.glb',   pos: [ 2.5, 0, -4.5], rot: [0,-1.57, 0], scale: 1.8 },
-    { file: 'living-room/lampSquareTable.glb',    pos: [-3.8, 0, -4.5], rot: [0, 0,    0], scale: 1.5 },
+    // Structural furniture
+    { file: 'living-room/loungeSofaLong.glb',       pos: [-1.5, 0,    -5.5], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/loungeSofaCorner.glb',     pos: [ 2.5, 0,    -5.0], rot: [0,-1.57,  0], scale: 1.8 },
+    { file: 'living-room/loungeChairRelax.glb',     pos: [-4.5, 0,    -5.5], rot: [0, 0.4,   0], scale: 1.8 },
+    { file: 'living-room/cabinetTelevision.glb',    pos: [ 0.0, 0,    -7.5], rot: [0, 0,     0], scale: 2.0 },
+    { file: 'living-room/rugRectangle.glb',         pos: [-0.5, 0.01, -5.8], rot: [0, 0,     0], scale: 2.8 },
+    { file: 'living-room/desk.glb',                 pos: [ 3.8, 0,    -6.5], rot: [0,-1.57,  0], scale: 1.8 },
+    // Shelving and storage
+    { file: 'living-room/bookcaseOpen.glb',         pos: [ 5.5, 0,    -7.0], rot: [0,-1.57,  0], scale: 1.8 },
+    { file: 'living-room/bookcaseClosed.glb',       pos: [-6.0, 0,    -7.0], rot: [0, 1.57,  0], scale: 1.8 },
+    { file: 'living-room/books.glb',                pos: [ 5.5, 1.4,  -6.8], rot: [0,-1.57,  0], scale: 1.5 },
+    // Lighting
+    { file: 'living-room/lampRoundFloor.glb',       pos: [ 4.2, 0,    -4.5], rot: [0, 0,     0], scale: 1.6 },
+    { file: 'living-room/lampSquareTable.glb',      pos: [-4.2, 0.82, -5.5], rot: [0, 0,     0], scale: 1.3 },
+    { file: 'living-room/lampRoundTable.glb',       pos: [ 3.8, 0.82, -6.5], rot: [0, 0,     0], scale: 1.3 },
+    // Plants and decor
+    { file: 'living-room/pottedPlant.glb',          pos: [-5.5, 0,    -6.5], rot: [0, 0.3,   0], scale: 1.6 },
+    { file: 'living-room/plantSmall1.glb',          pos: [ 5.5, 1.4,  -7.0], rot: [0, 0,     0], scale: 1.4 },
+    { file: 'living-room/plantSmall2.glb',          pos: [-5.8, 0,    -5.0], rot: [0, 1.0,   0], scale: 1.4 },
+    // Tech items — laptop on sofa arm, radio on shelf
+    { file: 'living-room/laptop.glb',               pos: [-0.8, 0.85, -5.3], rot: [0, 0.3,   0], scale: 1.4 },
+    { file: 'living-room/radio.glb',                pos: [-5.8, 1.55, -7.0], rot: [0, 1.57,  0], scale: 1.3 },
+    { file: 'living-room/computerScreen.glb',       pos: [ 3.8, 0.9,  -6.5], rot: [0,-1.57,  0], scale: 1.4 },
+    { file: 'living-room/computerKeyboard.glb',     pos: [ 3.8, 0.82, -6.1], rot: [0,-1.57,  0], scale: 1.3 },
+    // Soft furnishings — pillows on sofa, bear character detail
+    { file: 'living-room/pillow.glb',               pos: [-2.2, 0.85, -5.3], rot: [0, 0.4,   0], scale: 1.4 },
+    { file: 'living-room/pillowBlue.glb',           pos: [ 1.5, 0.85, -4.8], rot: [0,-0.5,   0], scale: 1.4 },
+    { file: 'living-room/pillowLong.glb',           pos: [-0.3, 0.85, -5.3], rot: [0, 0,     0], scale: 1.3 },
+    { file: 'living-room/bear.glb',                 pos: [-3.0, 0.85, -5.3], rot: [0, 0.5,   0], scale: 1.2 },
+    // Rug by door, coat rack
+    { file: 'living-room/rugDoormat.glb',           pos: [ 0.0, 0.01,  0.0], rot: [0, 0,     0], scale: 1.5 },
+    { file: 'living-room/coatRackStanding.glb',     pos: [ 5.5, 0,     0.5], rot: [0,-0.3,   0], scale: 1.6 },
+  ],
+
+  // ── OFFICE ──────────────────────────────────────────────────────────────────
+  // A proper work corner: L-desk, computer, bookcase, coat rack
+  // Activity anchors: desk (typing/reading), bookcase (browsing)
+  office: [
+    { file: 'living-room/deskCorner.glb',           pos: [ 0.0, 0,    -6.0], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/desk.glb',                 pos: [-2.2, 0,    -5.5], rot: [0, 1.57,  0], scale: 1.8 },
+    { file: 'living-room/chairDesk.glb',            pos: [ 0.2, 0,    -4.8], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/computerScreen.glb',       pos: [ 0.0, 0.9,  -6.0], rot: [0, 0,     0], scale: 1.5 },
+    { file: 'living-room/computerKeyboard.glb',     pos: [ 0.0, 0.82, -5.5], rot: [0, 0,     0], scale: 1.4 },
+    { file: 'living-room/computerMouse.glb',        pos: [ 0.5, 0.82, -5.5], rot: [0, 0,     0], scale: 1.4 },
+    { file: 'living-room/laptop.glb',               pos: [-2.2, 0.85, -5.5], rot: [0, 1.57,  0], scale: 1.4 },
+    { file: 'living-room/bookcaseClosed.glb',       pos: [ 4.5, 0,    -7.0], rot: [0,-1.57,  0], scale: 1.8 },
+    { file: 'living-room/bookcaseClosedWide.glb',   pos: [-5.0, 0,    -7.0], rot: [0, 1.57,  0], scale: 1.8 },
+    { file: 'living-room/books.glb',                pos: [ 4.5, 1.4,  -6.8], rot: [0,-1.57,  0], scale: 1.5 },
+    { file: 'living-room/lampSquareCeiling.glb',    pos: [ 0.0, 3.5,  -5.5], rot: [0, 0,     0], scale: 1.6 },
+    { file: 'living-room/lampSquareTable.glb',      pos: [-2.2, 0.85, -5.0], rot: [0, 1.57,  0], scale: 1.3 },
+    { file: 'living-room/coatRack.glb',             pos: [ 5.5, 0,     0.0], rot: [0,-0.5,   0], scale: 1.5 },
+    { file: 'living-room/rugRectangle.glb',         pos: [ 0.0, 0.01, -5.5], rot: [0, 0,     0], scale: 2.0 },
+    { file: 'living-room/plantSmall3.glb',          pos: [ 5.0, 0,    -6.5], rot: [0, 0.5,   0], scale: 1.5 },
+    { file: 'living-room/cardboardBoxClosed.glb',   pos: [ 3.5, 0,    -6.8], rot: [0, 0.3,   0], scale: 1.4 },
+    { file: 'living-room/radio.glb',                pos: [-5.0, 1.55, -7.0], rot: [0, 1.57,  0], scale: 1.3 },
+  ],
+
+  // ── BEAUTY ───────────────────────────────────────────────────────────────────
+  // Vanity corner: bathroom mirror, cabinet, sink unit, ring light from studio
+  // Activity anchors: bathroomMirror (doing makeup), bathroomSink (skincare)
+  beauty: [
+    { file: 'living-room/bathroomMirror.glb',       pos: [ 0.0, 0,    -6.5], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/bathroomCabinet.glb',      pos: [-2.0, 0,    -6.8], rot: [0, 0.3,   0], scale: 1.8 },
+    { file: 'living-room/bathroomCabinetDrawer.glb',pos: [ 2.0, 0,    -6.8], rot: [0,-0.3,   0], scale: 1.8 },
+    { file: 'living-room/bathroomSinkSquare.glb',   pos: [ 0.0, 0,    -6.8], rot: [0, 0,     0], scale: 1.8 },
+    { file: 'living-room/bench.glb',                pos: [ 0.0, 0,    -5.0], rot: [0, 0,     0], scale: 1.6 },
+    { file: 'living-room/benchCushion.glb',         pos: [ 0.0, 0.42, -5.0], rot: [0, 0,     0], scale: 1.6 },
+    { file: 'living-room/lampSquareTable.glb',      pos: [-3.0, 0,    -5.5], rot: [0, 0.5,   0], scale: 1.5 },
+    { file: 'living-room/rugRound.glb',             pos: [ 0.0, 0.01, -5.8], rot: [0, 0,     0], scale: 2.0 },
+    { file: 'living-room/plantSmall1.glb',          pos: [ 3.5, 0,    -6.5], rot: [0,-0.8,   0], scale: 1.4 },
+    { file: 'living-room/pottedPlant.glb',          pos: [-4.0, 0,    -6.5], rot: [0, 0.4,   0], scale: 1.4 },
+    { file: 'living-room/pillow.glb',               pos: [ 0.0, 0.5,  -5.0], rot: [0, 0,     0], scale: 1.3 },
   ],
 };
 
 // ── Room waypoints — where she stands in each room ────────────
 // These extend the existing WAYPOINTS object (added after it's declared below)
 const ROOM_WAYPOINT_DEFS = {
-  studio:       { x:  0.6, z: -1.2 }, // streaming desk — already 'desk'
-  kitchen:      { x: -1.5, z: -4.0 },
-  'living-room':{ x: -0.5, z: -3.5 },
-  office:       { x:  0.6, z: -1.2 }, // reuse studio for now
-  beauty:       { x:  0.6, z: -1.2 }, // reuse studio for now
+  studio:       { x:  0.6, z: -1.2 }, // streaming desk
+  kitchen:      { x: -1.5, z: -4.8 }, // centre of kitchen counter
+  'living-room':{ x: -0.5, z: -4.2 }, // in front of sofa
+  office:       { x:  0.2, z: -5.0 }, // in front of the L-desk
+  beauty:       { x:  0.0, z: -4.5 }, // in front of the vanity mirror/bench
 };
 
 // ── State ────────────────────────────────────────────────────
@@ -945,18 +1044,30 @@ let _lastWaypointActivity = '';
 
 // All the spots she might drift to organically
 const WANDER_SPOTS = [
-  // studio
-  { room: 'studio',      x:  0.6, z: -1.2, label: 'Desk'        },
-  { room: 'studio',      x:  0.0, z:  0.0, label: 'Centre'      },
-  { room: 'studio',      x: -5.2, z:  0.5, label: 'Bean Bags'   },
-  { room: 'studio',      x: -4.5, z: -1.0, label: 'Dartboard'   },
-  { room: 'studio',      x:  4.0, z: -0.8, label: 'Basketball'  },
-  // kitchen
-  { room: 'kitchen',     x: -2.0, z: -4.0, label: 'Stove'       },
-  { room: 'kitchen',     x:  1.0, z: -4.5, label: 'Counter'     },
-  // living room
-  { room: 'living-room', x: -0.5, z: -3.5, label: 'Sofa'        },
-  { room: 'living-room', x:  1.5, z: -4.5, label: 'TV Area'     },
+  // ── Studio ──
+  { room: 'studio',      x:  0.6, z: -1.2, label: 'Desk'          },
+  { room: 'studio',      x:  0.0, z:  0.0, label: 'Centre Stage'  },
+  { room: 'studio',      x: -5.2, z:  0.5, label: 'Bean Bags'     },
+  { room: 'studio',      x: -4.5, z: -1.0, label: 'Dartboard'     },
+  { room: 'studio',      x:  4.0, z: -0.8, label: 'Basketball'    },
+  { room: 'studio',      x: -4.5, z: -3.2, label: 'Foosball'      },
+  { room: 'studio',      x:  3.5, z: -4.5, label: 'Trophy Shelf'  },
+  // ── Kitchen ──
+  { room: 'kitchen',     x: -2.0, z: -5.0, label: 'Stove'         },
+  { room: 'kitchen',     x:  1.0, z: -5.2, label: 'Counter'       },
+  { room: 'kitchen',     x:  2.8, z: -5.0, label: 'Sink'          },
+  { room: 'kitchen',     x: -4.0, z: -5.0, label: 'Fridge'        },
+  // ── Living Room ──
+  { room: 'living-room', x: -1.5, z: -4.5, label: 'Sofa'          },
+  { room: 'living-room', x:  2.5, z: -4.5, label: 'Corner Sofa'   },
+  { room: 'living-room', x:  0.0, z: -5.5, label: 'TV Area'       },
+  { room: 'living-room', x: -4.5, z: -4.8, label: 'Reading Chair' },
+  // ── Office ──
+  { room: 'office',      x:  0.2, z: -5.0, label: 'Desk'          },
+  { room: 'office',      x:  4.0, z: -5.5, label: 'Bookcase'      },
+  // ── Beauty ──
+  { room: 'beauty',      x:  0.0, z: -4.5, label: 'Vanity'        },
+  { room: 'beauty',      x: -2.0, z: -5.0, label: 'Cabinet'       },
 ];
 
 function roamUpdate() {
@@ -1410,12 +1521,21 @@ const ACTIVITY = {
   phase:     0,        // time accumulator within current activity
 };
 
-// Activities pool — picked randomly, no repeats back-to-back
-const ACTIVITY_POOL = ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor', 'noseCover'];
+// Activities per room — she only does activities that fit where she is
+const ACTIVITY_POOLS = {
+  studio:        ['darts', 'basketball', 'dance', 'stretch', 'hairflick', 'hiponhip', 'idle', 'typing', 'monitor', 'noseCover'],
+  kitchen:       ['stirring', 'chopping', 'tasting', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
+  'living-room': ['sofaSit', 'tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'idle', 'dance', 'stretch'],
+  office:        ['typing', 'monitor', 'stretch', 'hairflick', 'idle', 'noseCover'],
+  beauty:        ['mirrorPose', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
+};
+// Fallback pool when room has no specific entry
+const ACTIVITY_POOL = ACTIVITY_POOLS.studio;
 let _lastActivity = 'idle';
 
 function activityPickNext() {
-  const choices = ACTIVITY_POOL.filter(a => a !== _lastActivity);
+  const pool = ACTIVITY_POOLS[_currentRoom] || ACTIVITY_POOL;
+  const choices = pool.filter(a => a !== _lastActivity);
   const next    = choices[Math.floor(Math.random() * choices.length)];
   _lastActivity        = next;
   ACTIVITY.current     = next;
@@ -1893,6 +2013,304 @@ function activityUpdate(delta) {
         if (boneSpine) boneSpine.rotation.z = -0.06 + ep * 0.06;
         setExpression('neutral');
         setBS('I', 0.18 - ep * 0.18);
+      }
+      break;
+    }
+
+    // ── STIRRING THE POT (kitchen) ───────────────────────────────
+    // She leans slightly forward over the stove, right arm makes
+    // slow clockwise circles as if stirring a pot. Left hand rests.
+    // Head tilts down to watch. Occasional satisfied expression.
+    case 'stirring': {
+      const cycle = t % 2.2; // one stir revolution = 2.2s
+      const ang   = (t / 2.2) * Math.PI * 2; // continuous angle
+      const stirX = Math.sin(ang) * 0.18;
+      const stirZ = Math.cos(ang) * 0.18;
+      const leanIn = 0.12 + Math.sin(t * 0.4) * 0.02;
+
+      // Body leans toward stove
+      if (boneSpine) { boneSpine.rotation.x = leanIn; boneSpine.rotation.z = Math.sin(t * 0.3) * 0.02; }
+      if (boneChest) boneChest.rotation.x = 0.06;
+      if (boneHead)  { boneHead.rotation.x = 0.2; boneHead.rotation.z = Math.sin(t * 0.5) * 0.03; } // watching pot
+
+      // Right arm: circular stirring motion
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.7; boneRUpperArm.rotation.x = 0.55 + stirX * 0.3; boneRUpperArm.rotation.y = stirZ * 0.2; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = 0.3 + Math.abs(stirX) * 0.15; }
+      if (boneRHand)     { boneRHand.rotation.x = -0.15 + stirX * 0.2; boneRHand.rotation.z = -0.12 + stirZ * 0.12; }
+
+      // Left hand: resting on counter edge, relaxed
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.65; boneLUpperArm.rotation.x = 0.3; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.4; boneLLowerArm.rotation.x = 0.2; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.08; }
+
+      if (boneHips) boneHips.rotation.z = 0.06 + Math.sin(t * 0.7) * 0.03;
+
+      // Occasional reaction — smells good, slight satisfied expression
+      if (t % 5.5 < 1.2) setExpression('happy');
+      else setExpression('neutral');
+      setBS('O', Math.sin(t * 0.8) * 0.04 + 0.02); // mouth slightly open in concentration
+      break;
+    }
+
+    // ── CHOPPING (kitchen) ────────────────────────────────────────
+    // Right arm makes sharp downward chop motions over the cutting board.
+    // Body has rhythm, head watches the board, left hand holds the food.
+    case 'chopping': {
+      const cycle = t % 0.7; // chop rhythm
+      const chop  = Math.max(0, Math.sin((cycle / 0.7) * Math.PI * 2)); // 0–1 chop pulse
+      const isDown = cycle < 0.35;
+
+      // Lean over the board
+      if (boneSpine) { boneSpine.rotation.x = 0.16 + chop * 0.04; boneSpine.rotation.z = Math.sin(t * 0.3) * 0.02; }
+      if (boneHead)  { boneHead.rotation.x = 0.22; }
+
+      // Right arm: sharp chop — fast down, slower raise
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.65; boneRUpperArm.rotation.x = 0.35 + (isDown ? chop * 0.55 : 0.3 - chop * 0.3); }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3; boneRLowerArm.rotation.x = 0.2 + (isDown ? chop * 0.45 : 0.2); }
+      if (boneRHand)     { boneRHand.rotation.x = -0.1 + chop * 0.1; boneRHand.rotation.z = -0.18; } // gripping knife
+
+      // Left hand: holding the food, slight protective curl inward
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.6; boneLUpperArm.rotation.x = 0.45; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.38; boneLLowerArm.rotation.x = 0.3; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.25; boneLHand.rotation.x = -0.15; boneLHand.rotation.y = 0.1; } // claw grip
+
+      if (boneHips) boneHips.rotation.z = 0.05 + Math.sin(t * 1.4) * 0.025; // weight shifts with rhythm
+
+      setExpression('neutral');
+      setBS('I', 0.06); // focused lip press
+      break;
+    }
+
+    // ── TASTING FROM SPOON (kitchen) ──────────────────────────────
+    // Picks up the cooking spoon, brings it to her mouth for a taste.
+    // Reacts — either approves (happy) or thinks it needs something (hmm).
+    case 'tasting': {
+      const cycle = t % 6.0;
+      if (cycle < 0.8) {
+        // Reach for the spoon
+        const p = cycle / 0.8;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.9 + p * 0.35; boneRUpperArm.rotation.x = p * 0.3; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3; boneRLowerArm.rotation.x = p * 0.25; }
+        if (boneHead)      boneHead.rotation.x = p * 0.08;
+        setExpression('neutral');
+      } else if (cycle < 1.8) {
+        // Bring spoon to mouth — arm rises, head tips forward
+        const p = (cycle - 0.8) / 1.0;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.55 + p * 0.1; boneRUpperArm.rotation.x = 0.3 + p * 0.35; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3 - p * 0.1; boneRLowerArm.rotation.x = 0.25 + p * 0.2; }
+        if (boneRHand)     { boneRHand.rotation.x = -p * 0.2; }
+        if (boneHead)      { boneHead.rotation.x = 0.08 + p * 0.1; boneHead.rotation.z = p * 0.03; }
+        if (boneHips)      boneHips.rotation.z = p * 0.05;
+        setExpression('neutral');
+      } else if (cycle < 2.5) {
+        // TASTE — mouth opens, little reaction
+        const p = (cycle - 1.8) / 0.7;
+        setExpression(p > 0.4 ? 'happy' : 'neutral');
+        setBS('O', Math.sin(p * Math.PI) * 0.35); // mouth opens for tasting
+        if (boneHead) boneHead.rotation.x = 0.18 + Math.sin(p * Math.PI) * 0.04;
+      } else if (cycle < 4.2) {
+        // React and consider — she nods or tilts head like "hmm that's good"
+        const react = cycle - 2.5;
+        setExpression('happy');
+        setBS('O', 0);
+        if (boneHead) { boneHead.rotation.x = 0.1 + Math.sin(react * 1.5) * 0.06; boneHead.rotation.y = Math.sin(react * 0.8) * 0.06; }
+        if (boneHips) boneHips.rotation.z = 0.08 + Math.sin(react * 0.9) * 0.03;
+        setBS('I', Math.sin(react * 1.2) * 0.08 + 0.04); // little satisfied smirk
+      } else {
+        // Put spoon back, return to normal stance
+        const p = (cycle - 4.2) / 1.8;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45 - p * 0.55; boneRUpperArm.rotation.x = 0.65 - p * 0.6; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.4 - p * 0.05; boneRLowerArm.rotation.x = 0.45 - p * 0.4; }
+        if (boneHead)      boneHead.rotation.x = 0.1 - p * 0.1;
+        if (boneHips)      boneHips.rotation.z = 0.08 - p * 0.08;
+        setExpression('neutral');
+        setBS('I', 0);
+      }
+      break;
+    }
+
+    // ── SOFA SIT (living room) ────────────────────────────────────
+    // She sinks onto the sofa — hips lower, legs bend forward,
+    // leans back with one arm over the armrest. Looks relaxed.
+    case 'sofaSit': {
+      const settle = Math.min(ACTIVITY.phase / 1.2, 1.0); // ease into seated in 1.2s
+      const ease = 3*settle*settle - 2*settle*settle*settle;
+      const bob   = Math.sin(t * 0.9) * 0.025;
+
+      // Lower hips to seated height
+      if (vrm) vrm.scene.position.y = -ease * 0.38; // sink down
+      if (boneHips)       { boneHips.rotation.x = ease * 0.35; boneHips.rotation.z = ease * 0.08 + bob; }
+      if (boneSpine)      { boneSpine.rotation.x = ease * 0.08; boneSpine.rotation.z = -ease * 0.04 + bob * 0.4; }
+      if (boneChest)      boneChest.rotation.x = ease * 0.05;
+
+      // Legs bent forward in seat
+      if (boneLUpperLeg)  { boneLUpperLeg.rotation.x = ease * 0.9; boneLUpperLeg.rotation.z = ease * 0.1; }
+      if (boneRUpperLeg)  { boneRUpperLeg.rotation.x = ease * 0.9; boneRUpperLeg.rotation.z = -ease * 0.06; }
+      if (boneLLowerLeg)  boneLLowerLeg.rotation.x = -ease * 1.0;
+      if (boneRLowerLeg)  boneRLowerLeg.rotation.x = -ease * 1.0;
+      if (boneLFoot)      boneLFoot.rotation.x = -0.05 - ease * 0.1;
+      if (boneRFoot)      boneRFoot.rotation.x = -0.05 - ease * 0.1;
+
+      // Right arm rests on armrest — casual
+      if (boneRUpperArm)  { boneRUpperArm.rotation.z = -(0.85 + ease * 0.15); boneRUpperArm.rotation.x = ease * 0.12 + bob * 0.3; }
+      if (boneRLowerArm)  { boneRLowerArm.rotation.z = -(0.4 + ease * 0.1); }
+      if (boneRHand)      { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.05; }
+
+      // Left arm: casual across lap or in air
+      if (boneLUpperArm)  { boneLUpperArm.rotation.z = 0.72 + ease * 0.1 + Math.sin(t * 0.6) * 0.03; boneLUpperArm.rotation.x = ease * 0.1; }
+      if (boneLLowerArm)  boneLLowerArm.rotation.z = 0.5 + Math.sin(t * 0.4) * 0.04;
+      if (boneLHand)      { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.06; }
+
+      // Head: slight backward tilt, relaxed
+      if (boneHead)       { boneHead.rotation.x = -ease * 0.04 + bob * 0.5; boneHead.rotation.z = Math.sin(t * 0.5) * 0.03; }
+
+      setExpression('happy');
+      setBS('U', 0.08 * ease); // soft relaxed lips
+
+      // When leaving sofaSit, reset position
+      if (ACTIVITY.timer > ACTIVITY.duration - 0.5) {
+        const fadeOut = 1 - ((ACTIVITY.duration - ACTIVITY.timer) / 0.5);
+        if (vrm) vrm.scene.position.y = -0.38 + fadeOut * 0.38;
+      }
+      break;
+    }
+
+    // ── TV REACT (living room) ────────────────────────────────────
+    // She faces the TV cabinet, watches it, reacts — point, gasp, laugh.
+    // Head turns toward TV, body shifts. Multiple reaction phases.
+    case 'tvReact': {
+      const cycle = t % 8.0;
+
+      // Always slightly facing TV (rotate body a little toward -7.5z TV wall)
+      if (boneSpine) boneSpine.rotation.y = -0.12 + Math.sin(t * 0.4) * 0.03;
+      if (boneHead)  boneHead.rotation.y  = -0.22 + Math.sin(t * 0.5) * 0.04;
+
+      if (cycle < 2.0) {
+        // Just watching — slight lean, arms relaxed
+        if (boneHips)       boneHips.rotation.z = 0.07;
+        if (boneLUpperArm)  { boneLUpperArm.rotation.z = 0.85; boneLUpperArm.rotation.x = 0.08; }
+        if (boneRUpperArm)  { boneRUpperArm.rotation.z = -0.85; boneRUpperArm.rotation.x = 0.08; }
+        setExpression('neutral');
+      } else if (cycle < 3.5) {
+        // REACT — something happens on TV — point and lean forward
+        const p = Math.min((cycle - 2.0) / 0.6, 1);
+        if (boneLUpperArm)  { boneLUpperArm.rotation.z = 0.85 - p * 0.6; boneLUpperArm.rotation.x = p * 0.45; boneLUpperArm.rotation.y = -p * 0.2; }
+        if (boneLLowerArm)  { boneLLowerArm.rotation.z = 0.5 - p * 0.3; boneLLowerArm.rotation.x = p * 0.15; }
+        if (boneLHand)      { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = p * 0.1; }
+        if (boneSpine)      boneSpine.rotation.x = p * 0.08;
+        if (boneHead)       { boneHead.rotation.x = p * 0.06; boneHead.rotation.y = -0.22 - p * 0.06; }
+        setExpression('surprised');
+        setBS('O', p * 0.35);
+        if (boneHips) boneHips.rotation.z = 0.07 + p * 0.04;
+      } else if (cycle < 5.5) {
+        // LAUGH / enjoy — hip pop, clap energy, big smile
+        const laugh = cycle - 3.5;
+        if (boneHips)       { boneHips.rotation.z = 0.11 + Math.sin(laugh * 4) * 0.04; boneHips.rotation.x = 0.04; }
+        if (boneSpine)      { boneSpine.rotation.z = -0.05 + Math.sin(laugh * 4) * 0.03; boneSpine.rotation.x = 0.04; }
+        if (boneLUpperArm)  { boneLUpperArm.rotation.z = 0.75 + Math.sin(laugh * 4) * 0.12; boneLUpperArm.rotation.x = 0.15; }
+        if (boneRUpperArm)  { boneRUpperArm.rotation.z = -(0.75 + Math.sin(laugh * 4 + 0.5) * 0.12); boneRUpperArm.rotation.x = 0.15; }
+        if (boneHead)       { boneHead.rotation.x = 0.06 + Math.sin(laugh * 3) * 0.04; boneHead.rotation.y = -0.18 + Math.sin(laugh * 1.5) * 0.05; }
+        setExpression('happy');
+        setBS('A', 0.15 + Math.sin(laugh * 4) * 0.1); // laughing mouth
+      } else {
+        // Settle back to watching
+        const p = (cycle - 5.5) / 2.5;
+        if (boneHips)       boneHips.rotation.z = 0.11 - p * 0.04;
+        if (boneLUpperArm)  { boneLUpperArm.rotation.z = 0.75 + p * 0.1; boneLUpperArm.rotation.x = 0.15 - p * 0.07; }
+        if (boneRUpperArm)  { boneRUpperArm.rotation.z = -(0.75 + p * 0.1); boneRUpperArm.rotation.x = 0.15 - p * 0.07; }
+        setExpression('neutral');
+        setBS('A', 0);
+      }
+      break;
+    }
+
+    // ── PHONE SCROLL (living room / office) ──────────────────────
+    // She holds her phone in front of her, head tilted down, thumb scrolls.
+    // Occasional eyeroll, laugh, or lean forward at something interesting.
+    case 'phoneScroll': {
+      const scroll = Math.sin(t * 0.6) * 0.05; // slow up/down scroll thumb movement
+
+      // Head down looking at phone
+      if (boneHead)  { boneHead.rotation.x = 0.25 + Math.sin(t * 0.3) * 0.03; boneHead.rotation.z = Math.sin(t * 0.4) * 0.04; }
+      if (boneSpine) { boneSpine.rotation.x = 0.1; boneSpine.rotation.z = Math.sin(t * 0.5) * 0.02; }
+      if (boneHips)  boneHips.rotation.z = 0.08 + Math.sin(t * 0.7) * 0.03;
+
+      // Right hand holds phone up — elbow bent, forearm raised
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.6; boneRUpperArm.rotation.x = 0.6; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.25; boneRLowerArm.rotation.x = 0.3; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.1; boneRHand.rotation.x = -0.15; boneRHand.rotation.y = 0.1; }
+
+      // Right thumb scrolling motion
+      if (boneR_ThumbPx) boneR_ThumbPx.rotation.z = 0.25 + scroll;
+      if (boneR_ThumbMd) boneR_ThumbMd.rotation.z = 0.2 + scroll * 0.5;
+
+      // Left arm: resting / crossing — casual
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.72; boneLUpperArm.rotation.x = 0.2; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.55; boneLLowerArm.rotation.x = 0.12; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.22; boneLHand.rotation.x = 0.06; }
+
+      // Reactions cycling: neutral → something catches her eye → reaction
+      const phase = t % 7.0;
+      if (phase < 3.5) {
+        setExpression('neutral');
+        setBS('I', 0.04);
+      } else if (phase < 4.8) {
+        setExpression('surprised'); // something interesting
+        setBS('O', (phase - 3.5) / 1.3 * 0.2);
+        if (boneHead) boneHead.rotation.x = 0.25 - (phase - 3.5) / 1.3 * 0.08; // leans in
+      } else {
+        setExpression('happy');
+        setBS('I', 0.12); // little smile / smirk
+      }
+      break;
+    }
+
+    // ── MIRROR POSE (beauty room) ─────────────────────────────────
+    // She stands in front of the bathroom mirror, checks herself out.
+    // Turns side-to-side, touches hair, gives approving nod.
+    case 'mirrorPose': {
+      const cycle = t % 7.0;
+
+      if (cycle < 1.5) {
+        // Turn and look at reflection — slow head turn, self-satisfied
+        const p = Math.min(cycle / 1.0, 1);
+        if (boneHead)      { boneHead.rotation.y = p * 0.15; boneHead.rotation.z = p * 0.04; }
+        if (boneSpine)     { boneSpine.rotation.y = p * 0.06; }
+        if (boneHips)      boneHips.rotation.z = p * 0.1;
+        setExpression('neutral');
+      } else if (cycle < 3.0) {
+        // Check the other side — sassy little turn
+        const p = (cycle - 1.5) / 1.5;
+        if (boneHead)      { boneHead.rotation.y = 0.15 - p * 0.3; boneHead.rotation.z = 0.04 - p * 0.08; }
+        if (boneSpine)     boneSpine.rotation.y = 0.06 - p * 0.12;
+        if (boneHips)      boneHips.rotation.z = 0.1 + Math.sin(p * Math.PI) * 0.06;
+        setExpression('happy');
+        setBS('I', 0.1);
+      } else if (cycle < 4.5) {
+        // Touch hair — satisfied fix
+        const p = Math.min((cycle - 3.0) / 0.7, 1);
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + p * 0.55; boneRUpperArm.rotation.x = p * 0.65; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - p * 0.2); }
+        if (boneRHand)     { boneRHand.rotation.z = -(0.18 + p * 0.12); boneRHand.rotation.y = p * 0.2; }
+        if (boneHead)      { boneHead.rotation.y = -0.15; boneHead.rotation.z = -0.04; }
+        if (boneHips)      boneHips.rotation.z = 0.12;
+        setExpression('happy');
+        setBS('I', 0.15);
+      } else if (cycle < 5.8) {
+        // Approving nod — she likes what she sees
+        const nod = cycle - 4.5;
+        if (boneHead)      { boneHead.rotation.x = Math.sin(nod * 2.5) * 0.06; boneHead.rotation.y = -0.05; }
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45 - (1 - Math.min((cycle - 4.5) / 0.5, 1)) * 0.55; }
+        if (boneHips)      boneHips.rotation.z = 0.12 + Math.sin(nod * 1.1) * 0.03;
+        setExpression('happy');
+        setBS('I', 0.2); // big smirk — she likes herself
+      } else {
+        // Settle — hand comes down, faces forward
+        const p = (cycle - 5.8) / 1.2;
+        if (boneHips) boneHips.rotation.z = 0.12 - p * 0.06;
+        if (boneHead) { boneHead.rotation.y = -0.05 + p * 0.05; boneHead.rotation.z = 0; }
+        setExpression('neutral');
+        setBS('I', 0.2 - p * 0.2);
       }
       break;
     }
