@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import DeadAirTimer from './utils/dead-air-timer.js';
-import { loadLivingRoomProps, LIVING_ROOM_PROP_KNOWLEDGE } from './rooms/living-room-props.js';
 
 // ── Dead air — handled by DeadAirTimer class ────────────────
 // Instantiated in _initDeadAir() once the VRM is ready.
@@ -288,9 +287,6 @@ _gltfLoader.load(
 
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
-
-    // Load living room props
-    loadLivingRoomProps(scene);
 
     // Spawn coords confirmed from GLB mesh analysis — living room centre
     // Defer by one frame so house world matrices are committed before raycasting.
@@ -865,33 +861,29 @@ function goToSpot(spot) {
 // Activities that try to set other facing values are ignored
 let _targetFacing = Math.PI;
 
-// ── 10-minute living-room demo loop ──────────────────────────────
-// Cycles her through every living-room spot so you can see props.
-// Set LIVING_ROOM_DEMO = false to disable once you're done testing.
-const LIVING_ROOM_DEMO = true;
-const _lrSpots = ['Sofa', 'TV', 'Centre', 'Fireplace'];
+// ── Living room life loop ─────────────────────────────────────────
+// Cycles her through every living-room spot: Sofa → TV → Centre → Fireplace
+// _LR_SPOT_DWELL: seconds per spot. 90s = ~6 min total loop.
+// Set to a higher value (e.g. 300) for a slower tour once confirmed working.
+const _lrSpotOrder = ['Sofa', 'TV', 'Centre', 'Fireplace'];
 let   _lrSpotIdx   = 0;
 let   _lrSpotTimer = 0;
-const _LR_SPOT_DWELL = 150; // 150s per spot × 4 spots = 600s (10 min)
+const _LR_SPOT_DWELL = 90; // seconds per spot
 
 function lifeUpdate() {
-  if (!LIVING_ROOM_DEMO) {
-    famUpdate(1/60);
-    return;
-  }
-
   famUpdate(1/60);
+
+  if (!vrm || walk.active) return; // don't interrupt a walk
+
   _lrSpotTimer += 1/60;
+  if (_lrSpotTimer < _LR_SPOT_DWELL) return;
 
-  if (_lrSpotTimer >= _LR_SPOT_DWELL) {
-    _lrSpotTimer = 0;
-    _lrSpotIdx   = (_lrSpotIdx + 1) % _lrSpots.length;
-    const targetLabel = _lrSpots[_lrSpotIdx];
+  _lrSpotTimer = 0;
+  _lrSpotIdx   = (_lrSpotIdx + 1) % _lrSpotOrder.length;
 
-    // Find the matching spot in HOUSE living-room
-    const spot = HOUSE['living-room'].spots.find(s => s.label === targetLabel);
-    if (spot) goToSpot({ ...spot, room: 'living-room' });
-  }
+  const targetLabel = _lrSpotOrder[_lrSpotIdx];
+  const spot = HOUSE['living-room'].spots.find(s => s.label === targetLabel);
+  if (spot) goToSpot({ ...spot, room: 'living-room' });
 }
 
 // Animate room neon lights (very slow ambient breathing — not a flicker)
@@ -3125,7 +3117,6 @@ async function sendMessage(message, displayName='Viewer') {
       history:      chatHistory.slice(-6),
       system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
       current_room: _currentRoom,
-      ...(  _currentRoom === 'living-room' ? { living_room_context: LIVING_ROOM_PROP_KNOWLEDGE } : {} ),
     };
     if (sceneSnapshot) {
       body.scene_image    = sceneSnapshot;   // base64 JPEG
