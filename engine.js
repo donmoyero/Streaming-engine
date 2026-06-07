@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import DeadAirTimer from './utils/dead-air-timer.js';
+import { loadLivingRoomProps, LIVING_ROOM_PROP_KNOWLEDGE } from './rooms/living-room-props.js';
 
 // ── Dead air — handled by DeadAirTimer class ────────────────
 // Instantiated in _initDeadAir() once the VRM is ready.
@@ -158,6 +159,7 @@ let monitorGlowLight = null;
 let keyboardMesh = null;
 let chairMesh = null;
 
+function buildGameRoom() {
 // Old game room removed — house GLB is the environment now
 const roomLights = {};
 
@@ -182,8 +184,6 @@ const AVATAR_RADIUS = 0.25; // capsule radius — NOT mesh half-width
 
 // Raycast downward from above spawn point to find the actual floor surface
 function _detectFloorByRaycast(x, z) {
-  // stub — floor detection is handled inside _placeVRMOnFloor via raycast grid
-}
 // Place the VRM standing exactly on the house floor at spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
@@ -287,6 +287,9 @@ _gltfLoader.load(
 
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
+
+    // Load living room props
+    loadLivingRoomProps(scene);
 
     // Spawn coords confirmed from GLB mesh analysis — living room centre
     // Defer by one frame so house world matrices are committed before raycasting.
@@ -861,10 +864,33 @@ function goToSpot(spot) {
 // Activities that try to set other facing values are ignored
 let _targetFacing = Math.PI;
 
+// ── 10-minute living-room demo loop ──────────────────────────────
+// Cycles her through every living-room spot so you can see props.
+// Set LIVING_ROOM_DEMO = false to disable once you're done testing.
+const LIVING_ROOM_DEMO = true;
+const _lrSpots = ['Sofa', 'TV', 'Centre', 'Fireplace'];
+let   _lrSpotIdx   = 0;
+let   _lrSpotTimer = 0;
+const _LR_SPOT_DWELL = 150; // 150s per spot × 4 spots = 600s (10 min)
+
 function lifeUpdate() {
-  // Room-walking disabled — avatar stays at (0,0,0) doing in-place activities.
-  // Calling famUpdate keeps the familiarity scores ticking for activity variety.
+  if (!LIVING_ROOM_DEMO) {
+    famUpdate(1/60);
+    return;
+  }
+
   famUpdate(1/60);
+  _lrSpotTimer += 1/60;
+
+  if (_lrSpotTimer >= _LR_SPOT_DWELL) {
+    _lrSpotTimer = 0;
+    _lrSpotIdx   = (_lrSpotIdx + 1) % _lrSpots.length;
+    const targetLabel = _lrSpots[_lrSpotIdx];
+
+    // Find the matching spot in HOUSE living-room
+    const spot = HOUSE['living-room'].spots.find(s => s.label === targetLabel);
+    if (spot) goToSpot({ ...spot, room: 'living-room' });
+  }
 }
 
 // Animate room neon lights (very slow ambient breathing — not a flicker)
@@ -3098,6 +3124,7 @@ async function sendMessage(message, displayName='Viewer') {
       history:      chatHistory.slice(-6),
       system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
       current_room: _currentRoom,
+      ...(  _currentRoom === 'living-room' ? { living_room_context: LIVING_ROOM_PROP_KNOWLEDGE } : {} ),
     };
     if (sceneSnapshot) {
       body.scene_image    = sceneSnapshot;   // base64 JPEG
