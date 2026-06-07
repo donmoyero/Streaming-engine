@@ -1003,12 +1003,14 @@ function moveToRoom(roomName) {
     if (roomSpots?.length) {
       const spot = roomSpots[Math.floor(Math.random() * roomSpots.length)];
       _currentSpot = spot;
-      const pool = spot.activities || ['idle'];
+      const pool = getFamiliarActivityPool(roomName);
       ACTIVITY.current  = pool[Math.floor(Math.random() * pool.length)];
       ACTIVITY.timer    = 0;
       ACTIVITY.phase    = 0;
       ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
     }
+    // Maybe change outfit for this room
+    maybeChangeOutfit(roomName);
     // Release API override after 30s (not 60) so she resumes her life sooner
     _apiOverrideTimer = API_OVERRIDE_DURATION - 30;
   });
@@ -1133,6 +1135,183 @@ let _apiOverride      = false;
 let _apiOverrideTimer = 0;
 const API_OVERRIDE_DURATION = 60; // seconds before she resumes her life
 
+// ================================================================
+//  FAMILIARITY SYSTEM
+//  Tracks time spent in each room + activity. The longer she's
+//  been somewhere the more she gravitates back there and the more
+//  complex her activities become. No ML needed — weighted scoring.
+// ================================================================
+const _familiarity = {
+  studio:        { room: 0, activities: {} },
+  kitchen:       { room: 0, activities: {} },
+  'living-room': { room: 0, activities: {} },
+  bedroom:       { room: 0, activities: {} },
+  bathroom:      { room: 0, activities: {} },
+  office:        { room: 0, activities: {} },
+};
+// How many seconds spent before she's "comfortable" in a room (unlocks more activities)
+const FAM_THRESHOLD_BASIC    = 60;    // 1 min → she's been here a few times
+const FAM_THRESHOLD_SETTLED  = 300;   // 5 min → she's settled, picks complex activities
+const FAM_THRESHOLD_HOME     = 900;   // 15 min → this is her turf, she goes here first
+
+function famUpdate(delta) {
+  if (_currentRoom && _familiarity[_currentRoom]) {
+    _familiarity[_currentRoom].room += delta;
+    const act = ACTIVITY.current;
+    if (act && act !== 'idle') {
+      _familiarity[_currentRoom].activities[act] =
+        (_familiarity[_currentRoom].activities[act] || 0) + delta;
+    }
+  }
+}
+
+// Returns a 0–1 comfort score for a room
+function famScore(roomName) {
+  const f = _familiarity[roomName];
+  if (!f) return 0;
+  return Math.min(1, f.room / FAM_THRESHOLD_HOME);
+}
+
+// Weighted room picker — more familiar rooms get picked more often
+function pickNextSpotFamiliar() {
+  const allSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
+    roomDef.spots.map(spot => ({ ...spot, room: roomKey }))
+  );
+
+  // Build weighted list — familiar rooms appear more times in the pool
+  const weighted = [];
+  for (const spot of allSpots) {
+    if (spot === _currentSpot) continue;
+    const score = famScore(spot.room);
+    // Base weight 1, +3 if familiar, +5 if home-tier
+    const w = _familiarity[spot.room]?.room > FAM_THRESHOLD_HOME ? 5
+            : _familiarity[spot.room]?.room > FAM_THRESHOLD_SETTLED ? 3
+            : _familiarity[spot.room]?.room > FAM_THRESHOLD_BASIC ? 2
+            : 1;
+    for (let i = 0; i < w; i++) weighted.push(spot);
+  }
+  return weighted[Math.floor(Math.random() * weighted.length)];
+}
+
+// Returns activity pool filtered by familiarity level
+function getFamiliarActivityPool(roomName) {
+  const base = {
+    studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover','darts','basketball'],
+    kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting'],
+    'living-room': ['idle','hairflick','hiponhip','stretch','sofaSit','phoneScroll','tvReact','dance'],
+    bedroom:       ['idle','hairflick','noseCover','sofaSit','phoneScroll','stretch'],
+    bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
+    office:        ['idle','hairflick','noseCover','typing','monitor','stretch'],
+  };
+  const advanced = {
+    studio:        ['darts','basketball','dance'],
+    kitchen:       ['stirring','chopping','tasting'],
+    'living-room': ['tvReact','sofaSit','phoneScroll','dance'],
+    bedroom:       ['sofaSit','phoneScroll'],
+    bathroom:      ['mirrorPose'],
+    office:        ['typing','monitor'],
+  };
+
+  const fam = _familiarity[roomName]?.room || 0;
+  const pool = [...(base[roomName] || base.studio)];
+  if (fam > FAM_THRESHOLD_BASIC) {
+    // Unlock advanced activities — weight them higher by adding twice
+    const adv = advanced[roomName] || [];
+    pool.push(...adv, ...adv);
+  }
+  return pool;
+}
+
+// ================================================================
+//  OUTFIT SYSTEM
+//  Outfits are colour + emissive presets. Style variants swap mesh
+//  visibility (requires mesh names to match). Outfit changes
+//  happen autonomously based on room/time or can be triggered.
+// ================================================================
+const OUTFITS = {
+  streaming: {
+    label:  'Streaming Look',
+    Top:    { color: 0xff69b4, emissive: 0x330011, emissiveIntensity: 0.1 },
+    Bottom: { color: 0xff1493, emissive: 0x330011, emissiveIntensity: 0.1 },
+    Shoe_R: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 },
+    Shoe_L: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 },
+  },
+  loungewear: {
+    label:  'Loungewear',
+    Top:    { color: 0x8b4513, emissive: 0x1a0a00, emissiveIntensity: 0.05 },
+    Bottom: { color: 0x6b3410, emissive: 0x1a0a00, emissiveIntensity: 0.05 },
+    Shoe_R: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 },
+    Shoe_L: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 },
+  },
+  streetwear: {
+    label:  'Streetwear',
+    Top:    { color: 0x111111, emissive: 0x000000, emissiveIntensity: 0 },
+    Bottom: { color: 0x1a1a2e, emissive: 0x000022, emissiveIntensity: 0.08 },
+    Shoe_R: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 },
+    Shoe_L: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 },
+  },
+  pyjamas: {
+    label:  'Pyjamas',
+    Top:    { color: 0x6a0dad, emissive: 0x200020, emissiveIntensity: 0.06 },
+    Bottom: { color: 0x7b1fa2, emissive: 0x200020, emissiveIntensity: 0.06 },
+    Shoe_R: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 },
+    Shoe_L: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 },
+  },
+  afrobeats: {
+    label:  'Afrobeats Night',
+    Top:    { color: 0xFFB830, emissive: 0x331a00, emissiveIntensity: 0.15 },
+    Bottom: { color: 0xff6600, emissive: 0x331100, emissiveIntensity: 0.12 },
+    Shoe_R: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1 },
+    Shoe_L: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1 },
+  },
+};
+
+// Which outfit fits which context
+const OUTFIT_CONTEXT = {
+  bedroom:       ['pyjamas', 'loungewear'],
+  bathroom:      ['pyjamas', 'loungewear'],
+  'living-room': ['loungewear', 'streetwear', 'afrobeats'],
+  kitchen:       ['loungewear', 'pyjamas'],
+  office:        ['streetwear', 'streaming'],
+  studio:        ['streaming', 'afrobeats', 'streetwear'],
+};
+
+let _currentOutfit = 'streaming';
+
+function applyOutfit(outfitName) {
+  if (!vrm || !OUTFITS[outfitName]) return;
+  const outfit = OUTFITS[outfitName];
+  _currentOutfit = outfitName;
+  vrm.scene.traverse(obj => {
+    if (!obj.isMesh) return;
+    const def = outfit[obj.name];
+    if (!def) return;
+    const m = obj.material;
+    if (!m) return;
+    m.color.setHex(def.color);
+    m.emissive.setHex(def.emissive);
+    m.emissiveIntensity = def.emissiveIntensity;
+    m.needsUpdate = true;
+  });
+  console.log(\`[Outfit] Changed to: \${OUTFITS[outfitName].label}\`);
+}
+
+// Called when she enters a new room — maybe changes outfit
+let _lastOutfitRoom = null;
+function maybeChangeOutfit(roomName) {
+  if (roomName === _lastOutfitRoom) return;
+  _lastOutfitRoom = roomName;
+  const options = OUTFIT_CONTEXT[roomName];
+  if (!options) return;
+  // 40% chance to change outfit on room entry
+  if (Math.random() > 0.4) return;
+  const pick = options[Math.floor(Math.random() * options.length)];
+  if (pick !== _currentOutfit) {
+    // Small delay so it feels like she "got changed"
+    setTimeout(() => applyOutfit(pick), 1500);
+  }
+}
+
 // All spots across the house, flat list for the scheduler
 function getAllSpots() {
   return Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
@@ -1143,14 +1322,8 @@ function getAllSpots() {
 let _currentSpot = null;
 
 function pickNextSpot(avoidRoom = null) {
-  const allSpots = getAllSpots();
-  // Bias: 25% chance to stay in current room, 75% to wander to another
-  const stayRoom = Math.random() < 0.25 ? _currentRoom : null;
-  let candidates = stayRoom
-    ? allSpots.filter(s => s.room === stayRoom && s !== _currentSpot)
-    : allSpots.filter(s => s.room !== _currentRoom);
-  if (!candidates.length) candidates = allSpots.filter(s => s !== _currentSpot);
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  // Use familiarity-weighted picker — familiar rooms come up more often
+  return pickNextSpotFamiliar();
 }
 
 function goToSpot(spot) {
@@ -1172,12 +1345,14 @@ function goToSpot(spot) {
       _targetFacing = spot.facingY;
     }
     // Pick an activity for this spot
-    const pool = spot.activities || ['idle'];
+    const pool = getFamiliarActivityPool(_currentRoom);
     const next = pool[Math.floor(Math.random() * pool.length)];
     ACTIVITY.current = next;
     ACTIVITY.timer   = 0;
     ACTIVITY.phase   = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+    // Maybe change outfit when she arrives somewhere new
+    maybeChangeOutfit(_currentRoom);
   });
 }
 
@@ -1186,6 +1361,7 @@ let _targetFacing = Math.PI;
 
 function lifeUpdate() {
   if (walk.active) return;
+  famUpdate(1/60);  // track time spent in current room/activity
   if (_apiOverride) {
     _apiOverrideTimer += 1/60;
     if (_apiOverrideTimer > API_OVERRIDE_DURATION) {
@@ -1397,6 +1573,117 @@ gltfLoader.load(
     loader_el.querySelector('.sub').textContent = 'Error loading avatar. Check console.';
   }
 );
+
+// ================================================================
+//  COMPANION CHARACTER — free VRoid Hub model loaded as background NPC
+//  He wanders the house independently, no AI/speech.
+//  Uses the official VRoid sample male avatar (CC0 licence).
+//  To swap: replace COMPANION_PATH with any .vrm in your repo.
+// ================================================================
+const COMPANION_PATH = 'https://cdn.jsdelivr.net/gh/pixiv/three-vrm@dev/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm';
+let companion     = null;
+let companionPos  = { x: 2.5, z: 1.5 };
+let _companionTimer = 0;
+let _companionDwell = 15 + Math.random() * 20;
+
+// Simple idle bob for companion
+let _compPhase = 0;
+
+function loadCompanion() {
+  const loader = new GLTFLoader();
+  loader.register(parser => new VRMLoaderPlugin(parser));
+  loader.load(
+    COMPANION_PATH,
+    (gltf) => {
+      companion = gltf.userData.vrm;
+      if (!companion) return;
+      VRMUtils.removeUnnecessaryJoints(gltf.scene);
+      VRMUtils.rotateVRM0(companion);
+
+      // Apply neutral male skin/outfit colours
+      companion.scene.traverse(obj => {
+        if (!obj.isMesh) return;
+        obj.frustumCulled = false;
+        if (!obj.material) return;
+        // Default dark outfit, medium skin
+        const n = obj.name.toLowerCase();
+        if (n.includes('hair')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a0a00, roughness: 0.8 });
+        } else if (n.includes('eye')) {
+          obj.material = new THREE.MeshStandardMaterial({ color: 0x3b2010, roughness: 0.1 });
+        } else {
+          obj.material = new THREE.MeshStandardMaterial({
+            color:    0xb07040,
+            roughness: 0.65,
+            emissive: new THREE.Color(0xb07040),
+            emissiveIntensity: 0.12,
+          });
+        }
+      });
+
+      // Scale to match Miss OG Tinz
+      const box   = new THREE.Box3().setFromObject(companion.scene);
+      const sizeY = box.getSize(new THREE.Vector3()).y;
+      const sc    = 1.75 / sizeY;
+      companion.scene.scale.set(sc, sc, sc);
+
+      // Start him slightly to her right
+      companion.scene.position.set(companionPos.x, 0, companionPos.z);
+      scene.add(companion.scene);
+      console.log('[Companion] Loaded and ready');
+    },
+    null,
+    (err) => console.warn('[Companion] Could not load — skipping:', err.message)
+  );
+}
+
+function updateCompanion(delta) {
+  if (!companion) return;
+  _compPhase += delta;
+  _companionTimer += delta;
+
+  // Gentle idle breathing
+  if (companion.scene) {
+    companion.scene.position.y = Math.sin(_compPhase * 0.8) * 0.008;
+  }
+
+  // Wander to a new spot every _companionDwell seconds
+  if (_companionTimer > _companionDwell) {
+    _companionTimer = 0;
+    _companionDwell = 12 + Math.random() * 20;
+
+    // Pick a random spot in the house (same HOUSE definition)
+    const allSpots = Object.entries(HOUSE).flatMap(([, roomDef]) => roomDef.spots);
+    const spot = allSpots[Math.floor(Math.random() * allSpots.length)];
+
+    // Smoothly lerp his position over next few seconds (simple teleport with lerp)
+    companionPos.targetX = spot.x + (Math.random() - 0.5) * 1.5;
+    companionPos.targetZ = spot.z + (Math.random() - 0.5) * 1.5;
+    companionPos.lerpT   = 0;
+  }
+
+  // Lerp toward target position
+  if (companionPos.targetX !== undefined) {
+    companionPos.lerpT = Math.min(1, (companionPos.lerpT || 0) + delta * 0.3);
+    companionPos.x = THREE.MathUtils.lerp(companionPos.x, companionPos.targetX, companionPos.lerpT);
+    companionPos.z = THREE.MathUtils.lerp(companionPos.z, companionPos.targetZ, companionPos.lerpT);
+    companion.scene.position.x = companionPos.x;
+    companion.scene.position.z = companionPos.z;
+
+    // Face direction of travel
+    const dx = companionPos.targetX - companionPos.x;
+    const dz = companionPos.targetZ - companionPos.z;
+    if (Math.abs(dx) + Math.abs(dz) > 0.05) {
+      companion.scene.rotation.y = Math.atan2(dx, dz);
+    }
+  }
+
+  // Update VRM internals
+  try { companion.update(delta); } catch(e) {}
+}
+
+// Load companion after a short delay (don't block main VRM)
+setTimeout(loadCompanion, 3000);
 
 // ── Blendshape helpers ──────────────────────────────────
 function setBS(name, value) {
@@ -2932,6 +3219,7 @@ function render() {
 
   // ── Room neon pulse ───────────────────────────────────
   animateRoomLights(delta);
+  updateCompanion(delta);
 
   if (vrm) {
     idleTime   += delta;
