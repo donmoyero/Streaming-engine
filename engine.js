@@ -862,9 +862,28 @@ function goToSpot(spot) {
 let _targetFacing = Math.PI;
 
 function lifeUpdate() {
-  // Room-walking disabled — avatar stays at (0,0,0) doing in-place activities.
-  // Calling famUpdate keeps the familiarity scores ticking for activity variety.
-  famUpdate(1/60);
+  if (!vrm || walk.active) return;
+
+  const delta = 1/60;
+  famUpdate(delta);
+
+  // API override: after a viewer message, she stays put for a bit
+  if (_apiOverride) {
+    _apiOverrideTimer -= delta;
+    if (_apiOverrideTimer <= 0) _apiOverride = false;
+    return;
+  }
+
+  // Count down the dwell timer at the current spot
+  _lifeTimer += delta;
+  if (_lifeTimer < _nextDwell) return;
+
+  // Time to move — pick the next spot and go there
+  _lifeTimer = 0;
+  _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+
+  const spot = pickNextSpot();
+  if (spot) goToSpot(spot);
 }
 
 // Animate room neon lights (very slow ambient breathing — not a flicker)
@@ -1053,13 +1072,9 @@ gltfLoader.load(
       loader_el.classList.add('hidden');
       setStatus('Ready ✦', 'ready');
       showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
+      startTopicPolling();
+      _initDeadAir();
       initTwitchChat();
-      // Delay API-hitting systems by 8s to let Render wake up fully
-      // and avoid an immediate 429 on cold start
-      setTimeout(() => {
-        startTopicPolling();
-        _initDeadAir();
-      }, 8000);
     }, 400);
   },
   (progress) => {
@@ -3206,29 +3221,15 @@ function updateTopicBox(data) {
 }
 
 function startTopicPolling() {
-  let _pollInterval = 6000;
   async function poll() {
     try {
-      const res = await fetch(TOPIC_URL);
-      if (res.status === 429) {
-        // Back off — double the interval up to 60s, then recover
-        _pollInterval = Math.min(_pollInterval * 2, 60000);
-        return;
-      }
-      _pollInterval = 6000; // reset on success
+      const res  = await fetch(TOPIC_URL);
       const data = await res.json();
       updateTopicBox(data);
     } catch (_) {}
   }
-  // Use recursive setTimeout so we can adjust the interval dynamically
-  function schedulePoll() {
-    setTimeout(async () => {
-      await poll();
-      schedulePoll();
-    }, _pollInterval);
-  }
   poll();
-  schedulePoll();
+  setInterval(poll, 6000);
 }
 
 
@@ -3273,6 +3274,9 @@ async function sendMessage(message, displayName='Viewer') {
   deadAir?.reset();
   setStatus('Thinking...', 'thinking');
   sendBtn.disabled = true;
+  // Pause autonomous roaming while she's responding to a viewer
+  _apiOverride      = true;
+  _apiOverrideTimer = API_OVERRIDE_DURATION;
 
   // Camera: go to THINK while processing
   setCamMode('THINK');
