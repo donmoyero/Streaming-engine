@@ -630,6 +630,10 @@ const roomLights = {};
 const _gltfLoader = new GLTFLoader();
 
 let _houseLoaded = false;
+// VRM spawn point — updated once house loads so avatar stands in a real room
+let _houseSpawnX = 0;
+let _houseSpawnZ = 0;
+
 _gltfLoader.load(
   'House.glb',
   (gltf) => {
@@ -648,7 +652,26 @@ _gltfLoader.load(
 
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
-    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  span=${(rawSize.x*hScale).toFixed(1)}×${(rawSize.z*hScale).toFixed(1)}`);
+
+    // Pick a spawn point well inside the house footprint so the avatar
+    // doesn't clip through a wall. We aim for the centre of the floor
+    // but offset slightly toward +Z so the default camera (which sits at
+    // vz + 2.6) is looking inward rather than through an exterior wall.
+    // HOUSE.studio.spots[0] = desk spot at (0.6, -1.2) which is a known
+    // open area. Use that as the starting position.
+    _houseSpawnX = HOUSE.studio.spots[0].x;   //  0.6
+    _houseSpawnZ = HOUSE.studio.spots[0].z;   // -1.2
+
+    // If the VRM is already loaded, reposition it now
+    if (vrm) {
+      vrm.scene.position.x = _houseSpawnX;
+      vrm.scene.position.z = _houseSpawnZ;
+      vrmPos.x = _houseSpawnX;
+      vrmPos.z = _houseSpawnZ;
+      _snapCameraToVRM();
+    }
+
+    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  span=${(rawSize.x*hScale).toFixed(1)}×${(rawSize.z*hScale).toFixed(1)}  spawn=(${_houseSpawnX}, ${_houseSpawnZ})`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
@@ -1479,17 +1502,17 @@ gltfLoader.load(
     setRestPose();
     vrm._restPosY = vrm.scene.position.y;
 
-    // ── Lock avatar at origin, always facing camera (+Z) ──────
-    vrmPos.x = 0; vrmPos.z = 0;
-    vrm.scene.position.set(0, vrm.scene.position.y, 0);
+    // ── Place avatar inside the house (studio desk spot) ────────
+    // Use the spawn coords set by the house loader (or defaults if house
+    // hasn't finished loading yet — house loader will reposition on arrival).
+    const spawnX = _houseSpawnX;  // 0.6  (studio desk area)
+    const spawnZ = _houseSpawnZ;  // -1.2 (studio desk area)
+    vrmPos.x = spawnX; vrmPos.z = spawnZ;
+    vrm.scene.position.set(spawnX, vrm.scene.position.y, spawnZ);
     vrm.scene.rotation.y = Math.PI; // face +Z toward camera
 
-    // Snap camCurrent to IDLE preset so there's zero drift on load
-    const _cp = STREAMER_CAM.IDLE;
-    camCurrent.x = 0;  camCurrent.y = _cp.height; camCurrent.z = _cp.dist;
-    camCurrent.lookX = 0; camCurrent.lookY = _cp.lookHeight; camCurrent.lookZ = 0;
-    camera.position.set(0, _cp.height, _cp.dist);
-    camera.lookAt(0, _cp.lookHeight, 0);
+    // Snap camera directly in front of her spawn point — no lerp drift
+    _snapCameraToVRM();
 
     // Activity system starts after a short idle
     ACTIVITY.current  = 'idle';
@@ -3151,6 +3174,24 @@ function triggerGiftPop() {
 //  purely from avatar's X/Z world position + fixed preset offsets.
 //  Avatar is locked facing +Z, camera always at +Z from her.
 // ================================================================
+
+// Instantly snap camCurrent (and the real camera) to sit in front of
+// wherever the VRM currently stands. Call this after spawn or teleport.
+function _snapCameraToVRM() {
+  if (!vrm) return;
+  const vx = vrm.scene.position.x;
+  const vz = vrm.scene.position.z;
+  const p  = STREAMER_CAM.IDLE;
+  camCurrent.x     = vx + p.sideShift;
+  camCurrent.y     = p.height;
+  camCurrent.z     = vz + p.dist;
+  camCurrent.lookX = vx;
+  camCurrent.lookY = p.lookHeight;
+  camCurrent.lookZ = vz;
+  camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+  camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+}
+
 function updateCamera(delta) {
   if (!vrm) return;
 
