@@ -775,7 +775,7 @@ export function updateGesture(delta) {
     GESTURES[gesture](gestureTime);
   } else {
     gesture = null;
-    if (vrm) vrm.scene.position.z = 0;
+    const vrm = _vrm(); if (vrm) vrm.scene.position.z = 0;
   }
 }
 
@@ -841,6 +841,7 @@ export function triggerRaidDance() {
       if (boneRUpperLeg) boneRUpperLeg.rotation.z = -sway*0.35;
     }},
     { dur: 2.0, fn: (t, p) => {
+      const vrm = _vrm();
       const ep = easeInOut(Math.min(p*2,1)); const retract = p > 0.5 ? easeInOut((p-0.5)*2) : 0;
       if (vrm) vrm.scene.position.z = ep*0.18-retract*0.18;
       if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.3-ep*0.25; boneLUpperArm.rotation.x = ep*0.35; }
@@ -850,6 +851,7 @@ export function triggerRaidDance() {
       if (boneHead)      boneHead.rotation.y = Math.sin(t*2)*0.04;
     }},
     { dur: 1.0, fn: (t) => {
+      const vrm = _vrm();
       if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.6+Math.sin(t*8)*0.12; boneLUpperArm.rotation.x = 0.2; }
       if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.6+Math.sin(t*8+0.5)*0.12); boneRUpperArm.rotation.x = 0.2; }
       if (vrm) vrm.scene.position.z = 0;
@@ -877,15 +879,17 @@ export function triggerSubCelebration() {
       setExpression('excited');
     }},
     { dur: 2.0, fn: (t) => {
+      const vrm = _vrm();
       const jump = Math.abs(Math.sin(t*8))*0.12;
       if (vrm) vrm.scene.position.y = (vrm.scene.position.y||0)+(jump-(vrm._lastJump||0));
-      vrm._lastJump = jump;
+      if (vrm) vrm._lastJump = jump;
       if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.4+Math.sin(t*7)*0.18; boneLUpperArm.rotation.x = 0.3; }
       if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.4+Math.sin(t*7+0.4)*0.18); boneRUpperArm.rotation.x = 0.3; }
       if (boneSpine)     boneSpine.rotation.x = Math.sin(t*8)*0.03;
       if (boneHips)      boneHips.rotation.z  = Math.sin(t*8)*0.06;
     }},
     { dur: 2.0, fn: (t, p) => {
+      const vrm = _vrm();
       if (vrm) { vrm.scene.position.y = vrm._restPosY||0; vrm._lastJump = 0; }
       const ep = easeInOut(Math.min(p*2,1)); const ret = p > 0.5 ? easeInOut((p-0.5)*2) : 0;
       if (vrm) vrm.scene.position.z = ep*0.14-ret*0.14;
@@ -896,7 +900,7 @@ export function triggerSubCelebration() {
       setExpression('happy');
     }},
     { dur: 1.2, fn: (t) => {
-      if (vrm) vrm.scene.position.z = 0;
+      const vrm = _vrm(); if (vrm) vrm.scene.position.z = 0;
       const kiss = Math.sin(t*5)*0.1;
       if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.3+kiss); boneRUpperArm.rotation.x = 0.6; }
       if (boneRLowerArm) boneRLowerArm.rotation.z = -0.6;
