@@ -1390,10 +1390,10 @@ function lifeUpdate() {
 let _roomTime = 0;
 function animateRoomLights(delta) {
   _roomTime += delta;
-  // Slow, subtle pulse — period ~12s, amplitude ±0.2 so it's a warm glow not a fault
-  roomLights.neonPink.intensity   = 2.8 + Math.sin(_roomTime * 0.18) * 0.2;
-  roomLights.neonBlue.intensity   = 2.4 + Math.sin(_roomTime * 0.14 + 1) * 0.2;
-  roomLights.neonPurple.intensity = 2.0 + Math.sin(_roomTime * 0.11 + 2) * 0.15;
+  // Neon lights only exist if buildGameRoom() was called — guard safely
+  if (roomLights.neonPink)   roomLights.neonPink.intensity   = 2.8 + Math.sin(_roomTime * 0.18) * 0.2;
+  if (roomLights.neonBlue)   roomLights.neonBlue.intensity   = 2.4 + Math.sin(_roomTime * 0.14 + 1) * 0.2;
+  if (roomLights.neonPurple) roomLights.neonPurple.intensity = 2.0 + Math.sin(_roomTime * 0.11 + 2) * 0.15;
   if (monitorGlowLight && ACTIVITY.current !== 'monitor') {
     monitorGlowLight.intensity = 0.6 + Math.sin(_roomTime * 0.12) * 0.08;
   }
