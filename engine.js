@@ -1551,6 +1551,7 @@ gltfLoader.load(
     VRM_BASE_ROT_Y = vrm.scene.rotation.y;
     scene.add(vrm.scene);
 
+    // Measure at scale=1, position=0 to get raw proportions
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
@@ -1558,18 +1559,20 @@ gltfLoader.load(
     const VRM_TARGET_HEIGHT = 1.65;
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
-    // Center X/Z, place feet at Y=0 — _placeVRMOnFloor will lift to actual floorY
-    const feetToOrigin = -boxRaw.min.y * scaleVal; // how far origin is above feet
-    vrm._feetOffset = feetToOrigin;               // stored so _placeVRMOnFloor can add it
-    vrm.scene.position.set(
-      -centerRaw.x * scaleVal,
-      feetToOrigin,
-      -centerRaw.z * scaleVal
-    );
+    // Center X/Z at origin, position.y=0 temporarily
+    vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
+
+    // Now re-measure with scale applied to find where the feet actually are.
+    // boxScaled.min.y will be negative (feet below origin). We lift by that amount
+    // so feet land at Y=0, and store it so _placeVRMOnFloor can add it to floorY.
+    const boxScaled = new THREE.Box3().setFromObject(vrm.scene);
+    const feetToOrigin = -boxScaled.min.y; // positive value = lift needed
+    vrm._feetOffset = feetToOrigin;
+    vrm.scene.position.y = feetToOrigin;  // feet now at world Y=0
 
     const box  = new THREE.Box3().setFromObject(vrm.scene);
     const size = box.getSize(new THREE.Vector3());
-    console.log("VRM final size:", size);
+    console.log("VRM final size:", size, "feetOffset:", feetToOrigin.toFixed(4));
 
     cacheBones();
 
