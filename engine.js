@@ -59,7 +59,7 @@ function setStageLight(mood, durationMs = 4000) {
 
 // ── Three.js Scene ──────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setClearColor(0x080510, 1);
+renderer.setClearColor(0x0d0a18, 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -71,10 +71,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 999999);
-// Initial camera — points at studio desk spot where avatar will start
-// (will be overridden once VRM loads and updateCamera() takes over)
-camera.position.set(0.6, 1.8, 1.5);
-camera.lookAt(0.6, 1.2, -1.2);
+// Initial camera — streamer portrait shot, updated once VRM loads
+const camCurrent = { x: 0, y: 1.55, z: 2.8, lookX: 0, lookY: 1.15, lookZ: 0 };
+const camSmooth  = camCurrent;
+const camWant    = camCurrent;
+camera.position.set(0, 1.55, 2.8);
+camera.lookAt(0, 1.15, 0);
 
 // ── Lighting ─────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0xffffff, 2.5);
@@ -636,37 +638,38 @@ _gltfLoader.load(
   'House.glb',
   (gltf) => {
     const house = gltf.scene;
+
+    // ── Auto-fit house as a backdrop ──────────────────────────────
+    // Avatar lives at world (0, 0, 0) facing +Z (toward camera at +Z).
+    // We want the house interior to surround her — measure raw bounds,
+    // scale so the longest axis is ~16 units, then sink the floor to y=0
+    // and push it back so she's roughly centred inside a room.
+
+    // First add to scene unscaled so Box3 can measure it
     scene.add(house);
+    const rawBox    = new THREE.Box3().setFromObject(house);
+    const rawSize   = rawBox.getSize(new THREE.Vector3());
+    const rawCenter = rawBox.getCenter(new THREE.Vector3());
 
-    // Auto-fit: measure the house, scale so it's roughly 14 units wide
-    // (to match avatar room coords spanning ~12 units), then center at origin.
-    const houseBox  = new THREE.Box3().setFromObject(house);
-    const houseSize = houseBox.getSize(new THREE.Vector3());
-    const houseCenter = houseBox.getCenter(new THREE.Vector3());
-
-    // Target width: 14 units so rooms at x=±6 are well inside
-    const targetWidth = 14;
-    const houseScale  = targetWidth / Math.max(houseSize.x, houseSize.z);
+    // Scale: target longest horizontal span = 16 units
+    const longest    = Math.max(rawSize.x, rawSize.z);
+    const houseScale = 16 / longest;
     house.scale.setScalar(houseScale);
 
-    // Recalculate after scaling
-    const scaledBox    = new THREE.Box3().setFromObject(house);
-    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-    const scaledMin    = scaledBox.min;
+    // Re-measure after scale
+    const sBox    = new THREE.Box3().setFromObject(house);
+    const sCenter = sBox.getCenter(new THREE.Vector3());
+    const sMin    = sBox.min;
 
-    // Center X/Z on origin, floor at y=0
-    house.position.set(
-      -scaledCenter.x,
-      -scaledMin.y,
-      -scaledCenter.z
-    );
+    // Centre X/Z on avatar, floor flush with y=0
+    house.position.set(-sCenter.x, -sMin.y, -sCenter.z);
 
     house.traverse(n => {
       if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
     });
+
     _houseLoaded = true;
-    console.log(`[House] GLB loaded ✓  raw size: ${houseSize.x.toFixed(1)} × ${houseSize.z.toFixed(1)} m  applied scale: ${houseScale.toFixed(3)}`);
-    console.log(`[House] Scaled size: ${(houseSize.x * houseScale).toFixed(1)} × ${(houseSize.z * houseScale).toFixed(1)} units  floor at y=0`);
+    console.log(`[House] loaded ✓  raw ${rawSize.x.toFixed(1)}×${rawSize.z.toFixed(1)}  scale ${houseScale.toFixed(3)}  world span ${(rawSize.x*houseScale).toFixed(1)}×${(rawSize.z*houseScale).toFixed(1)}`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
@@ -878,78 +881,37 @@ let _currentRoom   = 'studio';
 // ── Transition to a room ──────────────────────────────────────────────────────
 function moveToRoom(roomName) {
   if (!roomName) return;
-  if (roomName === _currentRoom && _apiOverride) return;
-
-  console.log(`[Room] Moving to: ${roomName}`);
-  _apiOverride      = true;
-  _apiOverrideTimer = 0;
-
-  const prevRoom = _currentRoom;
-
-  if (roomName !== _currentRoom) {
-    _currentRoom = roomName;
-    // Update ambient immediately so colour doesn't snap on arrival
-    const hNew = HOUSE[roomName];
-    if (hNew && ambient) ambient.color.setHex(hNew.ambientColor);
-  }
-
-  const wpDef = ROOM_WAYPOINT_DEFS[roomName];
-  if (!wpDef) return;
-
-  WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName, facingY: wpDef.facingY };
-  walkTo('_room_dest', () => {
-    // Hide previous room, show new one
-    if (prevRoom && prevRoom !== roomName) setRoomVisible(prevRoom, false);
-    setRoomVisible(roomName, true);
-    // Face the right direction on arrival
-    if (wpDef.facingY !== undefined) _targetFacing = wpDef.facingY;
-    // Move companion to the new room too
-    if (companion) {
-      const hNew = HOUSE[roomName];
-      if (hNew?.spots?.length) {
-        const sp = hNew.spots[Math.floor(Math.random() * hNew.spots.length)];
-        companion.scene.position.set(sp.x + 0.8, 0, sp.z + 0.8);
-        companionPos.x = sp.x + 0.8;
-        companionPos.z = sp.z + 0.8;
-        companionPos.targetX = undefined;
-        companionPos.targetZ = undefined;
-      }
-    }
-    // Start an activity in this room immediately on arrival
-    const roomSpots = HOUSE[roomName]?.spots;
-    if (roomSpots?.length) {
-      const spot = roomSpots[Math.floor(Math.random() * roomSpots.length)];
-      _currentSpot = spot;
-      const pool = getFamiliarActivityPool(roomName);
-      ACTIVITY.current  = pool[Math.floor(Math.random() * pool.length)];
-      ACTIVITY.timer    = 0;
-      ACTIVITY.phase    = 0;
-      ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
-    }
-    // Maybe change outfit for this room
-    maybeChangeOutfit(roomName);
-    // Release API override after 30s (not 60) so she resumes her life sooner
-    _apiOverrideTimer = API_OVERRIDE_DURATION - 30;
-  });
+  // Walking disabled — avatar stays at streaming spot.
+  // Just update ambient colour and activity pool for the named room.
+  _currentRoom = roomName;
+  const hNew = HOUSE[roomName];
+  if (hNew && ambient) ambient.color.setHex(hNew.ambientColor);
+  const pool = getFamiliarActivityPool(roomName);
+  ACTIVITY.current  = pool[Math.floor(Math.random() * pool.length)];
+  ACTIVITY.timer    = 0;
+  ACTIVITY.phase    = 0;
+  ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+  maybeChangeOutfit(roomName);
+  console.log(`[Room] Virtual switch to: ${roomName}`);
 }
 
 // ── Camera system ─────────────────────────────────────────────────────────────
+// STREAMER PORTRAIT CAM — always faces the avatar from the front.
+// She faces +Z (toward camera). Camera sits at +Z offset from her,
+// slightly above eye level. House interior fills the background.
+//
+// IDLE  : medium shot, waist-up, shows room behind her
+// SPEAK : close-up face/bust shot — punches in
+// THINK : medium-close with slight side angle
 let camMode = 'IDLE';
-const CAM_LERP = 0.035;
+const CAM_LERP = 0.04;
 
-const WORLD_CAM = { behindDist: 3.5, sideDist: 0.8, height: 2.2, lookHeight: 1.1 };
-const FACE_CAM  = { frontDist: 1.05, height: 1.65, lookHeight: 1.45 };
-const THINK_CAM = { behindDist: 2.2, sideDist: 0.5, height: 1.8, lookHeight: 1.3 };
-
-const camCurrent = { x: 0.6, y: 1.8, z: 1.5, lookX: 0.6, lookY: 1.2, lookZ: -1.2 };
-const camTarget  = { x: 0.6, y: 1.8, z: 1.5, lookX: 0.6, lookY: 1.2, lookZ: -1.2 };
-const camSmooth  = camCurrent;
-const camWant    = camTarget;
-const CAM_DIST   = { IDLE: 3.5, SPEAK: 1.05, THINK: 2.2 };
-const CAM_PRESETS = {
-  IDLE:  { z: 3.5,  y: 2.2,  lookY: 1.1,  rotY: 0    },
-  SPEAK: { z: 1.05, y: 1.65, lookY: 1.45, rotY: 0    },
-  THINK: { z: 2.2,  y: 1.8,  lookY: 1.3,  rotY: 0.01 },
+// All distances in world units. Avatar height ≈ 1.7 units.
+// Camera is always in FRONT of her (she faces +Z, cam at positive Z from her pos)
+const STREAMER_CAM = {
+  IDLE:  { dist: 2.8, height: 1.55, lookHeight: 1.15, sideAngle: 0.0  },
+  SPEAK: { dist: 1.1, height: 1.62, lookHeight: 1.45, sideAngle: 0.0  },
+  THINK: { dist: 2.0, height: 1.58, lookHeight: 1.30, sideAngle: 0.18 },
 };
 
 function setCamMode(mode) {
@@ -1381,28 +1343,10 @@ function goToSpot(spot) {
 let _targetFacing = Math.PI;
 
 function lifeUpdate() {
-  if (walk.active) return;
-  famUpdate(1/60);  // track time spent in current room/activity
-  if (_apiOverride) {
-    _apiOverrideTimer += 1/60;
-    if (_apiOverrideTimer > API_OVERRIDE_DURATION) {
-      _apiOverride = false;
-      _lifeTimer   = _nextDwell; // trigger immediate next move
-    }
-    return;
-  }
-
-  _lifeTimer += 1/60;
-  if (_lifeTimer < _nextDwell) return;
-
-  _lifeTimer  = 0;
-  _nextDwell  = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
-
-  const spot = pickNextSpot();
-  if (spot) {
-    console.log(`[Life] ${spot.room} → ${spot.label}`);
-    goToSpot(spot);
-  }
+  // Life scheduler disabled — avatar stays at streaming spot (0,0,0).
+  // She does in-place activities (dance, idle, gestures) instead of walking.
+  // Room walking caused her to clip into walls due to house coord mismatch.
+  famUpdate(1/60);
 }
 
 // Animate room neon lights (very slow ambient breathing — not a flicker)
@@ -1558,17 +1502,18 @@ gltfLoader.load(
     setRestPose();
     vrm._restPosY = vrm.scene.position.y;
 
-    // ── Bootstrap 360° camera system ─────────────────────
-    // Place her at centre stage facing camera (Z+) initially
+    // ── Lock avatar at world origin, facing +Z (toward camera) ──
+    // The life/walk system is disabled — she stays on her streaming spot
+    // and does activities in place. House fills the background.
     vrmPos.x = 0; vrmPos.z = 0;
     vrm.scene.position.set(0, vrm.scene.position.y, 0);
-    // VRM_BASE_ROT_Y is set by rotateVRM0 — she faces +Z (toward camera)
-    // Camera starts directly in front of her
-    const modelHeight = size.y;
-    camSmooth.x = 0; camSmooth.y = modelHeight * 0.68; camSmooth.z = CAM_DIST.IDLE;
-    camSmooth.lookX = 0; camSmooth.lookY = modelHeight * 0.55; camSmooth.lookZ = 0;
-    camera.position.set(camSmooth.x, camSmooth.y, camSmooth.z);
-    camera.lookAt(camSmooth.lookX, camSmooth.lookY, camSmooth.lookZ);
+
+    // Snap streamer cam to correct position so there's no drift on load
+    const preset = STREAMER_CAM.IDLE;
+    camCurrent.x = 0;    camCurrent.y = preset.height; camCurrent.z = preset.dist;
+    camCurrent.lookX = 0; camCurrent.lookY = preset.lookHeight; camCurrent.lookZ = 0;
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
 
     // Activity system starts after a short idle
     ACTIVITY.current  = 'idle';
@@ -3224,57 +3169,37 @@ function triggerGiftPop() {
 //  Smooth lerp between IDLE / SPEAK / THINK camera states.
 // ================================================================
 
+// ================================================================
+//  STREAMER PORTRAIT CAMERA
+//  Avatar faces +Z. Camera always sits in front of her (at +Z),
+//  so she's always facing the lens. House fills background.
+//  Three modes: IDLE (waist-up), SPEAK (close face), THINK (mid-side)
+// ================================================================
+
 function updateCamera(delta) {
   if (!vrm) return;
 
   const vx = vrm.scene.position.x;
   const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
-  // Her current facing angle in world space
-  const facing = vrm.scene.rotation.y;
 
-  let tx, ty, tz, lx, ly, lz;
+  const preset = STREAMER_CAM[camMode] || STREAMER_CAM.IDLE;
 
-  if (camMode === 'SPEAK') {
-    // ── FACE CAM: punch in to her face ──────────────────────
-    // Place camera directly in front of her face
-    const frontX = vx + Math.sin(facing) * FACE_CAM.frontDist;
-    const frontZ = vz + Math.cos(facing) * FACE_CAM.frontDist;
-    tx = frontX;
-    ty = FACE_CAM.height;
-    tz = frontZ;
-    lx = vx;
-    ly = FACE_CAM.lookHeight;
-    lz = vz;
+  // Camera sits directly in front — she faces +Z, so cam is at vz + dist
+  // Small side angle for THINK mode gives cinematic feel
+  const sideShift = preset.sideAngle;
+  const tx = vx + sideShift;
+  const ty = preset.height;
+  const tz = vz + preset.dist;
+  const lx = vx;
+  const ly = preset.lookHeight;
+  const lz = vz;
 
-  } else if (camMode === 'THINK') {
-    // ── THINK CAM: mid-distance, slight cinematic angle ──────
-    const bx = vx - Math.sin(facing) * THINK_CAM.behindDist + Math.cos(facing) * THINK_CAM.sideDist;
-    const bz = vz - Math.cos(facing) * THINK_CAM.behindDist - Math.sin(facing) * THINK_CAM.sideDist;
-    tx = bx;
-    ty = THINK_CAM.height;
-    tz = bz;
-    lx = vx;
-    ly = THINK_CAM.lookHeight;
-    lz = vz;
-
-  } else {
-    // ── WORLD CAM: Sims-style — behind her, shows the room ──
-    const bx = vx - Math.sin(facing) * WORLD_CAM.behindDist + Math.cos(facing) * WORLD_CAM.sideDist;
-    const bz = vz - Math.cos(facing) * WORLD_CAM.behindDist - Math.sin(facing) * WORLD_CAM.sideDist;
-    tx = bx;
-    ty = WORLD_CAM.height;
-    tz = bz;
-    lx = vx;
-    ly = WORLD_CAM.lookHeight;
-    lz = vz;
-  }
-
-  // Smooth lerp toward target
-  const L = camMode === 'SPEAK' ? 0.06 : CAM_LERP;
-  camCurrent.x    += (tx - camCurrent.x)    * L;
-  camCurrent.y    += (ty - camCurrent.y)    * L;
-  camCurrent.z    += (tz - camCurrent.z)    * L;
+  // Faster lerp when punching in for SPEAK
+  const L = camMode === 'SPEAK' ? 0.07 : CAM_LERP;
+  camCurrent.x     += (tx - camCurrent.x)     * L;
+  camCurrent.y     += (ty - camCurrent.y)     * L;
+  camCurrent.z     += (tz - camCurrent.z)     * L;
   camCurrent.lookX += (lx - camCurrent.lookX) * L;
   camCurrent.lookY += (ly - camCurrent.lookY) * L;
   camCurrent.lookZ += (lz - camCurrent.lookZ) * L;
@@ -3481,10 +3406,11 @@ function render() {
 
     vrm.update(delta);
 
-    // ── Eye look-at wander ────────────────────────────
+    // ── Eye look-at — mostly at camera with natural micro-wanders ──
     if (vrm.lookAt) {
-      vrm.lookAt.yaw   = Math.sin(idleTime * 0.28) * 12;
-      vrm.lookAt.pitch = Math.sin(idleTime * 0.19) * 6 - 2;
+      // Gentle wander around camera center — she's talking to chat
+      vrm.lookAt.yaw   = Math.sin(idleTime * 0.22) * 7 + Math.sin(idleTime * 0.71) * 3;
+      vrm.lookAt.pitch = Math.sin(idleTime * 0.17) * 4 - 3; // slight downward as if reading chat
     }
 
     // ── Blink ─────────────────────────────────────────
