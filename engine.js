@@ -654,13 +654,11 @@ _gltfLoader.load(
     _houseLoaded = true;
 
     // Pick a spawn point well inside the house footprint so the avatar
-    // doesn't clip through a wall. We aim for the centre of the floor
-    // but offset slightly toward +Z so the default camera (which sits at
-    // vz + 2.6) is looking inward rather than through an exterior wall.
-    // HOUSE.studio.spots[0] = desk spot at (0.6, -1.2) which is a known
-    // open area. Use that as the starting position.
-    _houseSpawnX = HOUSE.studio.spots[0].x;   //  0.6
-    _houseSpawnZ = HOUSE.studio.spots[0].z;   // -1.2
+    // doesn't clip through a wall. Start at origin (0,0) — the house
+    // loader centres the house so (0,0) should be near the middle.
+    // After first test, hardcode the correct room coordinates here.
+    _houseSpawnX = 0;
+    _houseSpawnZ = 0;
 
     // If the VRM is already loaded, reposition it now
     if (vrm) {
@@ -1502,14 +1500,17 @@ gltfLoader.load(
     setRestPose();
     vrm._restPosY = vrm.scene.position.y;
 
-    // ── Place avatar inside the house (studio desk spot) ────────
-    // Use the spawn coords set by the house loader (or defaults if house
-    // hasn't finished loading yet — house loader will reposition on arrival).
-    const spawnX = _houseSpawnX;  // 0.6  (studio desk area)
-    const spawnZ = _houseSpawnZ;  // -1.2 (studio desk area)
+    // ── Place avatar inside the house ───────────────────────────
+    // Spawn at (0,0,0) first — use Controls panel posX/posZ sliders
+    // to walk her into a clear room, then we'll hardcode those coords.
+    // Once house loads it will update _houseSpawnX/Z to better coords.
+    const spawnX = _houseSpawnX;
+    const spawnZ = _houseSpawnZ;
     vrmPos.x = spawnX; vrmPos.z = spawnZ;
     vrm.scene.position.set(spawnX, vrm.scene.position.y, spawnZ);
     vrm.scene.rotation.y = Math.PI; // face +Z toward camera
+
+    console.log(`[VRM] spawned at (${spawnX}, ${vrm.scene.position.y.toFixed(3)}, ${spawnZ}) — restPosY=${vrm.scene.position.y.toFixed(3)}`);
 
     // Snap camera directly in front of her spawn point — no lerp drift
     _snapCameraToVRM();
@@ -3180,13 +3181,14 @@ function triggerGiftPop() {
 function _snapCameraToVRM() {
   if (!vrm) return;
   const vx = vrm.scene.position.x;
+  const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
   const p  = STREAMER_CAM.IDLE;
   camCurrent.x     = vx + p.sideShift;
-  camCurrent.y     = p.height;
+  camCurrent.y     = vy + p.height;
   camCurrent.z     = vz + p.dist;
   camCurrent.lookX = vx;
-  camCurrent.lookY = p.lookHeight;
+  camCurrent.lookY = vy + p.lookHeight;
   camCurrent.lookZ = vz;
   camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
   camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
@@ -3196,15 +3198,16 @@ function updateCamera(delta) {
   if (!vrm) return;
 
   const vx = vrm.scene.position.x;
+  const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
 
   const p  = STREAMER_CAM[camMode] || STREAMER_CAM.IDLE;
-  const tx = vx + p.sideShift;   // tiny side shift for THINK mode only
-  const ty = p.height;
-  const tz = vz + p.dist;        // always in FRONT (+Z from avatar)
+  const tx = vx + p.sideShift;
+  const ty = vy + p.height;
+  const tz = vz + p.dist;
   const lx = vx;
-  const ly = p.lookHeight;
-  const lz = vz;                  // look at avatar's base X/Z
+  const ly = vy + p.lookHeight;
+  const lz = vz;
 
   const L = camMode === 'SPEAK' ? 0.08 : CAM_LERP;
   camCurrent.x     += (tx - camCurrent.x)     * L;
