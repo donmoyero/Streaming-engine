@@ -10,14 +10,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
-import { HOUSE } from './engine-life.js';
-import { ROOM_WAYPOINT_DEFS } from './engine-life.js';
 import { cacheBones, setRestPose } from './engine-bones.js';
-import { _snapCameraToVRM, resetCamFacingY } from './engine-camera.js';
+import { _snapCameraToVRM, setCamFacingY } from './engine-camera.js';
 import {
   startTopicPolling, _initDeadAir, initTwitchChat,
   setProgress, setStatus, loader_el,
-  vrmPos, setTargetFacing, showBubble,
+  HOUSE, ROOM_WAYPOINT_DEFS,
+  setTargetFacing,
+  vrmPos, ACTIVITY, showBubble,
 } from './engine-life.js';
 
 // ── Config ─────────────────────────────────────────────────────
@@ -109,11 +109,17 @@ export const HOUSE_BOUNDS  = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
 export const AVATAR_RADIUS = 0.25;
 
 // ── VRM ref (populated after load) ──────────────────────────────
-export let vrm           = null;
+// Use getVrm() in other modules — a plain `import { vrm }` captures the
+// initial null and never sees the update, because ES module live-bindings
+// only work when the exporting module writes its own variable.
+export let vrm            = null;
 export let VRM_BASE_ROT_Y = Math.PI;
+export function getVrm()   { return vrm; }
+export function _setVrm(v) { vrm = v; }
 
 // ── Place VRM on house floor via raycast ─────────────────────────
 export function _placeVRMOnFloor() {
+  const vrm = getVrm();
   if (!vrm) return;
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
@@ -164,8 +170,8 @@ export function _placeVRMOnFloor() {
   vrm.scene.rotation.y   = Math.PI;
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
-  setTargetFacing(Math.PI);   // from engine-life
-  resetCamFacingY(Math.PI);   // from engine-camera
+  setTargetFacing(Math.PI);
+  setCamFacingY(Math.PI);
   console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${safeFeetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
 }
 
