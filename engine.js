@@ -630,9 +630,22 @@ const roomLights = {};
 const _gltfLoader = new GLTFLoader();
 
 let _houseLoaded = false;
-// VRM spawn point — updated once house loads so avatar stands in a real room
+// VRM spawn point — set by the floor-finder once house loads
 let _houseSpawnX = 0;
 let _houseSpawnZ = 0;
+let _houseFloorY = 0;  // actual floor Y at spawn point
+
+// Place the VRM standing on the detected floor at the spawn X/Z
+function _placeVRMOnFloor() {
+  if (!vrm) return;
+  vrmPos.x = _houseSpawnX;
+  vrmPos.z = _houseSpawnZ;
+  // Her scene origin is at her feet after VRMUtils.rotateVRM0 + auto-scale.
+  // Stand her exactly on the detected floor surface.
+  vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
+  vrm._restPosY = _houseFloorY;
+  vrm.scene.rotation.y = Math.PI;
+}
 
 _gltfLoader.load(
   'House.glb',
@@ -653,23 +666,69 @@ _gltfLoader.load(
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
 
-    // Pick a spawn point well inside the house footprint.
-    // House is ~15×16 units centred at origin. After testing,
-    // (−3, 0, −3) puts her in the living room interior away from walls.
-    // Adjust these after confirming visually with the Controls sliders.
-    _houseSpawnX = -3;
-    _houseSpawnZ = -3;
+    // ── Auto floor-finder ──────────────────────────────────────────
+    // Cast rays downward from a grid of candidate positions.
+    // Pick the candidate with a real floor hit AND the most open
+    // horizontal space around it (fewest wall hits in 4 directions).
+    // This means she always spawns in a real room, never a wall/hallway.
+    const _raycaster = new THREE.Raycaster();
+    const _down      = new THREE.Vector3(0, -1, 0);
+    const _houseMeshes = [];
+    house.traverse(n => { if (n.isMesh) _houseMeshes.push(n); });
+
+    // Candidate grid: every 1 unit across the interior
+    const GRID_STEP = 1.0;
+    const SEARCH_R  = 6;   // search ±6 units from centre
+    let bestSpawn   = null;
+    let bestScore   = -1;
+
+    for (let gx = -SEARCH_R; gx <= SEARCH_R; gx += GRID_STEP) {
+      for (let gz = -SEARCH_R; gz <= SEARCH_R; gz += GRID_STEP) {
+        // Cast down from high up
+        _raycaster.set(new THREE.Vector3(gx, 20, gz), _down);
+        const hits = _raycaster.intersectObjects(_houseMeshes, false);
+        if (!hits.length) continue;
+        const floorY = hits[0].point.y;
+        if (floorY < -1) continue; // skip basement-level hits
+
+        // Score: count how many of 4 horizontal directions are open (no wall within 1.2m)
+        let openSides = 0;
+        const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (const [dx, dz] of DIRS) {
+          _raycaster.set(new THREE.Vector3(gx, floorY + 1.0, gz), new THREE.Vector3(dx, 0, dz));
+          _raycaster.far = 1.2;
+          const wHits = _raycaster.intersectObjects(_houseMeshes, false);
+          if (!wHits.length) openSides++;
+        }
+        _raycaster.far = Infinity; // reset
+
+        if (openSides > bestScore) {
+          bestScore = openSides;
+          bestSpawn = { x: gx, y: floorY, z: gz };
+        }
+      }
+    }
+
+    if (bestSpawn) {
+      _houseSpawnX = bestSpawn.x;
+      _houseSpawnZ = bestSpawn.z;
+      _houseFloorY = bestSpawn.y;
+      console.log(`[House] auto-spawn → (${bestSpawn.x.toFixed(2)}, ${bestSpawn.y.toFixed(2)}, ${bestSpawn.z.toFixed(2)})  openSides=${bestScore}`);
+    } else {
+      // Fallback: living room area which we know is visible
+      _houseSpawnX = -3;
+      _houseSpawnZ = -3;
+      _houseFloorY = 0;
+      console.warn('[House] floor-finder found no candidate, using fallback (-3, 0, -3)');
+    }
 
     // If the VRM is already loaded, reposition it now
     if (vrm) {
-      vrm.scene.position.x = _houseSpawnX;
-      vrm.scene.position.z = _houseSpawnZ;
-      vrmPos.x = _houseSpawnX;
-      vrmPos.z = _houseSpawnZ;
+      _placeVRMOnFloor();
       _snapCameraToVRM();
     }
 
-    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  span=${(rawSize.x*hScale).toFixed(1)}×${(rawSize.z*hScale).toFixed(1)}  spawn=(${_houseSpawnX}, ${_houseSpawnZ})`);
+    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}  span=${(rawSize.x*hScale).toFixed(1)}×${(rawSize.z*hScale).toFixed(1)}`);
   },
   (xhr) => {
     const pct = Math.round(xhr.loaded / xhr.total * 100);
@@ -1500,19 +1559,22 @@ gltfLoader.load(
     setRestPose();
     vrm._restPosY = vrm.scene.position.y;
 
-    // ── Place avatar inside the house ───────────────────────────
-    // Spawn at (0,0,0) first — use Controls panel posX/posZ sliders
-    // to walk her into a clear room, then we'll hardcode those coords.
-    // Once house loads it will update _houseSpawnX/Z to better coords.
-    const spawnX = _houseSpawnX;
-    const spawnZ = _houseSpawnZ;
-    vrmPos.x = spawnX; vrmPos.z = spawnZ;
-    vrm.scene.position.set(spawnX, vrm.scene.position.y, spawnZ);
-    vrm.scene.rotation.y = Math.PI; // face +Z toward camera
+    // ── Place avatar on the house floor ─────────────────────────
+    // If house already loaded, use detected floor coords.
+    // If house is still loading, _placeVRMOnFloor will be called
+    // from the house loader callback when it finishes.
+    if (_houseLoaded) {
+      _placeVRMOnFloor();
+    } else {
+      // Temporary: stand at origin until house loads and repositions her
+      vrmPos.x = 0; vrmPos.z = 0;
+      vrm.scene.position.set(0, vrm.scene.position.y, 0);
+      vrm.scene.rotation.y = Math.PI;
+    }
 
-    console.log(`[VRM] spawned at (${spawnX}, ${vrm.scene.position.y.toFixed(3)}, ${spawnZ}) — restPosY=${vrm.scene.position.y.toFixed(3)}`);
+    console.log(`[VRM] initial position (${vrm.scene.position.x.toFixed(2)}, ${vrm.scene.position.y.toFixed(3)}, ${vrm.scene.position.z.toFixed(2)})`);
 
-    // Snap camera directly in front of her spawn point — no lerp drift
+    // Snap camera directly in front of her — no lerp drift
     _snapCameraToVRM();
 
     // Activity system starts after a short idle
