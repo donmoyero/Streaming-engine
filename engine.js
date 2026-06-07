@@ -653,12 +653,12 @@ _gltfLoader.load(
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
 
-    // Pick a spawn point well inside the house footprint so the avatar
-    // doesn't clip through a wall. Start at origin (0,0) — the house
-    // loader centres the house so (0,0) should be near the middle.
-    // After first test, hardcode the correct room coordinates here.
-    _houseSpawnX = 0;
-    _houseSpawnZ = 0;
+    // Pick a spawn point well inside the house footprint.
+    // House is ~15×16 units centred at origin. After testing,
+    // (−3, 0, −3) puts her in the living room interior away from walls.
+    // Adjust these after confirming visually with the Controls sliders.
+    _houseSpawnX = -3;
+    _houseSpawnZ = -3;
 
     // If the VRM is already loaded, reposition it now
     if (vrm) {
@@ -902,9 +902,9 @@ const CAM_LERP = 0.05;
 // Camera positions: avatar at (vx, 0, vz), facing +Z
 // Camera sits at (vx + sideShift, height, vz + dist) looking at (vx, lookH, vz)
 const STREAMER_CAM = {
-  IDLE:  { dist: 2.6,  height: 1.50, lookHeight: 1.10, sideShift: 0.0  },
+  IDLE:  { dist: 1.8,  height: 1.50, lookHeight: 1.10, sideShift: 0.0  },
   SPEAK: { dist: 0.95, height: 1.60, lookHeight: 1.42, sideShift: 0.0  },
-  THINK: { dist: 1.85, height: 1.55, lookHeight: 1.28, sideShift: 0.22 },
+  THINK: { dist: 1.4,  height: 1.55, lookHeight: 1.28, sideShift: 0.22 },
 };
 
 // Smoothed camera state — lerps toward target each frame
