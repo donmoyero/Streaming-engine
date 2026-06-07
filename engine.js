@@ -77,7 +77,7 @@ camera.lookAt(0, 0.8, 0);
 // ── Lighting ─────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0x1a0a2e, 2.0);
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xfff5e0, 2.8);
+const keyLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
 keyLight.position.set(1.5, 3, 2);
 scene.add(keyLight);
 const fillLight = new THREE.DirectionalLight(0xffe0b0, 1.4);
@@ -97,8 +97,8 @@ scene.add(neonBlue);
 const neonPurple = new THREE.PointLight(0x9b30ff, 2.5, 10);
 neonPurple.position.set(0, 3.5, -5);
 scene.add(neonPurple);
-const floorGlow  = new THREE.PointLight(0xff6a00, 1.5, 8);
-floorGlow.position.set(0, 0.1, 0);
+const floorGlow  = new THREE.PointLight(0xff6a00, 0.4, 6);
+floorGlow.position.set(0, 0.5, -1);
 scene.add(floorGlow);
 
 // ── Streaming Studio Builder ──────────────────────────────
@@ -600,7 +600,7 @@ function buildGameRoom() {
 
   // ── Ceiling spot lights ────────────────────────────────
   function addSpotLight(x, z, color) {
-    const spot = new THREE.SpotLight(color, 4, 12, Math.PI/7, 0.4);
+    const spot = new THREE.SpotLight(color, 1.5, 12, Math.PI/7, 0.5);
     spot.position.set(x, 9, z);
     spot.target.position.set(x * 0.3, 0, z * 0.3);
     scene.add(spot);
@@ -1190,15 +1190,16 @@ function lifeUpdate() {
   }
 }
 
-// Animate room neon lights (gentle pulse)
+// Animate room neon lights (very slow ambient breathing — not a flicker)
 let _roomTime = 0;
 function animateRoomLights(delta) {
   _roomTime += delta;
-  roomLights.neonPink.intensity   = 3.2 + Math.sin(_roomTime * 1.7) * 0.8;
-  roomLights.neonBlue.intensity   = 2.8 + Math.sin(_roomTime * 1.3 + 1) * 0.7;
-  roomLights.neonPurple.intensity = 2.3 + Math.sin(_roomTime * 0.9 + 2) * 0.5;
+  // Slow, subtle pulse — period ~12s, amplitude ±0.2 so it's a warm glow not a fault
+  roomLights.neonPink.intensity   = 2.8 + Math.sin(_roomTime * 0.18) * 0.2;
+  roomLights.neonBlue.intensity   = 2.4 + Math.sin(_roomTime * 0.14 + 1) * 0.2;
+  roomLights.neonPurple.intensity = 2.0 + Math.sin(_roomTime * 0.11 + 2) * 0.15;
   if (monitorGlowLight && ACTIVITY.current !== 'monitor') {
-    monitorGlowLight.intensity = 0.7 + Math.sin(_roomTime * 0.8) * 0.15;
+    monitorGlowLight.intensity = 0.6 + Math.sin(_roomTime * 0.12) * 0.08;
   }
 }
 
