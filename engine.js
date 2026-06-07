@@ -159,7 +159,6 @@ let monitorGlowLight = null;
 let keyboardMesh = null;
 let chairMesh = null;
 
-function buildGameRoom() {
 // Old game room removed — house GLB is the environment now
 const roomLights = {};
 
@@ -184,6 +183,8 @@ const AVATAR_RADIUS = 0.25; // capsule radius — NOT mesh half-width
 
 // Raycast downward from above spawn point to find the actual floor surface
 function _detectFloorByRaycast(x, z) {
+  // stub — floor detection handled inside _placeVRMOnFloor via raycast grid
+}
 // Place the VRM standing exactly on the house floor at spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
