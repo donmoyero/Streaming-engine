@@ -75,7 +75,7 @@ camera.position.set(0, 0.8, 4);
 camera.lookAt(0, 0.8, 0);
 
 // ── Lighting ─────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0x1a0a2e, 2.0);
+const ambient = new THREE.AmbientLight(0x1a0a2e, 3.2);  // raised — prevents skin going black under neon
 scene.add(ambient);
 const keyLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
 keyLight.position.set(1.5, 3, 2);
@@ -88,13 +88,13 @@ rimLight.position.set(0, 2, -3);
 scene.add(rimLight);
 
 // ── RGB neon point lights (game room atmosphere) ─────────
-const neonPink   = new THREE.PointLight(0xff2d78, 3.5, 12);
+const neonPink   = new THREE.PointLight(0xff2d78, 1.8, 12);
 neonPink.position.set(-4, 2.5, -3);
 scene.add(neonPink);
-const neonBlue   = new THREE.PointLight(0x00aaff, 3.0, 12);
+const neonBlue   = new THREE.PointLight(0x00aaff, 1.5, 12);
 neonBlue.position.set(4, 2.5, -3);
 scene.add(neonBlue);
-const neonPurple = new THREE.PointLight(0x9b30ff, 2.5, 10);
+const neonPurple = new THREE.PointLight(0x9b30ff, 1.2, 10);
 neonPurple.position.set(0, 3.5, -5);
 scene.add(neonPurple);
 const floorGlow  = new THREE.PointLight(0xff6a00, 0.4, 6);
@@ -996,6 +996,21 @@ function moveToRoom(roomName) {
   WAYPOINTS['_room_dest'] = { x: wpDef.x, z: wpDef.z, label: roomName, facingY: wpDef.facingY };
   walkTo('_room_dest', () => {
     setRoomVisible(roomName, true);
+    // Face the right direction on arrival
+    if (wpDef.facingY !== undefined) _targetFacing = wpDef.facingY;
+    // Start an activity in this room immediately on arrival
+    const roomSpots = HOUSE[roomName]?.spots;
+    if (roomSpots?.length) {
+      const spot = roomSpots[Math.floor(Math.random() * roomSpots.length)];
+      _currentSpot = spot;
+      const pool = spot.activities || ['idle'];
+      ACTIVITY.current  = pool[Math.floor(Math.random() * pool.length)];
+      ACTIVITY.timer    = 0;
+      ACTIVITY.phase    = 0;
+      ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+    }
+    // Release API override after 30s (not 60) so she resumes her life sooner
+    _apiOverrideTimer = API_OVERRIDE_DURATION - 30;
   });
 }
 
@@ -1111,8 +1126,8 @@ let _lastWaypointActivity = '';
 // ================================================================
 
 let _lifeTimer     = 0;
-let _lifeMinDwell  = 12;  // minimum seconds at a spot before moving
-let _lifeMaxDwell  = 45;  // maximum seconds at a spot
+let _lifeMinDwell  = 8;   // minimum seconds at a spot before moving
+let _lifeMaxDwell  = 25;  // maximum seconds at a spot
 let _nextDwell     = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
 let _apiOverride      = false;
 let _apiOverrideTimer = 0;
@@ -1129,8 +1144,8 @@ let _currentSpot = null;
 
 function pickNextSpot(avoidRoom = null) {
   const allSpots = getAllSpots();
-  // Bias: 50% chance to stay in current room, 50% to wander to another
-  const stayRoom = Math.random() < 0.5 ? _currentRoom : null;
+  // Bias: 25% chance to stay in current room, 75% to wander to another
+  const stayRoom = Math.random() < 0.25 ? _currentRoom : null;
   let candidates = stayRoom
     ? allSpots.filter(s => s.room === stayRoom && s !== _currentSpot)
     : allSpots.filter(s => s.room !== _currentRoom);
@@ -1283,11 +1298,14 @@ gltfLoader.load(
       } else {
         const hexColour = MESH_COLOURS[name] ?? 0xb5743a;
         obj.material = new THREE.MeshStandardMaterial({
-          color:      hexColour,
-          roughness:  isSkin ? 0.52 : isMetallic ? 0.18 : 0.72,
-          metalness:  isMetallic ? 0.88 : 0.0,
-          side:       THREE.FrontSide,
-          depthWrite: true,
+          color:            hexColour,
+          roughness:        isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
+          metalness:        isMetallic ? 0.88 : 0.0,
+          // Emissive floor prevents skin going black under harsh neon swings
+          emissive:         isSkin ? new THREE.Color(0xc68642) : new THREE.Color(0x000000),
+          emissiveIntensity: isSkin ? 0.18 : 0.0,
+          side:             THREE.FrontSide,
+          depthWrite:       true,
         });
       }
     });
@@ -1628,6 +1646,8 @@ const ACTIVITY_POOLS = {
   'living-room': ['sofaSit', 'tvReact', 'phoneScroll', 'hairflick', 'hiponhip', 'idle', 'dance', 'stretch'],
   office:        ['typing', 'monitor', 'stretch', 'hairflick', 'idle', 'noseCover'],
   beauty:        ['mirrorPose', 'hairflick', 'hiponhip', 'idle', 'noseCover'],
+  bedroom:       ['sofaSit', 'phoneScroll', 'stretch', 'hairflick', 'idle', 'noseCover'],
+  bathroom:      ['mirrorPose', 'hairflick', 'stretch', 'idle', 'noseCover'],
 };
 // Fallback pool when room has no specific entry
 const ACTIVITY_POOL = ACTIVITY_POOLS.studio;
