@@ -70,12 +70,12 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 999999);
-camera.position.set(0, 0.8, 4);
-camera.lookAt(0, 0.8, 0);
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 999999);
+camera.position.set(0, 1.6, 3);
+camera.lookAt(0, 1.2, 0);
 
 // ── Lighting ─────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0x1a0a2e, 3.2);  // raised — prevents skin going black under neon
+const ambient = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambient);
 const keyLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
 keyLight.position.set(1.5, 3, 2);
@@ -629,13 +629,15 @@ const roomLights = buildGameRoom();
 // ================================================================
 const _gltfLoader = new GLTFLoader();
 
-let _houseLoaded = false;
+  let _houseLoaded = false;
 _gltfLoader.load(
   '/Streaming-engine/House.glb',
   (gltf) => {
     const house = gltf.scene;
-    // Scale: VRM avatar is ~1.7 units tall. Adjust if she looks tiny/huge.
-    house.scale.setScalar(1.0);
+    // House is in Blender metres — scale down so avatar (1.7 units) fits inside
+    // Typical Blender house room = ~4m wide → we want ~4 Three.js units wide
+    house.scale.setScalar(0.1);
+    // Centre the house so avatar starts in the living room area
     house.position.set(0, 0, 0);
     house.traverse(n => {
       if (n.isMesh) {
