@@ -3115,8 +3115,9 @@ async function sendMessage(message, displayName='Viewer') {
       // but we only send the last 6 to the API. This is intentional — it keeps
       // token costs low while giving the model enough recent context.
       history:      chatHistory.slice(-6),
-      system_hint:  'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
-      current_room: _currentRoom,
+      system_hint:      'Reply in 1-2 SHORT punchy sentences max. You are a live streamer — keep it quick, witty and real. No long explanations.',
+      current_room:     _currentRoom,
+      current_activity: ACTIVITY.current,
     };
     if (sceneSnapshot) {
       body.scene_image    = sceneSnapshot;   // base64 JPEG
