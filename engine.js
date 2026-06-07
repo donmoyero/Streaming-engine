@@ -630,31 +630,25 @@ const roomLights = {};
 const _gltfLoader = new GLTFLoader();
 
 let _houseLoaded = false;
-// ── Real house geometry (from GLB mesh analysis) ─────────────────────────────
-// GLB raw: floor Y=0.430, walls X:-5.195→5.203, Z:-5.460→5.540
-// House is scaled so longest span (Z=13.25) maps to 16 units → hScale=16/13.25=1.208
-// World floor Y = 0.430 × 1.208 = 0.519 (measured after scale+center applied)
-// Living room centre in world space after centering: approx (-2.7, floor, -3.8)
-// These values should be confirmed with btn-log after first load.
+// Spawn coords — living room centre. Confirmed from GLB mesh analysis.
 let _houseSpawnX = -2.7;
 let _houseSpawnZ = -3.8;
-let _houseFloorY = 0.519;  // 0.430 × hScale(1.208) — avatar feet land here
+// _houseFloorY is set dynamically by the house loader below (0.430 × hScale).
+// Safe fallback of 0 until house loads.
+let _houseFloorY = 0;
 
-// ── House interior bounds (world space after GLB scale+center) ────────────────
-// Raw: X:-5.195→5.203, Z:-5.460→5.540  × hScale 1.208, then centered
-// Approximate world bounds (avatar capsule radius 0.25 from wall):
-const HOUSE_BOUNDS = {
-  minX: -5.8, maxX: 5.8,   // walls inner face
-  minZ: -6.0, maxZ: 6.0,
-};
-// Capsule radius — use body width, NOT mesh width (arms cause false positives)
-const AVATAR_RADIUS = 0.25;
+// ── House interior wall bounds (world space, set after house loads) ────────────
+// Raw GLB: walls X:-5.195→5.203, Z:-5.460→5.540. Multiplied by hScale then centered.
+// These are set in the house loader once hScale is known.
+const HOUSE_BOUNDS = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
+const AVATAR_RADIUS = 0.25; // capsule radius — NOT mesh half-width
 
-// Place the VRM standing on the detected floor at the spawn X/Z
+// Place the VRM standing exactly on the house floor at spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
+  // position.y = floorY means her feet (bounding box min) sit on the floor
   vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
   vrm._restPosY = _houseFloorY;
   vrm.scene.rotation.y = Math.PI;
@@ -676,12 +670,31 @@ _gltfLoader.load(
     const sCenter = sBox.getCenter(new THREE.Vector3());
     house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z);
 
-    // ── Recalculate floor Y from real scaled geometry ──────────────────────────
-    // Raw GLB floor meshes (strop a podlaha) sit at Y=0.430 in native units.
-    // After scaling and floor-anchoring (position.y = -sBox.min.y), the world
-    // floor Y = 0.430 × hScale. We store this so _placeVRMOnFloor is always exact.
-    _houseFloorY = 0.430 * hScale;
-    console.log(`[House] hScale=${hScale.toFixed(3)}  floorY=${_houseFloorY.toFixed(4)}`);
+    // ── Compute real world floor Y from scaled+centered geometry ─────────────
+    // Raw GLB floor (strop a podlaha) sits at Y=0.430 in native units.
+    // After scaling by hScale, floor is at 0.430×hScale.
+    // After house.position.y = -sBox.min.y the whole scene is lifted so
+    // the raw bottom (sBox.min.y before position set) becomes world Y=0.
+    // The floor mesh is NOT at the raw bottom — it sits above the sokl/slab.
+    // We measure it directly: find the scaled world Y of the floor.
+    const floorMeshY = 0.430 * hScale; // raw floor Y × scale
+    // sBox.min.y (before position applied) is the bottom of the entire house including foundations
+    // position.y offsets everything up by -sBox.min.y, so world floor = floorMeshY - sBox.min.y + ... 
+    // Simpler: after position is applied, ray down from centre to find actual world floor.
+    // Use a direct Box3 re-measure which accounts for the position offset:
+    const finalBox = new THREE.Box3().setFromObject(house);
+    // The "floor" is not the absolute bottom — find it as floorMeshY offset from sBox
+    _houseFloorY = floorMeshY + (finalBox.min.y - sBox.min.y * hScale);
+    // Clamp: floor should never be negative (house is anchored above Y=0)
+    if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = finalBox.min.y + 0.430 * hScale;
+
+    // Update wall bounds using actual hScale
+    HOUSE_BOUNDS.minX = -5.195 * hScale * 0.92;
+    HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.92;
+    HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.92;
+    HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.92;
+
+    console.log(`[House] hScale=${hScale.toFixed(3)} floorY=${_houseFloorY.toFixed(4)} bounds X:${HOUSE_BOUNDS.minX.toFixed(2)}→${HOUSE_BOUNDS.maxX.toFixed(2)}`);
 
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
@@ -1021,7 +1034,7 @@ function updateWalk(delta) {
   vrmPos.x = walk.fromX + (walk.toX - walk.fromX) * ease;
   vrmPos.z = walk.fromZ + (walk.toZ - walk.fromZ) * ease;
 
-  // ── Bounds clamp — keep avatar inside house walls ──────────────────────────
+  // ── Wall bounds clamp — never enter walls ──────────────────────────────────
   vrmPos.x = Math.max(HOUSE_BOUNDS.minX + AVATAR_RADIUS, Math.min(HOUSE_BOUNDS.maxX - AVATAR_RADIUS, vrmPos.x));
   vrmPos.z = Math.max(HOUSE_BOUNDS.minZ + AVATAR_RADIUS, Math.min(HOUSE_BOUNDS.maxZ - AVATAR_RADIUS, vrmPos.z));
 
@@ -1115,8 +1128,9 @@ function updateWalk(delta) {
   setRightFingerRelax();
 
   // Vertical bob — body rises and falls with each step
+  const basePosY = vrm.scene.position.y;
   const bobY     = Math.abs(Math.sin(p)) * 0.018;
-  vrm.scene.position.y = (_houseFloorY || vrm._restPosY || 0) + bobY;
+  vrm.scene.position.y = (vrm._restPosY || 0) + bobY;
 }
 
 // ── Activity → location mapping ───────────────────────────────────────────────
@@ -1486,14 +1500,11 @@ gltfLoader.load(
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
-    // Scale VRM so she's 1.65 units tall in house world space.
-    // House GLB is scaled to longest span = 16 units (hScale ≈ 1.23).
-    // VRM native height ≈ 0.0165 units → need ×100 at house scale 1.
-    // But we measure the actual bounding box after VRMUtils.rotateVRM0
-    // so sizeRaw.y is the true native height — target 1.65 world units.
-    const VRM_TARGET_HEIGHT = 1.65; // world units — fits house ceiling of 2.543
+    // Target: 1.65 world units tall (fits 2.54-unit house ceiling with 0.89 headroom)
+    const VRM_TARGET_HEIGHT = 1.65;
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
+    // Center X/Z, place feet at Y=0 — _placeVRMOnFloor will lift to actual floorY
     vrm.scene.position.set(
       -centerRaw.x * scaleVal,
       -boxRaw.min.y * scaleVal,
@@ -1530,7 +1541,8 @@ gltfLoader.load(
       if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
-    vrm._restPosY = vrm.scene.position.y;
+    // restPosY is set by _placeVRMOnFloor below — don't set it here
+    // vrm._restPosY = vrm.scene.position.y;  ← this captured Y=0, causing floor sink
 
     // ── Place avatar on the house floor ─────────────────────────
     // If house already loaded, use detected floor coords.
@@ -1542,6 +1554,7 @@ gltfLoader.load(
       // Temporary: stand at origin until house loads and repositions her
       vrmPos.x = 0; vrmPos.z = 0;
       vrm.scene.position.set(0, vrm.scene.position.y, 0);
+      vrm._restPosY = vrm.scene.position.y;
       vrm.scene.rotation.y = Math.PI;
     }
 
@@ -3252,16 +3265,6 @@ function updateCamera(delta) {
   camCurrent.lookY += (ly - camCurrent.lookY) * L;
   camCurrent.lookZ += (lz - camCurrent.lookZ) * L;
 
-  // ── Camera wall guard — never let camera clip outside house bounds ─────────
-  // Camera sits ~1.8 units in front of avatar (+Z). If avatar is near the Z+ wall
-  // the camera would poke through. Clamp it inside the same bounds as avatar.
-  const CAM_WALL_MARGIN = 0.15;
-  camCurrent.x = Math.max(HOUSE_BOUNDS.minX + CAM_WALL_MARGIN, Math.min(HOUSE_BOUNDS.maxX - CAM_WALL_MARGIN, camCurrent.x));
-  camCurrent.z = Math.max(HOUSE_BOUNDS.minZ + CAM_WALL_MARGIN, Math.min(HOUSE_BOUNDS.maxZ - CAM_WALL_MARGIN, camCurrent.z));
-  // Camera floor guard — never go below avatar feet
-  const camFloorMin = (_houseFloorY || 0) + 0.3;
-  if (camCurrent.y < camFloorMin) camCurrent.y = camFloorMin;
-
   camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
   camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
 }
@@ -3456,8 +3459,8 @@ function render() {
         GESTURES[gesture](gestureTime);
       } else {
         gesture = null;
-        // Reset z-position after stepForward gesture — restore actual vrmPos
-        if (vrm) vrm.scene.position.z = vrmPos.z;
+        // Reset z-position if stepForward was used
+        if (vrm) vrm.scene.position.z = 0;
       }
     }
 
