@@ -4,8 +4,13 @@
 //  Reads vrm world position + _camFacingY, writes camera.position.
 // ================================================================
 
-import { camera, getVrm } from './engine-scene.js';
+import { camera, getVrm, HOUSE_BOUNDS } from './engine-scene.js';
 import { walk } from './engine-life.js';
+
+// ── Camera wall-clamp margin ─────────────────────────────────────
+// Camera is kept this far inside the house bounds so it never
+// clips through walls when the avatar stands near them.
+const CAM_WALL_MARGIN = 0.5;
 
 // ── Camera mode ──────────────────────────────────────────────────
 let camMode = 'IDLE';
