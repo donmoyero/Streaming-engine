@@ -246,6 +246,11 @@ function _placeVRMOnFloor() {
   vrm.scene.position.set(_houseSpawnX, finalY, _houseSpawnZ);
   vrm._restPosY = finalY;
   vrm.scene.rotation.y = Math.PI;
+  // Sync vrmPos so walk system knows her real world position
+  vrmPos.x = _houseSpawnX;
+  vrmPos.z = _houseSpawnZ;
+  _targetFacing = Math.PI;
+  _camFacingY   = Math.PI;
   console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${safeFeetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
 }
 
@@ -287,6 +292,34 @@ _gltfLoader.load(
 
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
     _houseLoaded = true;
+
+    // ── Scale HOUSE spot coords to match scaled GLB ───────────────────────────
+    // Raw GLB coords in HOUSE are in GLB units. House is scaled by hScale so
+    // all spot X/Z must be multiplied by hScale to land in world space.
+    // Only do this once — guard with a flag.
+    if (!HOUSE._scaled) {
+      HOUSE._scaled = true;
+      for (const roomDef of Object.values(HOUSE)) {
+        if (!roomDef.spots) continue;
+        for (const spot of roomDef.spots) {
+          spot.x *= hScale;
+          spot.z *= hScale;
+        }
+        if (roomDef.origin) {
+          roomDef.origin.x *= hScale;
+          roomDef.origin.z *= hScale;
+        }
+      }
+      // Also scale waypoint defs
+      for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) {
+        wp.x *= hScale;
+        wp.z *= hScale;
+      }
+      // Scale spawn
+      _houseSpawnX *= hScale;
+      _houseSpawnZ *= hScale;
+      console.log(`[House] Spot coords scaled by hScale=${hScale.toFixed(3)}`);
+    }
 
     // Spawn coords confirmed from GLB mesh analysis — living room centre
     // Defer by one frame so house world matrices are committed before raycasting.
@@ -1325,8 +1358,9 @@ gltfLoader.load(
 
     console.log(`[VRM] initial position (${vrm.scene.position.x.toFixed(2)}, ${vrm.scene.position.y.toFixed(3)}, ${vrm.scene.position.z.toFixed(2)})`);
 
-    // Snap camera directly in front of her — no lerp drift
-    _snapCameraToVRM();
+    // Camera snap is deferred — _placeVRMOnFloor() handles it once she's
+    // at her real spawn position inside the house. Don't snap here because
+    // she's still at (0,0,0) with rotation.y not yet set, putting cam into a wall.
 
     // Activity system starts after a short idle
     ACTIVITY.current  = 'idle';
