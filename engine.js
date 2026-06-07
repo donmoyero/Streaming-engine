@@ -643,15 +643,41 @@ let _houseFloorY = 0;
 const HOUSE_BOUNDS = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
 const AVATAR_RADIUS = 0.25; // capsule radius — NOT mesh half-width
 
+// Raycast downward from above spawn point to find the actual floor surface
+function _detectFloorByRaycast(x, z) {
+  const ray = new THREE.Raycaster(
+    new THREE.Vector3(x, 20, z),
+    new THREE.Vector3(0, -1, 0),
+    0, 40
+  );
+  const hits = ray.intersectObjects(scene.children, true)
+    .filter(h => h.object.isMesh && h.object !== vrm?.scene)
+    .sort((a, b) => b.point.y - a.point.y); // highest hit = top floor surface
+  if (hits.length > 0) {
+    console.log(`[Floor] Raycast found floor at Y=${hits[0].point.y.toFixed(4)}`);
+    return hits[0].point.y;
+  }
+  return null;
+}
+
 // Place the VRM standing exactly on the house floor at spawn X/Z
 function _placeVRMOnFloor() {
   if (!vrm) return;
   vrmPos.x = _houseSpawnX;
   vrmPos.z = _houseSpawnZ;
-  // position.y = floorY means her feet (bounding box min) sit on the floor
+
+  // Try raycast first for exact floor surface
+  const rayFloor = _detectFloorByRaycast(_houseSpawnX, _houseSpawnZ);
+  if (rayFloor !== null && rayFloor >= 0) {
+    _houseFloorY = rayFloor;
+  }
+  // Clamp: never let her spawn below 0
+  if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
+
   vrm.scene.position.set(_houseSpawnX, _houseFloorY, _houseSpawnZ);
   vrm._restPosY = _houseFloorY;
   vrm.scene.rotation.y = Math.PI;
+  console.log(`[VRM] Placed on floor Y=${_houseFloorY.toFixed(4)}`);
 }
 
 _gltfLoader.load(
