@@ -282,7 +282,8 @@
     display:flex;
     gap:8px;
     z-index:30;
-    width:580px;
+    max-width:580px;
+    width:calc(100% - 32px);
   }
   #chat-input {
     flex:1;
@@ -297,6 +298,8 @@
   }
   #chat-input::placeholder { color:var(--muted); }
   #chat-input:focus { border-color:rgba(255,184,48,0.5); }
+  #chat-input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  #send-btn:focus-visible   { outline: 2px solid var(--gold); outline-offset: 2px; }
   #send-btn {
     background:var(--gold);
     color:#0a0a0f;
@@ -370,6 +373,8 @@
     border-radius:12px 0 0 12px;
     padding:14px;
     width:220px;
+    max-height:90vh;
+    overflow-y:auto;
     z-index:50;
     backdrop-filter:blur(12px);
     font-size:12px;
