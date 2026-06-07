@@ -1551,28 +1551,15 @@ gltfLoader.load(
     VRM_BASE_ROT_Y = vrm.scene.rotation.y;
     scene.add(vrm.scene);
 
-    // Measure at scale=1, position=0 to get raw proportions
+    // Measure at scale=1, position=0
     const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
     const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
     const centerRaw = boxRaw.getCenter(new THREE.Vector3());
-    // Target: 1.65 world units tall (fits 2.54-unit house ceiling with 0.89 headroom)
     const VRM_TARGET_HEIGHT = 1.65;
     const scaleVal  = VRM_TARGET_HEIGHT / sizeRaw.y;
     vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
-    // Center X/Z at origin, position.y=0 temporarily
     vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
-
-    // Now re-measure with scale applied to find where the feet actually are.
-    // boxScaled.min.y will be negative (feet below origin). We lift by that amount
-    // so feet land at Y=0, and store it so _placeVRMOnFloor can add it to floorY.
-    const boxScaled = new THREE.Box3().setFromObject(vrm.scene);
-    const feetToOrigin = -boxScaled.min.y; // positive value = lift needed
-    vrm._feetOffset = feetToOrigin;
-    vrm.scene.position.y = feetToOrigin;  // feet now at world Y=0
-
-    const box  = new THREE.Box3().setFromObject(vrm.scene);
-    const size = box.getSize(new THREE.Vector3());
-    console.log("VRM final size:", size, "feetOffset:", feetToOrigin.toFixed(4));
+    // feetOffset will be measured AFTER setRestPose() below, once legs are posed
 
     cacheBones();
 
@@ -1600,8 +1587,15 @@ gltfLoader.load(
       if (boneSpine) { boneSpine.rotation.x = 0.02; boneSpine.rotation.z = -0.03; }
     }
     setRestPose();
-    // restPosY is set by _placeVRMOnFloor below — don't set it here
-    // vrm._restPosY = vrm.scene.position.y;  ← this captured Y=0, causing floor sink
+
+    // Measure feet position AFTER pose is applied (bent legs sit lower).
+    // Force a matrix update so Box3 sees the posed skeleton positions.
+    vrm.scene.updateMatrixWorld(true);
+    const boxPosed = new THREE.Box3().setFromObject(vrm.scene);
+    const feetToOrigin = -boxPosed.min.y; // how far to lift so feet are at Y=0
+    vrm._feetOffset = feetToOrigin;
+    vrm.scene.position.y = feetToOrigin;
+    console.log('[VRM] feetOffset after pose:', feetToOrigin.toFixed(4));
 
     // ── Place avatar on the house floor ─────────────────────────
     // Defer by one frame so all world matrices are committed before raycasting.
@@ -1672,51 +1666,126 @@ function loadCompanion() {
       VRMUtils.removeUnnecessaryJoints(gltf.scene);
       VRMUtils.rotateVRM0(companion);
 
-      // Apply neutral male skin/outfit colours
+      // ── Materials: replace ALL materials with proper MeshStandardMaterial.
+      // We can't rely on mesh names matching for an unknown VRM, so we use
+      // a colour-assignment approach based on mesh index/position in skeleton.
+      // The key insight: iterate ALL meshes, sort roughly by vertical position,
+      // and assign colours top-to-bottom (hair → skin → clothes → shoes).
+      const meshes = [];
       companion.scene.traverse(obj => {
         if (!obj.isMesh) return;
         obj.frustumCulled = false;
-        if (!obj.material) return;
-        const n = obj.name.toLowerCase();
-        // Hair
-        if (n.includes('hair') || n.includes('brow') || n.includes('lash')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a0800, roughness: 0.75 });
-        // Eyes
-        } else if (n.includes('eye') || n.includes('iris')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x3b2010, roughness: 0.1, metalness: 0.1 });
-        // Skin — face, hands, arms
-        } else if (n.includes('face') || n.includes('skin') || n.includes('body') || n.includes('hand') || n.includes('arm') || n.includes('leg') || n.includes('figure')) {
-          obj.material = new THREE.MeshStandardMaterial({
-            color: 0xb07040, roughness: 0.65,
-            emissive: new THREE.Color(0xb07040), emissiveIntensity: 0.12,
-          });
-        // Top / shirt — burgundy
-        } else if (n.includes('top') || n.includes('shirt') || n.includes('upper') || n.includes('torso') || n.includes('chest')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x5a1a1a, roughness: 0.8 });
-        // Bottom / trousers — dark navy
-        } else if (n.includes('bottom') || n.includes('pant') || n.includes('jean') || n.includes('skirt') || n.includes('lower')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a1a3a, roughness: 0.8 });
-        // Shoes
-        } else if (n.includes('shoe') || n.includes('foot') || n.includes('boot')) {
-          obj.material = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7, metalness: 0.1 });
-        // Catch-all — give a neutral outfit colour instead of skin
-        } else {
-          obj.material = new THREE.MeshStandardMaterial({
-            color: 0x2a1a0a, roughness: 0.8,
-          });
-        }
+        // Compute world-space centre Y for sorting
+        const b = new THREE.Box3().setFromObject(obj);
+        const cy = (b.min.y + b.max.y) / 2;
+        meshes.push({ obj, cy, name: obj.name.toLowerCase() });
       });
 
-      // Scale to match Miss OG Tinz
-      const box   = new THREE.Box3().setFromObject(companion.scene);
-      const sizeY = box.getSize(new THREE.Vector3()).y;
-      const sc    = 1.75 / sizeY;
+      // Sort bottom to top
+      meshes.sort((a, b) => a.cy - b.cy);
+      const total = meshes.length || 1;
+
+      meshes.forEach(({ obj, cy, name }, i) => {
+        const frac = i / total; // 0=bottom, 1=top
+
+        let color, roughness = 0.75, metalness = 0, emissive = 0x000000, emissiveIntensity = 0;
+
+        // Name-based first (most reliable when names exist)
+        if (/hair|brow|lash/i.test(name)) {
+          color = 0x120800; roughness = 0.8;
+        } else if (/eye|iris|cornea|pupil/i.test(name)) {
+          // Draw a proper eye texture
+          const ec = document.createElement('canvas'); ec.width = ec.height = 128;
+          const ctx = ec.getContext('2d');
+          ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
+          const g = ctx.createRadialGradient(64,64,4,64,64,38);
+          g.addColorStop(0,'#1a0800'); g.addColorStop(0.5,'#3b1a08'); g.addColorStop(1,'#5c2e10');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#080300'; ctx.beginPath(); ctx.arc(64,64,16,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(72,54,7,0,Math.PI*2); ctx.fill();
+          obj.material = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(ec), roughness: 0.05 });
+          return;
+        } else if (/tooth|teeth|mouth/i.test(name)) {
+          color = 0xfff8f0; roughness = 0.4;
+        } else if (/jewel|gold|necklace|earring|ring|chain|accessory/i.test(name)) {
+          color = 0xFFD700; roughness = 0.15; metalness = 0.9; emissive = 0xFFD700; emissiveIntensity = 0.15;
+        } else if (/shoe|boot|heel|sole/i.test(name)) {
+          color = 0x1a0f08; roughness = 0.7;
+        } else if (/skin|face|figure|body|arm|hand|leg|finger|toe|neck|head/i.test(name)) {
+          color = 0xb07040; roughness = 0.62; emissive = 0xb07040; emissiveIntensity = 0.12;
+        } else if (/top|shirt|blouse|torso|chest|upper|jacket|sleeve/i.test(name)) {
+          color = 0x5a1a2a; roughness = 0.8;
+        } else if (/bottom|pant|jean|skirt|trouser|lower|shorts/i.test(name)) {
+          color = 0x1a1a4a; roughness = 0.8;
+        } else {
+          // Fallback: use vertical position to guess
+          if (frac > 0.82)       { color = 0x120800; roughness = 0.8; }         // top = hair
+          else if (frac > 0.65)  { color = 0xb07040; roughness = 0.62; emissive = 0xb07040; emissiveIntensity = 0.12; } // face/neck
+          else if (frac > 0.45)  { color = 0x5a1a2a; roughness = 0.8; }         // torso = top
+          else if (frac > 0.15)  { color = 0x1a1a4a; roughness = 0.8; }         // legs = bottom
+          else                   { color = 0x1a0f08; roughness = 0.7; }         // feet = shoes
+        }
+
+        obj.material = new THREE.MeshStandardMaterial({
+          color, roughness, metalness,
+          emissive: new THREE.Color(emissive),
+          emissiveIntensity,
+          side: THREE.FrontSide,
+          depthWrite: true,
+        });
+      });
+
+      // ── Scale to match Miss OG Tinz height ──
+      companion.scene.scale.set(1, 1, 1);
+      companion.scene.position.set(0, 0, 0);
+      const rawBox = new THREE.Box3().setFromObject(companion.scene);
+      const rawH   = rawBox.getSize(new THREE.Vector3()).y;
+      const sc     = 1.60 / rawH;
       companion.scene.scale.set(sc, sc, sc);
 
-      // Start him slightly to her right
-      companion.scene.position.set(companionPos.x, 0, companionPos.z);
+      // ── Apply a natural idle pose — out of T-pose ──
+      // Use VRM humanoid if available, otherwise skip
+      if (companion.humanoid) {
+        const ch = companion.humanoid;
+        const cb = (name) => ch.getNormalizedBoneNode(name);
+        // Arms down naturally
+        const clua = cb('leftUpperArm'),  crua = cb('rightUpperArm');
+        const clla = cb('leftLowerArm'),  crla = cb('rightLowerArm');
+        const clh  = cb('leftHand'),      crh  = cb('rightHand');
+        const chip = cb('hips'),          csp  = cb('spine');
+        const clul = cb('leftUpperLeg'),  crul = cb('rightUpperLeg');
+        const clll = cb('leftLowerLeg'),  crll = cb('rightLowerLeg');
+        const clf  = cb('leftFoot'),      crf  = cb('rightFoot');
+
+        if (clua) { clua.rotation.set(0.06, 0.04,  0.85); }
+        if (crua) { crua.rotation.set(0.06,-0.04, -0.85); }
+        if (clla) { clla.rotation.set(0,    0,     0.45); }
+        if (crla) { crla.rotation.set(0,    0,    -0.45); }
+        if (clh)  { clh.rotation.set(0.06,  0,     0.15); }
+        if (crh)  { crh.rotation.set(0.06,  0,    -0.15); }
+        if (chip) { chip.rotation.set(0,     0,     0.04); }
+        if (csp)  { csp.rotation.set(0.02,  0,    -0.02); }
+        if (clul) { clul.rotation.set(0,     0,    -0.05); }
+        if (crul) { crul.rotation.set(0,     0,     0.05); }
+        if (clll) { clll.rotation.set(0.03,  0,     0); }
+        if (crll) { crll.rotation.set(0.03,  0,     0); }
+        if (clf)  { clf.rotation.set(-0.04,  0,    -0.03); }
+        if (crf)  { crf.rotation.set(-0.04,  0,     0.03); }
+      }
+
+      // ── Feet on floor — same feetOffset approach as main VRM ──
+      companion.scene.updateMatrixWorld(true);
+      const posedBox = new THREE.Box3().setFromObject(companion.scene);
+      const compFeetOffset = -posedBox.min.y;
+      companion._feetOffset = compFeetOffset;
+
+      // Place at spawn position on the house floor
+      const compFloorY = (_houseFloorY || 0) + compFeetOffset;
+      companion.scene.position.set(companionPos.x, compFloorY, companionPos.z);
+      companion._restPosY = compFloorY;
+
       scene.add(companion.scene);
-      console.log('[Companion] Loaded and ready');
+      console.log('[Companion] Loaded — feetOffset:', compFeetOffset.toFixed(4), 'floorY:', compFloorY.toFixed(4));
     },
     null,
     (err) => console.warn('[Companion] Could not load — skipping:', err.message)
@@ -1728,9 +1797,26 @@ function updateCompanion(delta) {
   _compPhase += delta;
   _companionTimer += delta;
 
-  // Gentle idle breathing
+  // Gentle idle breathing — bob around rest position, not absolute 0
   if (companion.scene) {
-    companion.scene.position.y = Math.sin(_compPhase * 0.8) * 0.008;
+    const base = companion._restPosY ?? 0;
+    companion.scene.position.y = base + Math.sin(_compPhase * 0.8) * 0.008;
+
+    // Subtle idle bone animation — gentle sway so she doesn't look frozen
+    if (companion.humanoid) {
+      const ch = companion.humanoid;
+      const t  = _compPhase;
+      const hs = ch.getNormalizedBoneNode('hips');
+      const sp = ch.getNormalizedBoneNode('spine');
+      const hd = ch.getNormalizedBoneNode('head');
+      const la = ch.getNormalizedBoneNode('leftUpperArm');
+      const ra = ch.getNormalizedBoneNode('rightUpperArm');
+      if (hs) { hs.rotation.z = Math.sin(t * 0.7) * 0.025; }
+      if (sp) { sp.rotation.z = -Math.sin(t * 0.7) * 0.015; sp.rotation.x = 0.02; }
+      if (hd) { hd.rotation.y = Math.sin(t * 0.4) * 0.06; hd.rotation.x = 0.04; }
+      if (la) { la.rotation.z =  0.85 + Math.sin(t * 0.6) * 0.04; }
+      if (ra) { ra.rotation.z = -0.85 - Math.sin(t * 0.6) * 0.04; }
+    }
   }
 
   // Wander to a new spot every _companionDwell seconds — stay near Miss OG Tinz
