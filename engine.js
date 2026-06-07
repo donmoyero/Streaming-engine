@@ -632,15 +632,18 @@ const roomLights = buildGameRoom();
 //    /Streaming-engine/models/living-room/
 // ================================================================
 
-// LoadingManager with graceful fallback for missing textures (e.g. colormap.png)
+// LoadingManager that silences missing-texture 404s by serving a fallback data-URI.
+// This stops the colormap.png spam without needing the file on the server.
+const _GREY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const _propManager = new THREE.LoadingManager();
-_propManager.setURLModifier(url => url); // pass-through
-// Fallback: replace 404 textures with a 1×1 neutral grey
-const _fallbackCanvas = document.createElement('canvas');
-_fallbackCanvas.width = _fallbackCanvas.height = 1;
-_fallbackCanvas.getContext('2d').fillStyle = '#888';
-_fallbackCanvas.getContext('2d').fillRect(0, 0, 1, 1);
-const _fallbackTexture = new THREE.CanvasTexture(_fallbackCanvas);
+_propManager.setURLModifier(url => {
+  // Only intercept texture paths (not GLBs)
+  if (/\.(png|jpg|jpeg|webp|bmp|tga)(\?.*)?$/i.test(url)) {
+    // Silently substitute a grey 1×1 PNG — no network request, no 404
+    return _GREY_PNG;
+  }
+  return url;
+});
 
 const _gltfLoader = new GLTFLoader(_propManager);
 
@@ -947,7 +950,7 @@ function loadRoomProps(roomName, onDone) {
             if (n.material) {
               const mats = Array.isArray(n.material) ? n.material : [n.material];
               mats.forEach(m => {
-                if (m.map && m.map.image === undefined) m.map = _fallbackTexture;
+                // textures are already handled by the LoadingManager URL interceptor
               });
             }
           }
@@ -3377,9 +3380,16 @@ function initTwitchChat() {
   if (typeof tmi === 'undefined') {
     // Dynamically load tmi.js then retry
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/build/tmi.min.js';
-    s.onload  = () => { console.log('[Twitch] tmi.js loaded dynamically'); initTwitchChat(); };
-    s.onerror = () => console.warn('[Twitch] Failed to load tmi.js');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tmi.js/1.8.5/tmi.min.js';
+    s.onload  = () => { console.log('[Twitch] tmi.js loaded'); initTwitchChat(); };
+    s.onerror = () => {
+      // fallback to unpkg
+      const s2 = document.createElement('script');
+      s2.src = 'https://unpkg.com/tmi.js@1.8.5/build/tmi.min.js';
+      s2.onload  = () => { console.log('[Twitch] tmi.js loaded via unpkg'); initTwitchChat(); };
+      s2.onerror = () => console.warn('[Twitch] Failed to load tmi.js from all CDNs');
+      document.head.appendChild(s2);
+    };
     document.head.appendChild(s);
     return;
   }
