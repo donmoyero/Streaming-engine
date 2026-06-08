@@ -11,6 +11,8 @@
 //    then picks the next creative angle from the activity pool
 //  ─ All original modes (IDLE/SPEAK/THINK/WALK) preserved exactly
 //  ─ Wall-clamp preserved — camera never clips through house walls
+//  ─ SIMS MODE: elevated isometric-style camera that floats above
+//    and behind the avatar at a fixed world angle (not orbit-based)
 // ================================================================
 
 import { camera, getVrm, HOUSE_BOUNDS } from './engine-scene.js';
@@ -20,8 +22,6 @@ import { walk } from './engine-life.js';
 const CAM_WALL_MARGIN = 0.5;
 
 // ── Interaction mode (IDLE / SPEAK / THINK / WALK) ───────────────
-// This controls distance/height presets for conversation moments.
-// Unchanged from original — these are set by engine-life.js calls.
 let camMode = 'IDLE';
 export const CAM_LERP = 0.04;
 
@@ -32,17 +32,25 @@ export const STREAMER_CAM = {
   WALK:  { dist: 2.20, height: 1.60, lookHeight: 1.15, sideShift: 0.0  },
 };
 
-// ── Angle presets ────────────────────────────────────────────────
-// angleOffset = radians added to her facing direction.
-//   0         = directly in front of her face (classic streamer shot)
-//   Math.PI   = directly behind her (back shot)
-//   Math.PI/2 = her right side (camera on left of scene)
-//  -Math.PI/2 = her left side (camera on right of scene)
-//
-// distMult   = multiplier on the interaction-mode distance
-// heightMult = multiplier on the interaction-mode height
-// lookOffset = extra Y added to the look-at point (tilt up/down)
+// ── Sims-style isometric camera preset ───────────────────────────
+// Fixed world-angle elevated camera — does not orbit with her facing.
+// heightAbove: how far above the avatar the camera sits
+// distBack:    horizontal distance behind the avatar (world Z)
+// distSide:    horizontal offset to the side (world X)
+// lookAtHeight: Y on the avatar to look at (hips feel more natural than face)
+const SIMS_CAM = {
+  heightAbove:  4.5,
+  distBack:     5.0,
+  distSide:     2.5,
+  lookAtHeight: 0.8,
+};
 
+// Sims mode flag + public toggle
+let _simsMode = false;
+export function setSimsMode(on) { _simsMode = on; }
+export function getSimsMode()   { return _simsMode; }
+
+// ── Angle presets ────────────────────────────────────────────────
 const ANGLE_PRESETS = {
   FRONT:          { angleOffset:  0,              distMult: 1.0,  heightMult: 1.0,  lookOffset:  0.0  },
   FRONT_LOW:      { angleOffset:  0,              distMult: 1.1,  heightMult: 0.82, lookOffset: -0.08 },
@@ -61,16 +69,11 @@ const ANGLE_PRESETS = {
 };
 
 // ── Activity → angle pool mapping ────────────────────────────────
-// Each activity has a weighted pool of angle presets.
-// The camera picks from this pool when the activity starts,
-// then dwells for ANGLE_DWELL_MS before picking again.
-// Weights: repeat an entry to make it more likely.
-
 const ACTIVITY_ANGLES = {
   idle:        ['FRONT', 'FRONT', 'QUARTER_L', 'QUARTER_R', 'SIDE_L', 'SIDE_R'],
   dance:       ['WIDE', 'WIDE', 'WIDE_SIDE', 'SIDE_L', 'SIDE_R', 'FRONT_LOW'],
   stretch:     ['SIDE_L', 'SIDE_R', 'WIDE', 'FRONT'],
-  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'FRONT'],
+  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'CLOSE'],
   hiponhip:    ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'QUARTER_R', 'WIDE_SIDE'],
   sofaSit:     ['FRONT', 'FRONT', 'SIDE_L', 'SIDE_R', 'QUARTER_L'],
   phoneScroll: ['SIDE_R', 'QUARTER_R', 'FRONT', 'OVER_SHOULDER'],
@@ -85,7 +88,6 @@ const ACTIVITY_ANGLES = {
   noseCover:   ['CLOSE', 'FRONT', 'QUARTER_R'],
   windowLook:  ['SIDE_L', 'SIDE_R', 'BACK_HIGH', 'OVER_SHOULDER'],
   fireGaze:    ['SIDE_L', 'SIDE_R', 'FRONT_LOW', 'WIDE'],
-  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'CLOSE'],
   washingUp:   ['SIDE_L', 'OVER_SHOULDER', 'QUARTER_L'],
   cabinetOpen: ['SIDE_R', 'OVER_SHOULDER', 'BACK_HIGH'],
 };
@@ -114,8 +116,6 @@ export function setCamMode(mode) {
   camMode = mode;
 }
 
-// Called by engine-life.js whenever ACTIVITY.current changes.
-// Immediately picks a new angle from the activity pool.
 export function onActivityChanged(activityName) {
   _currentActivity    = activityName || 'idle';
   _angleDwellTimer    = 0;
@@ -123,12 +123,10 @@ export function onActivityChanged(activityName) {
   _pickAngleForActivity(_currentActivity);
 }
 
-// Force a specific angle preset by name (for debug or manual control).
 export function setCamAngle(presetName) {
   if (ANGLE_PRESETS[presetName]) _currentAnglePreset = presetName;
 }
 
-// Instantly snap camera to current preset — call after VRM teleport.
 export function _snapCameraToVRM() {
   const vrm = getVrm();
   if (!vrm) return;
@@ -150,7 +148,6 @@ export function _snapCameraToVRM() {
 // ── Internal: pick angle from activity pool ──────────────────────
 function _pickAngleForActivity(activityName) {
   const pool = ACTIVITY_ANGLES[activityName] || ACTIVITY_ANGLES.idle;
-  // Avoid picking the same angle twice in a row
   let pick = pool[Math.floor(Math.random() * pool.length)];
   if (pick === _currentAnglePreset && pool.length > 1) {
     pick = pool[Math.floor(Math.random() * pool.length)];
@@ -167,6 +164,31 @@ export function updateCamera(delta) {
   const vy = vrm.scene.position.y;
   const vz = vrm.scene.position.z;
 
+  // ── SIMS MODE — fixed elevated world-angle camera ─────────────
+  // Ignores her facing direction entirely. Camera sits up high at
+  // a fixed offset (distSide, heightAbove, distBack) in world space
+  // and slowly drifts to follow her as she moves around the house.
+  if (_simsMode) {
+    const tx = vx + SIMS_CAM.distSide;
+    const ty = vy + SIMS_CAM.heightAbove;
+    const tz = vz + SIMS_CAM.distBack;
+
+    // Slow cinematic follow — feels like the Sims camera drifting
+    const L = 0.025;
+    camCurrent.x += (tx - camCurrent.x) * Math.min(1, L * 60 * delta);
+    camCurrent.y += (ty - camCurrent.y) * Math.min(1, L * 60 * delta);
+    camCurrent.z += (tz - camCurrent.z) * Math.min(1, L * 60 * delta);
+
+    // Look-at tracks her a little faster so she stays centred
+    camCurrent.lookX += (vx - camCurrent.lookX) * Math.min(1, L * 60 * delta * 2);
+    camCurrent.lookY += (vy + SIMS_CAM.lookAtHeight - camCurrent.lookY) * Math.min(1, L * 60 * delta * 2);
+    camCurrent.lookZ += (vz - camCurrent.lookZ) * Math.min(1, L * 60 * delta * 2);
+
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+    return; // skip all normal orbital camera logic
+  }
+
   // ── Smooth facing angle (prevents camera jitter on fast turns) ─
   const rawFacing = vrm.scene.rotation.y;
   let df = rawFacing - _camFacingY;
@@ -177,7 +199,6 @@ export function updateCamera(delta) {
   _camFacingY  = ((_camFacingY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
   // ── Angle dwell timer — auto-switch while activity is active ───
-  // Paused during SPEAK/THINK so camera doesn't cut mid-conversation
   if (camMode === 'IDLE' && !walk.active) {
     _angleDwellTimer += delta * 1000;
     if (_angleDwellTimer >= _angleDwellDuration) {
@@ -188,8 +209,6 @@ export function updateCamera(delta) {
   }
 
   // ── Resolve which distance/height preset to use ────────────────
-  // During WALK, override angle to WIDE for full-body shot.
-  // During SPEAK/THINK, lock to FRONT/THINK angle.
   let interactionPreset;
   let effectiveAngle;
 
@@ -208,29 +227,23 @@ export function updateCamera(delta) {
   }
 
   // ── Compute target camera position ────────────────────────────
-  // The angle offset is added to her facing direction so the
-  // camera always orbits relative to where SHE is looking,
-  // not the world axes. FRONT = her face, BACK = behind her, etc.
-
   const orbitAngle = _camFacingY + effectiveAngle.angleOffset;
   const dist       = interactionPreset.dist       * effectiveAngle.distMult;
   const height     = interactionPreset.height      * effectiveAngle.heightMult;
   const lookHeight = interactionPreset.lookHeight  + effectiveAngle.lookOffset;
 
-  // Camera sits at orbitAngle relative to avatar
-  // sin/cos gives X/Z position on the orbit circle
   const tx = vx + Math.sin(orbitAngle) * dist;
   const ty = vy + height;
   const tz = vz + Math.cos(orbitAngle) * dist;
 
-  // ── Wall clamp — keep camera inside house ─────────────────────
+  // ── Wall clamp ────────────────────────────────────────────────
   const clampedX = Math.max(HOUSE_BOUNDS.minX + CAM_WALL_MARGIN, Math.min(HOUSE_BOUNDS.maxX - CAM_WALL_MARGIN, tx));
   const clampedZ = Math.max(HOUSE_BOUNDS.minZ + CAM_WALL_MARGIN, Math.min(HOUSE_BOUNDS.maxZ - CAM_WALL_MARGIN, tz));
 
-  // ── Lerp speed: fast for SPEAK, medium for IDLE, slow for WALK ─
+  // ── Lerp speed ────────────────────────────────────────────────
   const L = camMode === 'SPEAK' ? 0.09
           : walk.active          ? 0.03
-          : 0.018; // slightly slower than original for cinematic feel
+          : 0.018;
 
   const lerpFactor = Math.min(1, L * 60 * delta);
   camCurrent.x     += (clampedX    - camCurrent.x)     * lerpFactor;
