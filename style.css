@@ -84,40 +84,99 @@
     z-index: 3;
   }
 
-  /* ── Chat bubble ── */
+  /* ── Chat bubble — world-space, positioned by JS each frame ── */
   #chat-bubble {
-    position:absolute;
-    bottom: 110px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: rgba(10,10,15,0.85);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 14px 22px;
-    max-width: 600px;
-    min-width: 200px;
-    text-align:center;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--text);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 0 30px rgba(255,184,48,0.1), 0 8px 32px rgba(0,0,0,0.5);
-    opacity:0;
-    transition: opacity 0.4s, transform 0.4s;
-    z-index:20;
+    position:         fixed;            /* JS sets left/top via boneHead projection */
+    transform:        translate(-50%, -100%); /* centre above projected point */
+    pointer-events:   none;
+    z-index:          20;
+
+    /* Size — compact pill, not the large dark box */
+    max-width:        300px;
+    min-width:        100px;
+    width:            max-content;
+
+    /* White pill with thick black border */
+    background:       #ffffff;
+    border:           3px solid #111111;
+    border-radius:    999px;
+    padding:          10px 20px;
+
+    /* Typography — dark text on white */
+    font-family:      'DM Sans', sans-serif;
+    font-size:        14px;
+    font-weight:      500;
+    color:            #111111;
+    line-height:      1.4;
+    text-align:       left;
+    white-space:      normal;
+
+    /* Subtle shadow for depth over 3D scene */
+    filter:           drop-shadow(0 3px 8px rgba(0,0,0,0.28));
+
+    opacity:          0;
+    transition:       opacity 0.25s ease;
   }
   #chat-bubble.visible {
-    opacity:1;
-    transform: translateX(-50%) translateY(0);
+    opacity: 1;
   }
+
+  /* Speaker label hidden — pill is compact enough without it */
   #chat-bubble .speaker {
-    font-size:11px;
-    color: var(--gold);
-    font-weight:500;
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    margin-bottom:4px;
+    display: none;
+  }
+
+  /* ── Tail — down-left triangle, layered border + fill ── */
+  #chat-bubble::before,
+  #chat-bubble::after {
+    content:  '';
+    position: absolute;
+    left:     26px;
+  }
+  /* Outer black border triangle */
+  #chat-bubble::before {
+    border:           10px solid transparent;
+    border-top-color: #111111;
+    bottom:           -23px;
+  }
+  /* Inner white fill triangle */
+  #chat-bubble::after {
+    border:           8px solid transparent;
+    border-top-color: #ffffff;
+    bottom:           -17px;
+    left:             28px;
+  }
+
+  /* ── Speech bubble (default) ── */
+  #chat-bubble.speech {
+    border-style: solid;
+    font-style:   normal;
+  }
+
+  /* ── Thought bubble — dashed oval, italic, dot trail ── */
+  #chat-bubble.thought {
+    border-style:  dashed;
+    border-width:  2.5px;
+    border-color:  #333333;
+    border-radius: 50%;
+    padding:       12px 22px;
+    font-style:    italic;
+    font-weight:   400;
+    color:         #333333;
+  }
+  #chat-bubble.thought::before {
+    border:         none;
+    content:        '···';
+    font-size:      20px;
+    color:          #333333;
+    letter-spacing: 3px;
+    bottom:         -28px;
+    left:           20px;
+    line-height:    1;
+  }
+  #chat-bubble.thought::after {
+    border:  none;
+    content: '';
   }
 
   /* ── Name plate ── */
