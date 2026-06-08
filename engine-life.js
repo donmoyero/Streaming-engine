@@ -16,8 +16,7 @@ import { getVrm, scene, camera, renderer, ambient,
          TWITCH_CHANNEL, USER_ID,
        } from './engine-scene.js';
 
-import { setCamMode }          from './engine-camera.js';
-import { updateCamera }        from './engine-camera.js';
+import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   setExpression, setBS, doBlink,
@@ -151,8 +150,8 @@ export const HOUSE = {
     origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',         x: -4.159, z: -4.424, facingY: 0,              activities: ['sofaSit','phoneScroll','idle','tvReact','readBook'], prop: 'sedacka' },
-      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, activities: ['idle','hairflick','hiponhip','phoneScroll'], prop: 'sedacka' },
+      { label: 'Sofa',         x: -4.159, z: -4.424, facingY: 0,              yOffset: -0.52, activities: ['sofaSit','phoneScroll','idle','tvReact','readBook'], prop: 'sedacka' },
+      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['idle','hairflick','hiponhip','phoneScroll'], prop: 'sedacka' },
       { label: 'TV Wall',      x: -2.500, z: -5.000, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
       { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch','sofaSit'], prop: 'krb' },
@@ -179,8 +178,8 @@ export const HOUSE = {
     origin: { x: -2.0, z: 2.5 }, size: { w: 3.5, d: 4.0 },
     ambientColor: 0x0a0a05,
     spots: [
-      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          activities: ['idle','tasting','phoneScroll','readBook','hiponhip'], prop: 'jidelni stul' },
-      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   activities: ['idle','readBook','phoneScroll','tasting'], prop: 'zidle' },
+      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['idle','tasting','phoneScroll','readBook','hiponhip'], prop: 'jidelni stul' },
+      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['idle','readBook','phoneScroll','tasting'], prop: 'zidle' },
       { label: 'Table End',    x: -2.132, z:  3.500, facingY: 0,                activities: ['idle','dance','hairflick','hiponhip'], prop: 'jidelni stul.001' },
       { label: 'Dining Window',x: -1.200, z:  3.800, facingY: 0,                activities: ['windowLook','idle','hairflick','stretch'], prop: 'parapet' },
       { label: 'Dining Centre',x: -1.800, z:  2.200, facingY: Math.PI,           activities: ['dance','stretch','idle','hiponhip'] },
@@ -205,8 +204,8 @@ export const HOUSE = {
     spots: [
       { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
       { label: 'Wardrobe',        x:  4.356, z:  2.100, facingY: Math.PI,          activities: ['cabinetOpen','mirrorPose','idle','hairflick'], prop: 'closet.006' },
-      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  activities: ['sofaSit','phoneScroll','idle','stretch'], prop: 'Plane.054' },
-      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI,          activities: ['sofaSit','phoneScroll','stretch','idle','readBook'] },
+      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','phoneScroll','idle','stretch'], prop: 'Plane.054' },
+      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI,          yOffset: -0.85, activities: ['bedLie','bedLiePhone','sofaSit','phoneScroll','stretch','idle','readBook'] },
       { label: 'Bedside',         x:  4.313, z: -1.125, facingY: Math.PI * 0.5,   activities: ['idle','phoneScroll','stretch'], prop: 'jidelni stul.003' },
       { label: 'Window 1',        x:  5.000, z: -2.091, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick','stretch'], prop: 'window.008' },
       { label: 'Window 2',        x:  5.000, z: -4.241, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick'], prop: 'window.010' },
@@ -291,6 +290,12 @@ let _walkPhase = 0;
 export function updateWalk(delta) {
   const vrm = _vrm();
   if (!walk.active || !vrm) return;
+
+  // Restore standing height at the very first frame of each walk
+  // so she stands up from seated/lying position before moving.
+  if (walk.progress === 0) {
+    vrm.scene.position.y = vrm._restPosY || 0;
+  }
 
   walk.progress += delta / walk.duration;
   if (walk.progress >= 1) {
@@ -434,7 +439,7 @@ export function getFamiliarActivityPool(roomName) {
     studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover'],
     kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting'],
     'living-room': ['idle','hairflick','hiponhip','stretch','phoneScroll','tvReact','dance','readBook','fireGaze','windowLook'],
-    bedroom:       ['idle','hairflick','noseCover','phoneScroll','stretch','mirrorPose'],
+    bedroom:       ['idle','hairflick','noseCover','phoneScroll','stretch','mirrorPose','bedLie','bedLiePhone'],
     bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
     dining:        ['idle','tasting','phoneScroll','readBook','hairflick','hiponhip','windowLook'],
     hallway:       ['idle','hairflick','stretch'],
@@ -443,7 +448,7 @@ export function getFamiliarActivityPool(roomName) {
     studio:        ['dance','typing','monitor'],
     kitchen:       ['stirring','chopping','tasting'],
     'living-room': ['tvReact','sofaSit','phoneScroll','dance','readBook'],
-    bedroom:       ['sofaSit','phoneScroll'],
+    bedroom:       ['sofaSit','phoneScroll','bedLie','bedLiePhone'],
     bathroom:      ['mirrorPose'],
   };
   const fam  = _familiarity[roomName]?.room || 0;
@@ -589,8 +594,18 @@ function goToSpot(spot) {
     ACTIVITY.current  = next;
     ACTIVITY.timer    = 0; ACTIVITY.phase = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+
+    // ── Drop Y for seated/lying spots, restore for standing ───
+    const vrm = _vrm();
+    if (vrm) {
+      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','bedLie','bedLiePhone']);
+      const yOff = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
+      vrm.scene.position.y = (vrm._restPosY || 0) + yOff;
+    }
+
     maybeChangeOutfit(_currentRoom);
     setCamMode('IDLE');
+    onActivityChanged(next);
   });
 }
 
@@ -611,9 +626,9 @@ export function doActivity(actName) {
   ACTIVITY.timer    = 0;
   ACTIVITY.phase    = 0;
   ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
-  // Short api-override window so lifeUpdate doesn't immediately overwrite it
   _apiOverride      = true;
-  _apiOverrideTimer = 12; // 12 seconds before life scheduler resumes
+  _apiOverrideTimer = 12;
+  onActivityChanged(actName);
 }
 
 function lifeUpdate() {
@@ -1169,6 +1184,7 @@ document.getElementById('btn-reset')?.addEventListener('click', () => location.r
     readBook: '📖', typing: '⌨️', monitor: '🖥', stirring: '🥄',
     chopping: '🔪', tasting: '😋', washingUp: '🧼', cabinetOpen: '🗄',
     mirrorPose: '🪞', noseCover: '🤭', windowLook: '🪟', fireGaze: '🔥',
+    bedLie: '😴', bedLiePhone: '📱😴',
   };
 
   let _lastRenderedRoom = null;
@@ -1260,8 +1276,11 @@ function render() {
     while (diff < -Math.PI) diff += Math.PI * 2;
     vrm.scene.rotation.y += diff * Math.min(1, delta * (walk.active ? 6.0 : 3.5));
 
-    // ── Idle body sway ─────────────────────────────────────────
-    if (!gestureActive() && !walk.active) {
+    // ── Idle body sway — ONLY when truly idle ─────────────────
+    // This block must NOT run during dance, sofaSit, typing, etc.
+    // activityUpdate() sets those bone rotations and this would
+    // overwrite them every frame, causing the "stiff" appearance.
+    if (!gestureActive() && !walk.active && ACTIVITY.current === 'idle') {
       const hipSway      = Math.sin(idleTime * 1.05) * 0.09;
       const hipBob       = Math.abs(Math.sin(idleTime * 1.05)) * 0.035;
       const breathe      = Math.sin(idleTime * 0.72) * 0.014;
