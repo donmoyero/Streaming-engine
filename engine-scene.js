@@ -97,6 +97,7 @@ export let monitorMesh      = null;
 export let monitorGlowLight = null;
 export let keyboardMesh     = null;
 export let chairMesh        = null;
+export let roofMesh         = null;   // populated after house load — used for Sims cutaway
 export const roomLights     = {};
 
 // ── House spawn / bounds ─────────────────────────────────────────
@@ -208,6 +209,17 @@ _gltfLoader.load(
 
     console.log(`[House] hScale=${hScale.toFixed(3)} floorY=${_houseFloorY.toFixed(4)}`);
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+
+    // ── Roof mesh — hidden in Sims mode so camera can look down inside ──
+    // Matches common names used in house GLBs; add more patterns if needed.
+    house.traverse(n => {
+      if (n.isMesh && /roof|strecha|ceiling|dach|techo|plafond/i.test(n.name)) {
+        roofMesh = n;
+        console.log(`[House] roofMesh found: "${n.name}"`);
+      }
+    });
+    if (!roofMesh) console.warn('[House] No roof mesh found — Sims cutaway will not hide roof. Check mesh names.');
+
     _houseLoaded = true;
 
     if (!window._houseScaled) {
