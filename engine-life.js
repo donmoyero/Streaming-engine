@@ -388,6 +388,8 @@ const _familiarity = {
   'living-room': { room: 0, activities: {} },
   bedroom:       { room: 0, activities: {} },
   bathroom:      { room: 0, activities: {} },
+  dining:        { room: 0, activities: {} },
+  hallway:       { room: 0, activities: {} },
 };
 const FAM_THRESHOLD_BASIC   = 60;
 const FAM_THRESHOLD_SETTLED = 300;
@@ -480,18 +482,22 @@ function moveToRoom(roomName) {
 // NOTE: engine-scene.js scales these by hScale on house load via
 //       window.ROOM_CONNECTIONS_REF — do not hardcode scaled values.
 const ROOM_CONNECTIONS = {
-  'studio':      { 'hallway':      { x:  0.6, z: -1.2 } },
-  'living-room': { 'hallway':      { x:  0.2, z: -0.4 } },
-  'kitchen':     { 'hallway':      { x:  0.2, z:  0.9 } },
-  'dining':      { 'kitchen':      { x: -1.0, z:  2.2 } },
-  'bedroom':     { 'hallway':      { x:  1.59, z: -4.5 } },
-  'bathroom':    { 'hallway':      { x:  1.59, z: -4.5 } },
+  'studio':      { 'hallway':   { x:  0.6,  z: -1.2  } },
+  'living-room': { 'hallway':   { x:  0.2,  z: -0.4  } },
+  'kitchen':     { 'hallway':   { x:  0.2,  z:  0.9  } },
+  'dining':      { 'kitchen':   { x: -1.0,  z:  2.2  } },
+  'bedroom': {
+    'hallway':   { x:  1.59, z: -5.3  },   // front of bedroom door into hallway
+    'bathroom':  { x:  2.75, z:  0.85 },   // bedroom → bathroom direct (shared wall)
+  },
+  'bathroom': {
+    'bedroom':   { x:  2.75, z:  0.85 },   // bathroom → bedroom direct
+  },
   'hallway': {
     'studio':      { x:  0.6,  z: -1.2  },
     'living-room': { x:  0.2,  z: -0.4  },
     'kitchen':     { x:  0.2,  z:  0.9  },
     'bedroom':     { x:  1.59, z: -5.3  },
-    'bathroom':    { x:  1.59, z: -5.3  },
   },
 };
 // Register reference so engine-scene.js can scale waypoints after hScale is known
@@ -536,7 +542,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
     walk.active   = true;
     walk.onArrive = onArrive;
     walk.duration     = Math.max(0.6, dist / 1.5);
-    walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // VRM -Z forward; no +PI needed
+    walk.targetFacing = Math.atan2(dx, dz) + Math.PI;
     _targetFacing     = walk.targetFacing;
     return;
   }
