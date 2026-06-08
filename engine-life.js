@@ -282,7 +282,7 @@ export function walkTo(waypointName, onArrive = null) {
   const dz = wp.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
   walk.duration     = Math.max(0.8, dist / 1.5);
-  walk.targetFacing = Math.atan2(dx, dz); // VRM forward is -Z; atan2(dx,dz) faces her toward dest
+  walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // +PI: VRM forward is +Z after rotateVRM0
   _targetFacing     = walk.targetFacing;
 }
 
@@ -536,7 +536,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
     walk.active   = true;
     walk.onArrive = onArrive;
     walk.duration     = Math.max(0.6, dist / 1.5);
-    walk.targetFacing = Math.atan2(dx, dz); // VRM -Z forward; no +PI needed
+    walk.targetFacing = Math.atan2(dx, dz) + Math.PI; // VRM -Z forward; no +PI needed
     _targetFacing     = walk.targetFacing;
     return;
   }
@@ -553,7 +553,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
   walk.progress = 0;
   walk.active   = true;
   walk.duration     = Math.max(0.5, dist / 1.5);
-  walk.targetFacing = Math.atan2(dx, dz);
+  walk.targetFacing = Math.atan2(dx, dz) + Math.PI;
   _targetFacing     = walk.targetFacing;
   walk.onArrive = () => {
     vrmPos.x     = first.waypoint.x;
