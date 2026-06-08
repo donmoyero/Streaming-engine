@@ -225,6 +225,17 @@ _gltfLoader.load(
         if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
       }
       for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
+
+      // Scale door-threshold waypoints inside ROOM_CONNECTIONS (added in engine-life.js)
+      // These must match house geometry just like spot coords and ROOM_WAYPOINT_DEFS.
+      if (window.ROOM_CONNECTIONS_REF) {
+        for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
+          for (const wp of Object.values(targets)) {
+            wp.x *= hScale;
+            wp.z *= hScale;
+          }
+        }
+      }
       _houseSpawnX *= hScale;
       _houseSpawnZ *= hScale;
       // Clamp spawn inside bounds too
