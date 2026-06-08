@@ -798,6 +798,10 @@ export function _initDeadAir() {
     silenceThresholdMs: 120_000,
     minIntervalMs:      180_000,
     chatEndpoint:       PROACTIVE_URL,
+    // Supply extra body fields so the server knows her physical room.
+    // DeadAirTimer merges extraBody into its POST payload if supported;
+    // if not, the fallback fetch in _onProactiveMessage below handles it.
+    getExtraBody:       () => ({ current_room: _currentRoom }),
     onProactiveMessage: (text) => _onProactiveMessage(text),
     debug: false,
   });
