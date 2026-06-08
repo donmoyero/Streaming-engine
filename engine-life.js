@@ -449,6 +449,8 @@ function moveToRoom(roomName) {
 // Each key = a room; values = rooms directly reachable and the
 // door-threshold waypoint (world-space x/z) to pass through first.
 // Coords match the existing HOUSE.hallway door spot positions.
+// NOTE: engine-scene.js scales these by hScale on house load via
+//       window.ROOM_CONNECTIONS_REF — do not hardcode scaled values.
 const ROOM_CONNECTIONS = {
   'studio':      { 'hallway':      { x:  0.6, z: -1.2 } },
   'living-room': { 'hallway':      { x:  0.2, z: -0.4 } },
@@ -464,6 +466,8 @@ const ROOM_CONNECTIONS = {
     'bathroom':    { x:  1.59, z: -5.3  },
   },
 };
+// Register reference so engine-scene.js can scale waypoints after hScale is known
+window.ROOM_CONNECTIONS_REF = ROOM_CONNECTIONS;
 
 // BFS — returns ordered array of { throughRoom, waypoint } steps,
 // or [] if already in same room / no path found (fallback: direct walk).
