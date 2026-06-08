@@ -702,6 +702,62 @@ export function activityUpdate(delta) {
       break;
     }
 
+    // ── BED LIE ────────────────────────────────────────────────
+    // Full lying pose — use with yOffset: -0.85 on the Bed spot.
+    // VRM hips rotate ~-1.45 rad to lay the spine horizontal.
+    case 'bedLie': {
+      if (boneHips)      { boneHips.rotation.x = -1.45; boneHips.rotation.z = Math.sin(t*0.3)*0.02; }
+      if (boneSpine)     { boneSpine.rotation.x = -0.08 + Math.sin(t*0.25)*0.02; }
+      if (boneChest)     boneChest.rotation.x = -0.04;
+      // Head propped on pillow — tilted up from horizontal
+      if (boneHead)      { boneHead.rotation.x = 0.35; boneHead.rotation.z = Math.sin(t*0.4)*0.03; }
+      // Legs flat with gentle knee bend
+      if (boneLUpperLeg) boneLUpperLeg.rotation.x = -0.12;
+      if (boneRUpperLeg) boneRUpperLeg.rotation.x = -0.12;
+      if (boneLLowerLeg) boneLLowerLeg.rotation.x =  0.18;
+      if (boneRLowerLeg) boneRLowerLeg.rotation.x =  0.18;
+      if (boneLFoot)     boneLFoot.rotation.x = 0.05;
+      if (boneRFoot)     boneRFoot.rotation.x = 0.05;
+      // Arms resting at sides, slightly out, relaxed
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.6; boneLUpperArm.rotation.x = -0.05; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.6; boneRUpperArm.rotation.x = -0.05; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z = 0.3;
+      if (boneRLowerArm) boneRLowerArm.rotation.z = -0.3;
+      if (boneLHand)     { boneLHand.rotation.z = 0.15; boneLHand.rotation.x = 0.05; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.05; }
+      setExpression('neutral');
+      setLeftFingerRelax(); setRightFingerRelax();
+      break;
+    }
+
+    // ── BED LIE PHONE ──────────────────────────────────────────
+    // Lying down scrolling phone above face — common bedroom pose
+    case 'bedLiePhone': {
+      if (boneHips)      { boneHips.rotation.x = -1.45; boneHips.rotation.z = Math.sin(t*0.3)*0.02; }
+      if (boneSpine)     boneSpine.rotation.x = -0.06;
+      if (boneChest)     boneChest.rotation.x = -0.04;
+      if (boneHead)      { boneHead.rotation.x = 0.45; boneHead.rotation.z = Math.sin(t*0.3)*0.02; }
+      if (boneLUpperLeg) boneLUpperLeg.rotation.x = -0.1;
+      if (boneRUpperLeg) boneRUpperLeg.rotation.x = -0.1;
+      if (boneLLowerLeg) boneLLowerLeg.rotation.x =  0.15;
+      if (boneRLowerLeg) boneRLowerLeg.rotation.x =  0.15;
+      // Right arm raised, phone above face
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.3; boneRUpperArm.rotation.x = -0.8; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.2; boneRLowerArm.rotation.x = 0.15; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.1; boneRHand.rotation.x = -0.1 + Math.sin(t*1.5)*0.04; }
+      // Left arm resting
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.55; boneLUpperArm.rotation.x = -0.05; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z = 0.28;
+      if (boneLHand)     { boneLHand.rotation.z = 0.15; boneLHand.rotation.x = 0.05; }
+      const scrollCycle = t % 8.0;
+      if (scrollCycle > 6.5) {
+        setExpression('happy');
+        setBS('I', Math.sin((scrollCycle-6.5)/1.5*Math.PI)*0.15);
+      } else { setExpression('neutral'); }
+      setRightFingerCurl(0.3); setLeftFingerRelax();
+      break;
+    }
+
     // Default: idle hands
     default:
       break;
