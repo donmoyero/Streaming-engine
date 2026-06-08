@@ -6,7 +6,6 @@
 // ================================================================
 
 import * as THREE from 'three';
-import DeadAirTimer from './utils/dead-air-timer.js';
 
 import { getVrm, scene, camera, renderer, ambient,
          HOUSE_BOUNDS, AVATAR_RADIUS,
@@ -36,7 +35,36 @@ import {
 } from './engine-bones.js';
 
 // ── Dead air ─────────────────────────────────────────────────────
-let deadAir = null;
+// Fires /chat/proactive after silence. Has a busy-lock so only ONE
+// call is ever in-flight, and exponential backoff after failures.
+
+let _deadAirTimer    = null;
+let _deadAirBusy     = false;   // true while fetch or speak is running
+let _deadAirActive   = false;
+let _deadAirBackoff  = 0;       // extra delay added after failures
+const DEAD_AIR_MS    = 120_000; // 2 min silence threshold
+const DEAD_AIR_MIN   = 180_000; // minimum 3 min between proactive calls
+
+const deadAir = {
+  start() {
+    _deadAirActive = true;
+    this._arm();
+  },
+  stop() {
+    _deadAirActive = false;
+    clearTimeout(_deadAirTimer);
+  },
+  reset() {
+    clearTimeout(_deadAirTimer);
+    _deadAirBackoff = 0; // conversation is active — clear backoff
+    if (_deadAirActive && !_deadAirBusy) this._arm();
+  },
+  _arm() {
+    clearTimeout(_deadAirTimer);
+    const delay = Math.max(DEAD_AIR_MS, DEAD_AIR_MIN) + _deadAirBackoff;
+    _deadAirTimer = setTimeout(() => _triggerProactive(), delay);
+  },
+};
 
 // ── VRM accessor — getVrm() returns the live ref, never null after load ──
 const _vrm = () => getVrm();
@@ -781,48 +809,119 @@ export function startTopicPolling() {
   setInterval(poll, 6000);
 }
 
-// ── Dead air ─────────────────────────────────────────────────────
-async function _onProactiveMessage(text) {
-  if (_isSpeaking || !text) return;
-  setCamMode('SPEAK');
-  showBubble(text, 'Miss OG Tinz');
-  setStatus('Live ✦', 'ready');
-  doGesture('talk', text.length * 65);
-  await speak(text, 'neutral');
-  setCamMode('IDLE');
-  deadAir?.reset();
+// ── Dead air trigger ─────────────────────────────────────────────
+// Only ONE call ever in-flight. Backs off after 429s / errors.
+async function _triggerProactive() {
+  if (_deadAirBusy || _isSpeaking) {
+    deadAir._arm(); // re-arm and wait longer
+    return;
+  }
+  _deadAirBusy = true;
+
+  try {
+    const res = await fetch(PROACTIVE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ current_room: _currentRoom }),
+    });
+
+    if (res.status === 429) {
+      _deadAirBackoff = 5 * 60_000; // back off 5 min
+      console.warn('[DeadAir] 429 — backing off 5 min');
+      _deadAirBusy = false;
+      deadAir._arm();
+      return;
+    }
+
+    if (!res.ok) throw new Error('status ' + res.status);
+
+    const data = await res.json();
+    const text = data?.response || '';
+    if (text && !_isSpeaking) {
+      _deadAirBackoff = 0;
+      setCamMode('SPEAK');
+      showBubble(text, 'Miss OG Tinz');
+      setStatus('Live ✦', 'ready');
+      doGesture('talk', text.length * 65);
+      await speak(text, 'neutral');
+      setCamMode('IDLE');
+    }
+  } catch(err) {
+    console.warn('[DeadAir] fetch error:', err.message);
+    _deadAirBackoff = Math.min((_deadAirBackoff || 0) + 60_000, 10 * 60_000);
+  }
+
+  _deadAirBusy = false;
+  if (_deadAirActive) deadAir._arm();
 }
 
 export function _initDeadAir() {
-  deadAir = new DeadAirTimer({
-    silenceThresholdMs: 120_000,
-    minIntervalMs:      180_000,
-    chatEndpoint:       PROACTIVE_URL,
-    // Supply extra body fields so the server knows her physical room.
-    // DeadAirTimer merges extraBody into its POST payload if supported;
-    // if not, the fallback fetch in _onProactiveMessage below handles it.
-    getExtraBody:       () => ({ current_room: _currentRoom }),
-    onProactiveMessage: (text) => _onProactiveMessage(text),
-    debug: false,
-  });
-  deadAir?.start();
+  deadAir.start();
 }
 
 // ── Twitch chat ──────────────────────────────────────────────────
+const _seenViewers = new Set(); // track who we've already greeted this session
+
 export function initTwitchChat() {
   if (typeof tmi === 'undefined') {
     console.warn('[Twitch] tmi.js not available — check the <script> tag in index.html');
     return;
   }
-  const client = new tmi.Client({ channels: [TWITCH_CHANNEL] });
-  client.connect()
-    .then(() => { console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`); setStatus('Live ✦', 'ready'); })
-    .catch(err => console.warn('[Twitch] Chat connect failed:', err));
 
+  const client = new tmi.Client({
+    options:    { debug: false },
+    connection: { reconnect: true, secure: true },
+    channels:   [TWITCH_CHANNEL],
+  });
+
+  function _connect(attempt = 1) {
+    client.connect()
+      .then(() => {
+        console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`);
+        setStatus('Live ✦', 'ready');
+      })
+      .catch(err => {
+        console.warn(`[Twitch] Connect failed (attempt ${attempt}):`, err);
+        if (attempt < 5) setTimeout(() => _connect(attempt + 1), attempt * 5000);
+      });
+  }
+  _connect();
+
+  // ── Chat message ───────────────────────────────────────────────
   client.on('message', (channel, tags, message, self) => {
     if (self) return;
-    queueTwitchMessage(tags['display-name'] || tags.username || 'Someone', message);
+    const username = tags['display-name'] || tags.username || 'Someone';
+    const isNew    = !_seenViewers.has(username.toLowerCase());
+    if (isNew) _seenViewers.add(username.toLowerCase());
+    // Prefix new viewer messages so the prompt can give a warmer welcome
+    const prefixed = isNew
+      ? `[NEW VIEWER] ${username}: ${message}`
+      : message;
+    queueTwitchMessage(username, prefixed);
   });
+
+  // ── Viewer joins the chat room ─────────────────────────────────
+  client.on('join', (channel, username, self) => {
+    if (self) return;
+    if (_seenViewers.has(username.toLowerCase())) return; // already greeted
+    _seenViewers.add(username.toLowerCase());
+    // Only greet — don't queue a full API call for every join (can spam)
+    // Show a quick bubble instead; saves tokens
+    const greetings = [
+      `${username} just joined the stream! Welcome to the madness!`,
+      `Ayyyy ${username} is here! Welcome welcome!`,
+      `${username}! Glad you made it, grab a seat!`,
+      `Look who showed up — ${username}! We see you!`,
+      `${username} in the chat! Let's gooo!`,
+    ];
+    const g = greetings[Math.floor(Math.random() * greetings.length)];
+    showBubble(g, 'Miss OG Tinz');
+    // Also speak it if she's not already talking
+    if (!_isSpeaking) speak(g, 'happy').catch(() => {});
+    deadAir?.reset();
+  });
+
+  // ── Channel events ─────────────────────────────────────────────
   client.on('subscription', (channel, username) => {
     setStageLight('sub', 6000); triggerSubCelebration();
     queueTwitchMessage('StreamEvent', `${username} just subscribed! Omo thank you so much! Welcome to the family!`);
@@ -1130,7 +1229,6 @@ let blinkTimer = 0;
 let nextBlink  = 3;
 
 function render() {
-  requestAnimationFrame(render);
   const delta = clock.getDelta();
 
   animateRoomLights(delta);
@@ -1235,5 +1333,39 @@ function render() {
   renderer.render(scene, camera);
 }
 
-render();
+// ── Visibility-aware render loop ────────────────────────────────
+// requestAnimationFrame pauses when the browser tab loses focus —
+// which happens every time OBS/Streamlabs captures the window.
+// Fix: keep a setInterval heartbeat running at ~30fps as fallback,
+// and let rAF handle the high-fps rendering when tab is visible.
+
+let _rafPending = false;
+let _forceTick  = null;
+
+function _tick() {
+  _rafPending = false;
+  render();
+}
+
+function _scheduleRender() {
+  if (!_rafPending) {
+    _rafPending = true;
+    requestAnimationFrame(_tick);
+  }
+}
+
+// Heartbeat: fires even when tab is hidden / captured by OBS
+// 33ms ≈ 30fps — enough to keep avatar moving on stream
+_forceTick = setInterval(() => {
+  if (document.hidden) {
+    // Tab is hidden — drive render directly from interval
+    render();
+  } else {
+    // Tab is visible — let rAF handle it (avoids double-rendering)
+    _scheduleRender();
+  }
+}, 33);
+
+// Initial render
+_scheduleRender();
 console.log('Miss OG Tinz ready ✦');
