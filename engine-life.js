@@ -16,7 +16,7 @@ import { getVrm, scene, camera, renderer, ambient,
          TWITCH_CHANNEL, USER_ID,
        } from './engine-scene.js';
 
-import { setCamMode, updateCamera, onActivityChanged, setSimsMode, getSimsMode } from './engine-camera.js';
+import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   setExpression, setBS, doBlink,
@@ -91,13 +91,10 @@ function setStageLight(mood, durationMs = 4000) {
 
 // ── Chat bubble ──────────────────────────────────────────────────
 let bubbleTimeout = null;
-export function showBubble(text, speaker = 'Miss OG Tinz', type = 'speech') {
+export function showBubble(text, speaker = 'Miss OG Tinz') {
   bubbleTxt.textContent = text;
   bubble.querySelector('.speaker').textContent = speaker;
   bubble.classList.add('visible');
-  // Switch styling for thought vs speech bubble
-  bubble.classList.toggle('thought', type === 'thought');
-  bubble.classList.toggle('speech',  type === 'speech');
   clearTimeout(bubbleTimeout);
   const displayTime = Math.max(4000, text.length * 60);
   bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
@@ -153,8 +150,8 @@ export const HOUSE = {
     origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',         x: -4.159, z: -4.424, facingY: 0,              yOffset: -0.52, activities: ['sofaSit','phoneScroll','idle','tvReact','readBook'], prop: 'sedacka' },
-      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['idle','hairflick','hiponhip','phoneScroll'], prop: 'sedacka' },
+      { label: 'Sofa',         x: -4.159, z: -4.424, facingY: 0,              yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
+      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
       { label: 'TV Wall',      x: -2.500, z: -5.000, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
       { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch','sofaSit'], prop: 'krb' },
@@ -181,8 +178,8 @@ export const HOUSE = {
     origin: { x: -2.0, z: 2.5 }, size: { w: 3.5, d: 4.0 },
     ambientColor: 0x0a0a05,
     spots: [
-      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['idle','tasting','phoneScroll','readBook','hiponhip'], prop: 'jidelni stul' },
-      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['idle','readBook','phoneScroll','tasting'], prop: 'zidle' },
+      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['sofaSit','tasting','phoneScroll','readBook'], prop: 'jidelni stul' },
+      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle' },
       { label: 'Table End',    x: -2.132, z:  3.500, facingY: 0,                activities: ['idle','dance','hairflick','hiponhip'], prop: 'jidelni stul.001' },
       { label: 'Dining Window',x: -1.200, z:  3.800, facingY: 0,                activities: ['windowLook','idle','hairflick','stretch'], prop: 'parapet' },
       { label: 'Dining Centre',x: -1.800, z:  2.200, facingY: Math.PI,           activities: ['dance','stretch','idle','hiponhip'] },
@@ -207,8 +204,8 @@ export const HOUSE = {
     spots: [
       { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
       { label: 'Wardrobe',        x:  4.356, z:  2.100, facingY: Math.PI,          activities: ['cabinetOpen','mirrorPose','idle','hairflick'], prop: 'closet.006' },
-      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','phoneScroll','idle','stretch'], prop: 'Plane.054' },
-      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI,          yOffset: -0.85, activities: ['bedLie','bedLiePhone','sofaSit','phoneScroll','stretch','idle','readBook'] },
+      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'Plane.054' },
+      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI,          yOffset: -0.85, activities: ['bedLie','bedLie','bedLiePhone','phoneScroll','readBook'] },
       { label: 'Bedside',         x:  4.313, z: -1.125, facingY: Math.PI * 0.5,   activities: ['idle','phoneScroll','stretch'], prop: 'jidelni stul.003' },
       { label: 'Window 1',        x:  5.000, z: -2.091, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick','stretch'], prop: 'window.008' },
       { label: 'Window 2',        x:  5.000, z: -4.241, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick'], prop: 'window.010' },
@@ -601,7 +598,7 @@ function goToSpot(spot) {
     // ── Drop Y for seated/lying spots, restore for standing ───
     const vrm = _vrm();
     if (vrm) {
-      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','bedLie','bedLiePhone']);
+      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','tasting','bedLie','bedLiePhone']);
       const yOff = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
       vrm.scene.position.y = (vrm._restPosY || 0) + yOff;
     }
@@ -640,10 +637,11 @@ function lifeUpdate() {
   famUpdate(delta);
   if (_apiOverride) {
     _apiOverrideTimer -= delta;
-    if (_apiOverrideTimer <= 0) { _apiOverride = false; } // let her keep facing where she is
+    if (_apiOverrideTimer <= 0) { _apiOverride = false; _targetFacing = Math.PI; }
     return;
   }
   _lifeTimer += delta;
+  if (_lifeTimer >= _nextDwell - 3 && _lifeTimer < _nextDwell) _targetFacing = Math.PI;
   if (_lifeTimer < _nextDwell) return;
   _lifeTimer = 0;
   _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
@@ -745,7 +743,7 @@ function maybeShowThought(delta) {
   _thoughtInterval = 45 + Math.random() * 60;
   const pool    = THOUGHT_BUBBLES[_currentRoom] || THOUGHT_BUBBLES['studio'];
   const thought = pool[Math.floor(Math.random() * pool.length)];
-  showBubble(thought, 'Miss OG Tinz', 'thought');
+  showBubble(thought, 'Miss OG Tinz', 4000);
 }
 
 // ── Audio unlock ─────────────────────────────────────────────────
@@ -997,6 +995,7 @@ async function sendMessage(message, displayName = 'Viewer') {
   sendBtn.disabled  = true;
   _apiOverride      = true;
   _apiOverrideTimer = API_OVERRIDE_DURATION;
+  _targetFacing     = Math.PI;
   setCamMode('THINK');
   doGesture('think', 4000);
   chatHistory.push({ role: 'user', content: message });
@@ -1217,23 +1216,6 @@ document.getElementById('btn-reset')?.addEventListener('click', () => location.r
   // Poll for room changes to refresh activity list
   setInterval(refreshActivityButtons, 1000);
   refreshActivityButtons();
-
-  // ── Sims camera toggle ────────────────────────────────────────
-  const sep3 = document.createElement('hr');
-  sep3.className = 'ctrl-sep';
-  panel.appendChild(sep3);
-
-  const simsBtn = document.createElement('button');
-  simsBtn.className   = 'ctrl-btn';
-  simsBtn.textContent = '🏠 Sims View';
-  simsBtn.style.width = '100%';
-  simsBtn.addEventListener('click', () => {
-    const on = !getSimsMode();
-    setSimsMode(on);
-    simsBtn.style.outline = on ? '2px solid #FFB830' : '';
-  });
-  panel.appendChild(simsBtn);
-
 })();
 
 // ── Public API ───────────────────────────────────────────────────
@@ -1263,42 +1245,6 @@ window.missOgTinz = {
 // ================================================================
 //  RENDER LOOP
 // ================================================================
-
-// ── 3D world-space bubble positioning ────────────────────────────
-// Projects the head bone's world position to screen coords each
-// frame so the bubble floats above her head in 3D space rather
-// than sitting as a fixed UI overlay.
-function updateBubblePosition() {
-  if (!bubble.classList.contains('visible')) return;
-  const vrm = _vrm();
-  if (!vrm || !boneHead) return;
-
-  // Get head bone world position
-  const headWorldPos = new THREE.Vector3();
-  boneHead.getWorldPosition(headWorldPos);
-
-  // Offset above the head (~0.35 works well for a 1.65 m avatar)
-  headWorldPos.y += 0.35;
-
-  // Project to normalised device coordinates (-1 to +1)
-  const ndc = headWorldPos.clone().project(camera);
-
-  // If behind the camera, hide the bubble
-  if (ndc.z > 1) {
-    bubble.style.opacity = '0';
-    return;
-  }
-
-  // Convert NDC → CSS pixel coords
-  const screenX = ( ndc.x * 0.5 + 0.5) * window.innerWidth;
-  const screenY = (-ndc.y * 0.5 + 0.5) * window.innerHeight;
-
-  bubble.style.opacity = '1';
-  bubble.style.left    = `${screenX}px`;
-  bubble.style.top     = `${screenY}px`;
-}
-
-
 const clock    = new THREE.Clock();
 let idleTime   = 0;
 let blinkTimer = 0;
@@ -1386,9 +1332,6 @@ function render() {
     updateGesture(delta);
 
     vrm.update(delta);
-
-    // ── 3D world-space bubble positioning ─────────────────────
-    updateBubblePosition();
 
     // ── Eye look-at ───────────────────────────────────────────
     if (vrm.lookAt) {
