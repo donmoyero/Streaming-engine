@@ -46,9 +46,9 @@ export function _snapCameraToVRM() {
   const p  = STREAMER_CAM.IDLE;
   const fy = vrm.scene.rotation.y;
   _camFacingY = fy;
-  const cx = vx - Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
+  const cx = vx + Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
   const cy = vy + p.height;
-  const cz = vz - Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
+  const cz = vz + Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
   camCurrent.x = cx; camCurrent.y = cy; camCurrent.z = cz;
   camCurrent.lookX = vx; camCurrent.lookY = vy + p.lookHeight; camCurrent.lookZ = vz;
   camera.position.set(cx, cy, cz);
@@ -75,10 +75,10 @@ export function updateCamera(delta) {
   const camPreset = walk.active ? STREAMER_CAM.WALK : (STREAMER_CAM[camMode] || STREAMER_CAM.IDLE);
   const fy = _camFacingY;
 
-  // Camera opposite to facing direction → always shows her face
-  const tx = vx - Math.sin(fy) * camPreset.dist + Math.cos(fy) * camPreset.sideShift;
+  // Camera in FRONT of avatar — same direction she faces, offset by dist
+  const tx = vx + Math.sin(fy) * camPreset.dist + Math.cos(fy) * camPreset.sideShift;
   const ty = vy + camPreset.height;
-  const tz = vz - Math.cos(fy) * camPreset.dist - Math.sin(fy) * camPreset.sideShift;
+  const tz = vz + Math.cos(fy) * camPreset.dist - Math.sin(fy) * camPreset.sideShift;
 
   const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : CAM_LERP;
   camCurrent.x     += (tx - camCurrent.x)     * Math.min(1, L * 60 * delta);
