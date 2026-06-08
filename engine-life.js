@@ -16,7 +16,7 @@ import { getVrm, scene, camera, renderer, ambient,
          TWITCH_CHANNEL, USER_ID,
        } from './engine-scene.js';
 
-import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
+import { setCamMode, updateCamera, onActivityChanged, setSimsMode, getSimsMode } from './engine-camera.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   setExpression, setBS, doBlink,
@@ -91,10 +91,13 @@ function setStageLight(mood, durationMs = 4000) {
 
 // ── Chat bubble ──────────────────────────────────────────────────
 let bubbleTimeout = null;
-export function showBubble(text, speaker = 'Miss OG Tinz') {
+export function showBubble(text, speaker = 'Miss OG Tinz', type = 'speech') {
   bubbleTxt.textContent = text;
   bubble.querySelector('.speaker').textContent = speaker;
   bubble.classList.add('visible');
+  // Switch styling for thought vs speech bubble
+  bubble.classList.toggle('thought', type === 'thought');
+  bubble.classList.toggle('speech',  type === 'speech');
   clearTimeout(bubbleTimeout);
   const displayTime = Math.max(4000, text.length * 60);
   bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), displayTime);
@@ -637,11 +640,10 @@ function lifeUpdate() {
   famUpdate(delta);
   if (_apiOverride) {
     _apiOverrideTimer -= delta;
-    if (_apiOverrideTimer <= 0) { _apiOverride = false; _targetFacing = Math.PI; }
+    if (_apiOverrideTimer <= 0) { _apiOverride = false; } // let her keep facing where she is
     return;
   }
   _lifeTimer += delta;
-  if (_lifeTimer >= _nextDwell - 3 && _lifeTimer < _nextDwell) _targetFacing = Math.PI;
   if (_lifeTimer < _nextDwell) return;
   _lifeTimer = 0;
   _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
@@ -743,7 +745,7 @@ function maybeShowThought(delta) {
   _thoughtInterval = 45 + Math.random() * 60;
   const pool    = THOUGHT_BUBBLES[_currentRoom] || THOUGHT_BUBBLES['studio'];
   const thought = pool[Math.floor(Math.random() * pool.length)];
-  showBubble(thought, 'Miss OG Tinz', 4000);
+  showBubble(thought, 'Miss OG Tinz', 'thought');
 }
 
 // ── Audio unlock ─────────────────────────────────────────────────
@@ -995,7 +997,6 @@ async function sendMessage(message, displayName = 'Viewer') {
   sendBtn.disabled  = true;
   _apiOverride      = true;
   _apiOverrideTimer = API_OVERRIDE_DURATION;
-  _targetFacing     = Math.PI;
   setCamMode('THINK');
   doGesture('think', 4000);
   chatHistory.push({ role: 'user', content: message });
@@ -1216,6 +1217,23 @@ document.getElementById('btn-reset')?.addEventListener('click', () => location.r
   // Poll for room changes to refresh activity list
   setInterval(refreshActivityButtons, 1000);
   refreshActivityButtons();
+
+  // ── Sims camera toggle ────────────────────────────────────────
+  const sep3 = document.createElement('hr');
+  sep3.className = 'ctrl-sep';
+  panel.appendChild(sep3);
+
+  const simsBtn = document.createElement('button');
+  simsBtn.className   = 'ctrl-btn';
+  simsBtn.textContent = '🏠 Sims View';
+  simsBtn.style.width = '100%';
+  simsBtn.addEventListener('click', () => {
+    const on = !getSimsMode();
+    setSimsMode(on);
+    simsBtn.style.outline = on ? '2px solid #FFB830' : '';
+  });
+  panel.appendChild(simsBtn);
+
 })();
 
 // ── Public API ───────────────────────────────────────────────────
@@ -1245,6 +1263,42 @@ window.missOgTinz = {
 // ================================================================
 //  RENDER LOOP
 // ================================================================
+
+// ── 3D world-space bubble positioning ────────────────────────────
+// Projects the head bone's world position to screen coords each
+// frame so the bubble floats above her head in 3D space rather
+// than sitting as a fixed UI overlay.
+function updateBubblePosition() {
+  if (!bubble.classList.contains('visible')) return;
+  const vrm = _vrm();
+  if (!vrm || !boneHead) return;
+
+  // Get head bone world position
+  const headWorldPos = new THREE.Vector3();
+  boneHead.getWorldPosition(headWorldPos);
+
+  // Offset above the head (~0.35 works well for a 1.65 m avatar)
+  headWorldPos.y += 0.35;
+
+  // Project to normalised device coordinates (-1 to +1)
+  const ndc = headWorldPos.clone().project(camera);
+
+  // If behind the camera, hide the bubble
+  if (ndc.z > 1) {
+    bubble.style.opacity = '0';
+    return;
+  }
+
+  // Convert NDC → CSS pixel coords
+  const screenX = ( ndc.x * 0.5 + 0.5) * window.innerWidth;
+  const screenY = (-ndc.y * 0.5 + 0.5) * window.innerHeight;
+
+  bubble.style.opacity = '1';
+  bubble.style.left    = `${screenX}px`;
+  bubble.style.top     = `${screenY}px`;
+}
+
+
 const clock    = new THREE.Clock();
 let idleTime   = 0;
 let blinkTimer = 0;
@@ -1332,6 +1386,9 @@ function render() {
     updateGesture(delta);
 
     vrm.update(delta);
+
+    // ── 3D world-space bubble positioning ─────────────────────
+    updateBubblePosition();
 
     // ── Eye look-at ───────────────────────────────────────────
     if (vrm.lookAt) {
