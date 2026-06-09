@@ -759,51 +759,74 @@ function _unlockAudio() {
     const src = ctx.createBufferSource();
     src.buffer = buf; src.connect(ctx.destination); src.start(0); ctx.resume();
   } catch(e) {}
+  // Also wake speech synthesis
+  try { window.speechSynthesis.cancel(); } catch(e) {}
 }
 document.addEventListener('click',      _unlockAudio, { once: true });
 document.addEventListener('keydown',    _unlockAudio, { once: true });
 document.addEventListener('touchstart', _unlockAudio, { once: true });
 
+// ── Voice list — loaded once, refreshed on change ─────────────────
+let _voices = [];
+function _loadVoices() { _voices = window.speechSynthesis.getVoices(); }
+_loadVoices();
+window.speechSynthesis.onvoiceschanged = _loadVoices;
+
+function _pickVoice() {
+  if (!_voices.length) _loadVoices();
+  // Preference order: Nigerian → British female → any British → any English
+  return _voices.find(v => v.name.includes('Ezinne'))
+    || _voices.find(v => v.name.includes('Sonia'))
+    || _voices.find(v => v.name.includes('Zira'))
+    || _voices.find(v => v.name.includes('Hazel'))
+    || _voices.find(v => v.name.includes('Libby'))
+    || _voices.find(v => v.lang === 'en-GB')
+    || _voices.find(v => v.lang === 'en-NG')
+    || _voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+    || _voices.find(v => v.lang.startsWith('en'))
+    || _voices[0]
+    || null;
+}
+
 // ── TTS + lip sync ───────────────────────────────────────────────
 export let _isSpeaking = false;
 
 async function speak(text, mood = 'neutral') {
+  // Wake speech synthesis — essential when running as OBS/Streamlabs browser source
+  // where no user interaction ever fires to unlock audio normally.
+  if (!_audioUnlocked) _unlockAudio();
+  window.speechSynthesis.cancel();
+
   _isSpeaking = true;
   setExpression(mood);
   setStageLight('speak', text.length * 65 + 2000);
-  try {
-    const controller = new AbortController();
-    const ttsTimeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(TTS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-      signal: controller.signal,
-    });
-    clearTimeout(ttsTimeout);
-    if (res.ok) {
-      const blob  = await res.blob();
-      const url   = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.volume = 1.0;
-      runLipSync(text);
-      await new Promise((resolve) => {
-        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.play().catch(() => {
-          const nudge = document.createElement('div');
-          nudge.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,184,48,0.95);color:#000;padding:18px 32px;border-radius:12px;font-family:Syne,sans-serif;font-weight:700;font-size:16px;z-index:9999;cursor:pointer;';
-          nudge.textContent = '🔊 TAP TO HEAR MISS OG TINZ';
-          nudge.onclick = () => { audio.play(); nudge.remove(); };
-          document.body.appendChild(nudge);
-          setTimeout(() => nudge?.remove(), 8000);
-          resolve();
-        });
-      });
-      stopLipSync(); setExpression('neutral'); _isSpeaking = false; return;
-    }
-  } catch(_) {}
-  await runLipSync(text);
+  runLipSync(text);
+
+  await new Promise((resolve) => {
+    const utter = new SpeechSynthesisUtterance(text);
+    const voice = _pickVoice();
+    if (voice) utter.voice = voice;
+    utter.rate   = 1.05;
+    utter.pitch  = 1.1;
+    utter.volume = 1.0;
+    utter.onend   = resolve;
+    utter.onerror = resolve;
+
+    // Chromium bug: long utterances silently stall after ~15s.
+    // Fix: watchdog timer that cancels + resolves if she goes quiet too long.
+    const watchdog = setTimeout(() => {
+      window.speechSynthesis.cancel();
+      resolve();
+    }, Math.max(15000, text.length * 80));
+
+    const _origResolve = resolve;
+    utter.onend = () => { clearTimeout(watchdog); _origResolve(); };
+    utter.onerror = () => { clearTimeout(watchdog); _origResolve(); };
+
+    window.speechSynthesis.speak(utter);
+  });
+
+  stopLipSync();
   setExpression('neutral');
   _isSpeaking = false;
 }
