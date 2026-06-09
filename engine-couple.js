@@ -142,23 +142,30 @@ let _busy       = false;   // prevent overlapping turns
 let _lastSpeaker = null;   // 'miss' or 'mr'
 let _convoTimer  = null;
 
-// ── AI call helper ────────────────────────────────────────────────
-const API = 'https://api.anthropic.com/v1/messages';
+// ── AI call helper — routes through your existing backend ────────
+// Your backend at impactgrid-dijo.onrender.com already handles CORS.
+// We pass the character system prompt as part of the message so the
+// backend's Claude instance knows who is speaking.
+const BACKEND_CHAT = 'https://impactgrid-dijo.onrender.com/chat/message';
 
 async function _askClaude(systemPrompt, userMessage) {
   try {
-    const res = await fetch(API, {
+    // Prefix the user message with the system persona so the backend
+    // routes it correctly even if it doesn't accept a separate system field.
+    const fullMessage = `[SYSTEM PERSONA]\n${systemPrompt}\n\n[MESSAGE]\n${userMessage}`;
+    const res = await fetch(BACKEND_CHAT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        user_id: 'couple-engine-' + Math.random().toString(36).slice(2, 6),
+        message: fullMessage,
       }),
     });
     const data = await res.json();
-    return data.content?.[0]?.text || '';
+    // Log first time so you can confirm the response shape
+    if (!_askClaude._logged) { _askClaude._logged = true; console.log('[Couple] backend response shape:', data); }
+    // Support both common response shapes your backend might return
+    return data.reply || data.response || data.text || data.message || data.content || '';
   } catch (e) {
     console.warn('[Couple] API error:', e);
     return '';
