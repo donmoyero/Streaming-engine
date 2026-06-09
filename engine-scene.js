@@ -1,7 +1,7 @@
 // ================================================================
-//  engine-scene.js  — DUAL AVATAR (Miss + Mr OG Tinz)
+//  engine-scene.js  — DUAL AVATAR (Miss OG Tinz + Lora)
 //  Loads both VRMs, positions them facing each other,
-//  exports getVrm() / getVrmMr() for the rest of the engine.
+//  exports getVrm() / getVrmLora() for the rest of the engine.
 // ================================================================
 
 import * as THREE from 'three';
@@ -17,10 +17,12 @@ import {
   setTargetFacing,
   vrmPos, showBubble, speak,
 } from './engine-life.js';
+import { dressBothCharacters } from './engine-wardrobe.js';
 
 // ── Config ─────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
-export const VRM_MR_PATH    = 'MrOgTinz_Master.vrm';
+export const VRM_LORA_PATH  = 'MrOgTinz_Master.vrm';  // file unchanged — Lora uses this VRM
+export const VRM_MR_PATH    = 'MrOgTinz_Master.vrm';  // kept for backwards compat
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -114,21 +116,24 @@ export let VRM_BASE_ROT_Y = Math.PI;
 export function getVrm()   { return vrm; }
 export function _setVrm(v) { vrm = v; }
 
-// ── Mr VRM ref ───────────────────────────────────────────────────
-export let vrmMr            = null;
-export let VRM_MR_BASE_ROT_Y = 0;   // faces opposite direction (toward Miss)
-export function getVrmMr()   { return vrmMr; }
-export function _setVrmMr(v) { vrmMr = v; }
+// ── Lora VRM ref ─────────────────────────────────────────────────
+export let vrmMr             = null;   // alias kept so engine-bones.js still works
+export let vrmLora           = null;
+export let VRM_MR_BASE_ROT_Y = 0;
+export function getVrmMr()    { return vrmLora; }  // legacy alias
+export function getVrmLora()  { return vrmLora; }
+export function _setVrmMr(v)  { vrmMr = v; vrmLora = v; }
+export function _setVrmLora(v){ vrmMr = v; vrmLora = v; }
 
 // ── Spawn positions — facing each other ──────────────────────────
-// Miss on the right, Mr on the left, both angled toward centre
+// Miss on the right, Lora on the left, both angled toward centre
 export const MISS_SPAWN_X = 1.1;
 export const MISS_SPAWN_Z = -0.6;
-export const MR_SPAWN_X   = -1.1;
+export const MR_SPAWN_X   = -1.1;   // kept name for engine-bones compat
 export const MR_SPAWN_Z   = -0.6;
 
-// Miss faces left (toward Mr):  rotation.y = Math.PI * 0.5  (~90° right-to-left)
-// Mr   faces right (toward Miss): rotation.y = -Math.PI * 0.5
+// Miss faces left (toward Lora): rotation.y = Math.PI * 0.5
+// Lora faces right (toward Miss): rotation.y = -Math.PI * 0.5
 export const MISS_FACE_Y = Math.PI * 0.55;
 export const MR_FACE_Y   = -Math.PI * 0.55;
 
@@ -266,10 +271,8 @@ const MISS_COLOURS = {
   Necklece:     0xFFD700,
 };
 
-// ── Mr OG Tinz colours — dark skin, streetwear ───────────────────
-const MR_COLOURS = {
-  // Add mesh names from MrOgTinz_Master.vrm — these are best-guess defaults.
-  // Open browser console after load; it will log any unmatched mesh names.
+// ── Lora colours — warm dark skin, street-chic (distinct from Miss) ─
+const LORA_COLOURS = {
   Body:         0x4a2000,
   Head:         0x4a2000,
   Skin:         0x4a2000,
@@ -280,21 +283,46 @@ const MR_COLOURS = {
   Eyes_L:       0x2a1205,
   Lashes:       0x030202,
   Teeth:        0xfff8f0,
-  Hair:         0x0a0a0a,
-  Hair_Block:   0x0a0a0a,
-  Shirt:        0x1a1a2e,   // dark navy
-  Top:          0x1a1a2e,
-  Pants:        0x101010,   // black jeans
-  Bottom:       0x101010,
-  Shoe_R:       0xeeeeee,   // white kicks
-  Shoe_L:       0xeeeeee,
+  Hair:         0x1a0a00,     // dark brown (different from Miss's black)
+  Hair_Block:   0x1a0a00,
+  Shirt:        0x2d1b69,     // deep violet top
+  Top:          0x2d1b69,
+  Pants:        0x0d0d1a,     // near-black bottoms
+  Bottom:       0x0d0d1a,
+  Shoe_R:       0xf5f5dc,     // cream platform sneakers
+  Shoe_L:       0xf5f5dc,
   Chain:        0xFFD700,
   Necklece:     0xFFD700,
-  Ring:         0xFFD700,
+  Ring:         0xC0C0C0,     // silver — different from Miss's gold
   Ear_Jewel:    0xFFD700,
-  Cap:          0x111111,
-  Snapback:     0x111111,
+  Cap:          0x2d1b69,     // matches top
+  Snapback:     0x2d1b69,
 };
+
+// ── Load Lora ─────────────────────────────────────────────────────
+const gltfLoaderLora = new GLTFLoader();
+gltfLoaderLora.register(parser => new VRMLoaderPlugin(parser));
+
+gltfLoaderLora.load(
+  VRM_LORA_PATH,
+  (gltf) => {
+    setProgress(90);
+    vrmLora = gltf.userData.vrm;
+    vrmMr   = vrmLora;  // keep alias in sync
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+    applyVRMColours(vrmLora, LORA_COLOURS, true);
+    VRM_MR_BASE_ROT_Y = 0;
+    _finaliseVRM(vrmLora, MR_SPAWN_X, MR_SPAWN_Z, MR_FACE_Y, false);
+
+    cacheBonesMr();
+    setRestPoseMr();
+
+    _loraLoaded = true;
+    _onBothLoaded();
+  },
+  (p) => setProgress(Math.min(50 + (p.loaded / (p.total || 1)) * 38, 88)),
+  (err) => { console.error(err); setStatus('Failed to load Lora VRM', 'error'); }
+);
 
 function applyVRMColours(vrmObj, colourMap, isMr = false) {
   vrmObj.scene.traverse((obj) => {
@@ -359,13 +387,20 @@ function applyVRMColours(vrmObj, colourMap, isMr = false) {
 
 // ── Track load state ─────────────────────────────────────────────
 let _missLoaded = false;
-let _mrLoaded   = false;
+let _loraLoaded = false;
 
 function _onBothLoaded() {
-  if (!_missLoaded || !_mrLoaded) return;
+  if (!_missLoaded || !_loraLoaded) return;
 
   setProgress(100);
-  setTimeout(() => {
+  setTimeout(async () => {
+    // Dress both characters from wardrobe before reveal
+    try {
+      await dressBothCharacters(vrm, vrmLora);
+    } catch (e) {
+      console.warn('[Wardrobe] outfit load failed (non-fatal):', e.message);
+    }
+
     loader_el.classList.add('hidden');
     setStatus('Ready ✦', 'ready');
     showBubble("Heyyy! Welcome to the stream! 💕", "Miss OG Tinz");
@@ -429,33 +464,9 @@ gltfLoader.load(
     ACTIVITY.duration = 3;
 
     _missLoaded = true;
-    setStatus('Loading Mr OG Tinz...');
+    setStatus('Loading Lora...');
     _onBothLoaded();
   },
   (p) => setProgress(Math.min(10 + (p.loaded / (p.total || 1)) * 35, 45)),
   (err) => { console.error(err); setStatus('Failed to load Miss VRM', 'error'); }
-);
-
-// ── Load Mr OG Tinz ──────────────────────────────────────────────
-const gltfLoaderMr = new GLTFLoader();
-gltfLoaderMr.register(parser => new VRMLoaderPlugin(parser));
-
-gltfLoaderMr.load(
-  VRM_MR_PATH,
-  (gltf) => {
-    setProgress(90);
-    vrmMr = gltf.userData.vrm;
-    VRMUtils.removeUnnecessaryJoints(gltf.scene);
-    applyVRMColours(vrmMr, MR_COLOURS, true);
-    VRM_MR_BASE_ROT_Y = 0;
-    _finaliseVRM(vrmMr, MR_SPAWN_X, MR_SPAWN_Z, MR_FACE_Y, false);
-
-    cacheBonesMr();
-    setRestPoseMr();
-
-    _mrLoaded = true;
-    _onBothLoaded();
-  },
-  (p) => setProgress(Math.min(50 + (p.loaded / (p.total || 1)) * 38, 88)),
-  (err) => { console.error(err); setStatus('Failed to load Mr VRM', 'error'); }
 );
