@@ -507,3 +507,12 @@
     margin-top:4px;
   }
   .ctrl-btn:hover { background:rgba(255,184,48,0.25); }
+
+  /* ── Hide dev UI when captured as OBS / Streamlabs browser source ── */
+  /* OBS sets the class "obs-browser" on <html> automatically.          */
+  /* Viewers never see the chat input box or the CONTROLS panel.        */
+  .obs-browser #chat-input-area,
+  .obs-browser #panel-toggle,
+  .obs-browser #control-panel {
+    display: none !important;
+  }
