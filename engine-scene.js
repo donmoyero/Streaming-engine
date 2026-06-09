@@ -21,7 +21,7 @@ import { dressBothCharacters } from './engine-wardrobe.js';
 
 // ── Config ─────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
-export const VRM_LORA_PATH  = 'MrOgTinz_Master.vrm';  // file unchanged — Lora uses this VRM
+export const VRM_LORA_PATH  = 'Lora_Master.vrm';
 export const VRM_MR_PATH    = 'MrOgTinz_Master.vrm';  // kept for backwards compat
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
