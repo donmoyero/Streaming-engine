@@ -17,7 +17,7 @@ import {
   setProgress, setStatus, loader_el,
   HOUSE, ROOM_WAYPOINT_DEFS,
   setTargetFacing,
-  vrmPos, showBubble,
+  vrmPos, showBubble, speak,
 } from './engine-life.js';
 
 // ── Config ─────────────────────────────────────────────────────
@@ -398,6 +398,7 @@ gltfLoader.load(
       loader_el.classList.add('hidden');
       setStatus('Ready ✦', 'ready');
       showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
+      setTimeout(() => speak("Heyyy! Welcome to the stream! What's good?", 'happy'), 600);
       startTopicPolling();
       _initDeadAir();
       initTwitchChat();
