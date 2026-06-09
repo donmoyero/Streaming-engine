@@ -1227,3 +1227,175 @@ export function doBlink() {
   setBS('blink', 1);
   setTimeout(() => setBS('blink', 0), 120);
 }
+
+// ================================================================
+//  MR OG TINZ — dual bone cache + animations
+//  All Mr bones are prefixed mr_ to live alongside Miss bones.
+// ================================================================
+import { getVrmMr } from './engine-scene.js';
+const _vrmMr = () => getVrmMr();
+
+export let mr_boneHead=null, mr_boneNeck=null, mr_boneSpine=null, mr_boneChest=null;
+export let mr_boneJaw=null;
+export let mr_boneHips=null;
+export let mr_boneLUpperLeg=null, mr_boneRUpperLeg=null;
+export let mr_boneLLowerLeg=null, mr_boneRLowerLeg=null;
+export let mr_boneLFoot=null,     mr_boneRFoot=null;
+export let mr_boneLToes=null,     mr_boneRToes=null;
+export let mr_boneLUpperArm=null, mr_boneRUpperArm=null;
+export let mr_boneLLowerArm=null, mr_boneRLowerArm=null;
+export let mr_boneLHand=null,     mr_boneRHand=null;
+export let mr_boneL_ThumbPx=null, mr_boneL_IndexPx=null, mr_boneL_MidPx=null;
+export let mr_boneR_ThumbPx=null, mr_boneR_IndexPx=null, mr_boneR_MidPx=null;
+export let mr_teethNode=null;
+
+export function cacheBonesMr() {
+  const v = _vrmMr();
+  if (!v || !v.humanoid) return;
+  const h = v.humanoid;
+  mr_boneHead      = h.getNormalizedBoneNode('head');
+  mr_boneNeck      = h.getNormalizedBoneNode('neck');
+  mr_boneSpine     = h.getNormalizedBoneNode('spine');
+  mr_boneChest     = h.getNormalizedBoneNode('chest');
+  mr_boneHips      = h.getNormalizedBoneNode('hips');
+  mr_boneJaw       = h.getNormalizedBoneNode('jaw') || h.getNormalizedBoneNode('lowerJaw') || null;
+  if (!mr_boneJaw) v.scene.traverse(n => { if (!mr_boneJaw && n.isBone && /jaw/i.test(n.name)) mr_boneJaw = n; });
+  mr_boneLUpperLeg = h.getNormalizedBoneNode('leftUpperLeg');
+  mr_boneRUpperLeg = h.getNormalizedBoneNode('rightUpperLeg');
+  mr_boneLLowerLeg = h.getNormalizedBoneNode('leftLowerLeg');
+  mr_boneRLowerLeg = h.getNormalizedBoneNode('rightLowerLeg');
+  mr_boneLFoot     = h.getNormalizedBoneNode('leftFoot');
+  mr_boneRFoot     = h.getNormalizedBoneNode('rightFoot');
+  mr_boneLToes     = h.getNormalizedBoneNode('leftToes');
+  mr_boneRToes     = h.getNormalizedBoneNode('rightToes');
+  mr_boneLUpperArm = h.getNormalizedBoneNode('leftUpperArm');
+  mr_boneRUpperArm = h.getNormalizedBoneNode('rightUpperArm');
+  mr_boneLLowerArm = h.getNormalizedBoneNode('leftLowerArm');
+  mr_boneRLowerArm = h.getNormalizedBoneNode('rightLowerArm');
+  mr_boneLHand     = h.getNormalizedBoneNode('leftHand');
+  mr_boneRHand     = h.getNormalizedBoneNode('rightHand');
+  mr_boneL_ThumbPx = h.getNormalizedBoneNode('leftThumbProximal');
+  mr_boneL_IndexPx = h.getNormalizedBoneNode('leftIndexProximal');
+  mr_boneL_MidPx   = h.getNormalizedBoneNode('leftMiddleProximal');
+  mr_boneR_ThumbPx = h.getNormalizedBoneNode('rightThumbProximal');
+  mr_boneR_IndexPx = h.getNormalizedBoneNode('rightIndexProximal');
+  mr_boneR_MidPx   = h.getNormalizedBoneNode('rightMiddleProximal');
+  v.scene.traverse(n => { if (n.name === 'Teeth') mr_teethNode = n; });
+  console.log('[Mr] Bones cached:', { mr_boneHead, mr_boneSpine, mr_boneLHand });
+}
+
+// ── Mr rest pose — relaxed stand, one hand on chin (thinking/flirty) ──
+export function setRestPoseMr() {
+  if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.95; mr_boneLUpperArm.rotation.x = 0.08; }
+  if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.80; mr_boneRUpperArm.rotation.x = 0.35; }
+  if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.30; mr_boneLLowerArm.rotation.x = 0.05; }
+  if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.20; mr_boneRLowerArm.rotation.x = 0.60; }
+  if (mr_boneLHand) { mr_boneLHand.rotation.z =  0.15; }
+  if (mr_boneRHand) { mr_boneRHand.rotation.z = -0.10; mr_boneRHand.rotation.x = -0.05; }
+  if (mr_boneHips)  { mr_boneHips.rotation.z  = -0.04; mr_boneHips.rotation.x = 0.01; }
+  if (mr_boneLUpperLeg) mr_boneLUpperLeg.rotation.z = -0.05;
+  if (mr_boneRUpperLeg) mr_boneRUpperLeg.rotation.z =  0.07;
+  if (mr_boneLFoot) { mr_boneLFoot.rotation.x = -0.05; mr_boneLFoot.rotation.z = -0.03; }
+  if (mr_boneRFoot) { mr_boneRFoot.rotation.x = -0.05; mr_boneRFoot.rotation.z =  0.04; }
+  if (mr_boneSpine) { mr_boneSpine.rotation.x = 0.03; mr_boneSpine.rotation.z = 0.03; }
+  if (mr_boneHead)  { mr_boneHead.rotation.x = 0.04; }  // slight tilt down toward Miss
+}
+
+// ── Mr blendshape setter ─────────────────────────────────────────
+export function setBSMr(name, value) {
+  const v = _vrmMr();
+  if (!v) return;
+  const val = Math.max(0, Math.min(1, value));
+  try { v.expressionManager?.setValue(name, val); } catch(e) {}
+}
+
+export function setExpressionMr(mood) {
+  ['happy','angry','sad','relaxed','surprised'].forEach(e => setBSMr(e, 0));
+  ['joy','angry','sorrow','fun','neutral'].forEach(e => setBSMr(e, 0));
+  const map = {
+    happy:     () => { setBSMr('joy',0.8); setBSMr('happy',0.8); },
+    excited:   () => { setBSMr('joy',1.0); setBSMr('fun',0.6); },
+    angry:     () => { setBSMr('angry',0.7); },
+    sad:       () => { setBSMr('sorrow',0.7); setBSMr('sad',0.6); },
+    neutral:   () => { setBSMr('neutral',0.3); },
+    surprised: () => { setBSMr('surprised',0.8); },
+  };
+  (map[mood] || map.neutral)();
+}
+
+// ── Mr idle animation tick (called from activityUpdate with who='mr') ──
+export function activityUpdateMr(delta) {
+  const v = _vrmMr();
+  if (!v) return;
+  const t = (Date.now() % 100000) / 1000;
+  const breathe  = Math.sin(t * 0.5) * 0.011;
+  const headNod  = Math.sin(t * 0.22) * 0.018;
+  const headTurn = Math.sin(t * 0.14) * 0.055; // subtle glance toward Miss
+
+  if (mr_boneSpine) { mr_boneSpine.rotation.x = 0.03 + breathe; }
+  if (mr_boneChest) { mr_boneChest.rotation.x = 0.02 + breathe * 0.6; }
+  if (mr_boneHead)  { mr_boneHead.rotation.x = 0.04 + headNod; mr_boneHead.rotation.y = headTurn; }
+  if (mr_boneNeck)  { mr_boneNeck.rotation.y = headTurn * 0.4; }
+  if (mr_boneHips)  { mr_boneHips.rotation.z = Math.sin(t * 0.3) * 0.015; }
+
+  // Right hand stays near chin/face — flirty lean
+  if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.80 + Math.sin(t*0.7)*0.04; mr_boneRUpperArm.rotation.x = 0.35; }
+  if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.x = 0.60 + Math.sin(t*0.9)*0.03; }
+  // Left arm relaxed sway
+  if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z = 0.95 + Math.sin(t*0.55)*0.03; }
+}
+
+// ── Mr lip sync ──────────────────────────────────────────────────
+let _mrLipActive  = false;
+let _mrLipRafId   = null;
+export let _isSpeakingMr = false;
+
+export function stopLipSyncMr() {
+  _mrLipActive = false;
+  cancelAnimationFrame(_mrLipRafId);
+  ['A','I','U','E','O'].forEach(s => setBSMr(s, 0));
+  if (mr_boneJaw) mr_boneJaw.rotation.x = 0;
+}
+
+export function runLipSyncMr(text) {
+  return new Promise((resolve) => {
+    stopLipSyncMr();
+    _mrLipActive = true;
+    _isSpeakingMr = true;
+    const startTime = Date.now();
+    const words     = text.split(' ');
+    const msPerWord = (text.length * 62) / Math.max(words.length, 1);
+    const totalMs   = words.length * msPerWord;
+    const VOWELS    = new Set(['a','e','i','o','u']);
+    function tick() {
+      if (!_mrLipActive) { _isSpeakingMr = false; return; }
+      _mrLipRafId = requestAnimationFrame(tick);
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= totalMs) {
+        stopLipSyncMr(); setExpressionMr('neutral');
+        _isSpeakingMr = false; resolve(); return;
+      }
+      const wordIndex = Math.floor(elapsed / msPerWord);
+      const word      = (words[wordIndex] || '').toLowerCase();
+      const charPos   = Math.floor((elapsed % msPerWord) / msPerWord * word.length);
+      const char      = word[charPos] || '';
+      const isVowel   = VOWELS.has(char);
+      const rhythm    = Math.abs(Math.sin(elapsed*0.018))*0.4+0.3;
+      const base      = char === '' ? 0 : rhythm + (isVowel ? 0.5 : 0);
+      const openness  = Math.min(1, base);
+      const spread    = isVowel && (char==='i'||char==='e') ? 0.6 : 0.1;
+      const round     = isVowel && (char==='o'||char==='u') ? 0.5 : 0.1;
+      setBSMr('A', openness*0.9); setBSMr('O', openness*round);
+      setBSMr('I', openness*spread); setBSMr('E', openness*spread*0.7);
+      setBSMr('U', openness*round*0.6);
+      if (mr_boneJaw) mr_boneJaw.rotation.x = openness * 0.22;
+    }
+    tick();
+  });
+}
+
+// ── Mr blink ─────────────────────────────────────────────────────
+export function doBlinkMr() {
+  setBSMr('blink', 1);
+  setTimeout(() => setBSMr('blink', 0), 120);
+}
