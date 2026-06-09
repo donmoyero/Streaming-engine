@@ -154,7 +154,7 @@ export const HOUSE = {
       { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
       { label: 'TV Wall',      x: -2.500, z: -5.000, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
-      { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch','sofaSit'], prop: 'krb' },
+      { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch'], prop: 'krb' },
       { label: 'Centre',       x: -3.200, z: -2.800, facingY: Math.PI,        activities: ['dance','stretch','hairflick','hiponhip','idle'] },
       { label: 'Front Window', x: -3.800, z: -5.200, facingY: 0,              activities: ['windowLook','idle','hairflick','stretch'], prop: 'parapet.005' },
     ]
@@ -178,8 +178,8 @@ export const HOUSE = {
     origin: { x: -2.0, z: 2.5 }, size: { w: 3.5, d: 4.0 },
     ambientColor: 0x0a0a05,
     spots: [
-      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['sofaSit','tasting','phoneScroll','readBook'], prop: 'jidelni stul' },
-      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle' },
+      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['sofaSit','sofaSit','tasting','phoneScroll','readBook'], prop: 'jidelni stul' },
+      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['sofaSit','sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle' },
       { label: 'Table End',    x: -2.132, z:  3.500, facingY: 0,                activities: ['idle','dance','hairflick','hiponhip'], prop: 'jidelni stul.001' },
       { label: 'Dining Window',x: -1.200, z:  3.800, facingY: 0,                activities: ['windowLook','idle','hairflick','stretch'], prop: 'parapet' },
       { label: 'Dining Centre',x: -1.800, z:  2.200, facingY: Math.PI,           activities: ['dance','stretch','idle','hiponhip'] },
@@ -205,7 +205,7 @@ export const HOUSE = {
       { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
       { label: 'Wardrobe',        x:  4.356, z:  2.100, facingY: Math.PI,          activities: ['cabinetOpen','mirrorPose','idle','hairflick'], prop: 'closet.006' },
       { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'Plane.054' },
-      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI,          yOffset: -0.85, activities: ['bedLie','bedLie','bedLiePhone','phoneScroll','readBook'] },
+      { label: 'Bed',             x:  5.200, z: -4.200, facingY: 0,               yOffset: -0.85, activities: ['bedLie','bedLie','bedLiePhone','readBook'] },
       { label: 'Bedside',         x:  4.313, z: -1.125, facingY: Math.PI * 0.5,   activities: ['idle','phoneScroll','stretch'], prop: 'jidelni stul.003' },
       { label: 'Window 1',        x:  5.000, z: -2.091, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick','stretch'], prop: 'window.008' },
       { label: 'Window 2',        x:  5.000, z: -4.241, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick'], prop: 'window.010' },
@@ -325,8 +325,10 @@ export function updateWalk(delta) {
   vrmPos.x = walk.fromX + (walk.toX - walk.fromX) * ease;
   vrmPos.z = walk.fromZ + (walk.toZ - walk.fromZ) * ease;
 
-  vrmPos.x = Math.max(HOUSE_BOUNDS.minX + AVATAR_RADIUS, Math.min(HOUSE_BOUNDS.maxX - AVATAR_RADIUS, vrmPos.x));
-  vrmPos.z = Math.max(HOUSE_BOUNDS.minZ + AVATAR_RADIUS, Math.min(HOUSE_BOUNDS.maxZ - AVATAR_RADIUS, vrmPos.z));
+  // Tighter clamp during walk — extra margin prevents camera clipping walls
+  const walkMargin = AVATAR_RADIUS + 0.4;
+  vrmPos.x = Math.max(HOUSE_BOUNDS.minX + walkMargin, Math.min(HOUSE_BOUNDS.maxX - walkMargin, vrmPos.x));
+  vrmPos.z = Math.max(HOUSE_BOUNDS.minZ + walkMargin, Math.min(HOUSE_BOUNDS.maxZ - walkMargin, vrmPos.z));
 
   vrm.scene.position.x = vrmPos.x;
   vrm.scene.position.z = vrmPos.z;
@@ -881,89 +883,104 @@ export function _initDeadAir() {
 }
 
 // ── Twitch chat ──────────────────────────────────────────────────
-const _seenViewers = new Set(); // track who we've already greeted this session
+// Uses anonymous IRC over WebSocket — works in OBS browser source
+// without needing tmi.js or auth tokens. Pure WebSocket connection
+// to irc-ws.chat.twitch.tv which OBS allows through its security model.
+const _seenViewers = new Set();
+let _twitchWs      = null;
+let _twitchReconTimer = null;
 
 export function initTwitchChat() {
-  if (typeof tmi === 'undefined') {
-    console.warn('[Twitch] tmi.js not available — check the <script> tag in index.html');
-    return;
+  _connectTwitchIRC(1);
+}
+
+function _connectTwitchIRC(attempt = 1) {
+  if (_twitchWs) { try { _twitchWs.close(); } catch(_) {} }
+  clearTimeout(_twitchReconTimer);
+
+  const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+  _twitchWs = ws;
+
+  ws.onopen = () => {
+    // Anonymous login — no oauth needed for read-only
+    ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    ws.send('PASS oauth:justinfan' + Math.floor(Math.random() * 90000 + 10000));
+    ws.send('NICK justinfan' + Math.floor(Math.random() * 90000 + 10000));
+    ws.send(`JOIN #${TWITCH_CHANNEL.toLowerCase()}`);
+    console.log(`[Twitch IRC] Connected → #${TWITCH_CHANNEL}`);
+    setStatus('Live ✦', 'ready');
+  };
+
+  ws.onmessage = (event) => {
+    const raw = event.data;
+
+    // Keep-alive PING → PONG
+    if (raw.startsWith('PING')) { ws.send('PONG :tmi.twitch.tv'); return; }
+
+    // Parse PRIVMSG (chat messages)
+    if (raw.includes('PRIVMSG')) {
+      const tagStr    = raw.startsWith('@') ? raw.slice(1, raw.indexOf(' ')) : '';
+      const tags      = _parseTags(tagStr);
+      const username  = tags['display-name'] || tags['login'] ||
+                        (raw.match(/:([^!]+)!/) || [])[1] || 'Someone';
+      const msgMatch  = raw.match(/PRIVMSG #\S+ :(.+)/);
+      const message   = msgMatch ? msgMatch[1].trim() : '';
+      if (!message) return;
+
+      const isNew = !_seenViewers.has(username.toLowerCase());
+      if (isNew) _seenViewers.add(username.toLowerCase());
+      const prefixed = isNew ? `[NEW VIEWER] ${username}: ${message}` : message;
+      queueTwitchMessage(username, prefixed);
+      deadAir?.reset();
+    }
+
+    // USERNOTICE — subs, resubs, raids, gifts
+    if (raw.includes('USERNOTICE')) {
+      const tagStr = raw.startsWith('@') ? raw.slice(1, raw.indexOf(' ')) : '';
+      const tags   = _parseTags(tagStr);
+      const type   = tags['msg-id'];
+      const name   = tags['display-name'] || tags['login'] || 'Someone';
+
+      if (type === 'sub' || type === 'subgift') {
+        setStageLight('sub', 6000); triggerSubCelebration();
+        queueTwitchMessage('StreamEvent', `${name} just subscribed! Omo thank you so much! Welcome to the family!`);
+      } else if (type === 'resub') {
+        const months = tags['msg-param-cumulative-months'] || '?';
+        setStageLight('sub', 5000); triggerResubHype();
+        queueTwitchMessage('StreamEvent', `${name} has been here for ${months} months! ${Number(months) >= 6 ? 'A real OG!' : 'Thank you!'} We see you!`);
+      } else if (type === 'raid') {
+        const viewers = tags['msg-param-viewerCount'] || '?';
+        setStageLight('raid', 8000); triggerRaidDance();
+        queueTwitchMessage('StreamEvent', `We are being raided by ${name} with ${viewers} viewers! Welcome welcome welcome! Come in, come in!`);
+      } else if (type === 'subgift') {
+        const recipient = tags['msg-param-recipient-display-name'] || 'someone';
+        setStageLight('sub', 4000); triggerGiftPop();
+        queueTwitchMessage('StreamEvent', `${name} just gifted a sub to ${recipient}! Omo that is so generous! Big love!`);
+      }
+    }
+  };
+
+  ws.onerror = (e) => console.warn('[Twitch IRC] WebSocket error:', e);
+
+  ws.onclose = () => {
+    console.warn(`[Twitch IRC] Disconnected — reconnecting in ${attempt * 5}s`);
+    _twitchReconTimer = setTimeout(
+      () => _connectTwitchIRC(Math.min(attempt + 1, 10)),
+      attempt * 5000
+    );
+  };
+}
+
+// Parse IRC tag string into key/value object
+function _parseTags(tagStr) {
+  const out = {};
+  if (!tagStr) return out;
+  for (const part of tagStr.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    out[part.slice(0, eq)] = part.slice(eq + 1);
   }
-
-  const client = new tmi.Client({
-    options:    { debug: false },
-    connection: { reconnect: true, secure: true },
-    channels:   [TWITCH_CHANNEL],
-  });
-
-  function _connect(attempt = 1) {
-    client.connect()
-      .then(() => {
-        console.log(`[Twitch] Connected to #${TWITCH_CHANNEL}`);
-        setStatus('Live ✦', 'ready');
-      })
-      .catch(err => {
-        console.warn(`[Twitch] Connect failed (attempt ${attempt}):`, err);
-        if (attempt < 5) setTimeout(() => _connect(attempt + 1), attempt * 5000);
-      });
-  }
-  _connect();
-
-  // ── Chat message ───────────────────────────────────────────────
-  client.on('message', (channel, tags, message, self) => {
-    if (self) return;
-    const username = tags['display-name'] || tags.username || 'Someone';
-    const isNew    = !_seenViewers.has(username.toLowerCase());
-    if (isNew) _seenViewers.add(username.toLowerCase());
-    // Prefix new viewer messages so the prompt can give a warmer welcome
-    const prefixed = isNew
-      ? `[NEW VIEWER] ${username}: ${message}`
-      : message;
-    queueTwitchMessage(username, prefixed);
-  });
-
-  // ── Viewer joins the chat room ─────────────────────────────────
-  client.on('join', (channel, username, self) => {
-    if (self) return;
-    if (_seenViewers.has(username.toLowerCase())) return; // already greeted
-    _seenViewers.add(username.toLowerCase());
-    // Only greet — don't queue a full API call for every join (can spam)
-    // Show a quick bubble instead; saves tokens
-    const greetings = [
-      `${username} just joined the stream! Welcome to the madness!`,
-      `Ayyyy ${username} is here! Welcome welcome!`,
-      `${username}! Glad you made it, grab a seat!`,
-      `Look who showed up — ${username}! We see you!`,
-      `${username} in the chat! Let's gooo!`,
-    ];
-    const g = greetings[Math.floor(Math.random() * greetings.length)];
-    showBubble(g, 'Miss OG Tinz');
-    // Also speak it if she's not already talking
-    if (!_isSpeaking) speak(g, 'happy').catch(() => {});
-    deadAir?.reset();
-  });
-
-  // ── Channel events ─────────────────────────────────────────────
-  client.on('subscription', (channel, username) => {
-    setStageLight('sub', 6000); triggerSubCelebration();
-    queueTwitchMessage('StreamEvent', `${username} just subscribed! Omo thank you so much! Welcome to the family!`);
-  });
-  client.on('resub', (channel, username, months) => {
-    setStageLight('sub', 5000); triggerResubHype();
-    queueTwitchMessage('StreamEvent', `${username} has been here for ${months} months! ${months >= 6 ? 'A real OG!' : 'Thank you!'} We see you!`);
-  });
-  client.on('cheer', (channel, tags, message) => {
-    const bits = tags.bits || '?';
-    setStageLight('bits', 5000); triggerBitsDazzle(Number(bits) || 100);
-    queueTwitchMessage('StreamEvent', `${tags['display-name'] || 'Someone'} just sent ${bits} bits! Ayyyy thank you! The support is real!`);
-  });
-  client.on('raided', (channel, username, viewers) => {
-    setStageLight('raid', 8000); triggerRaidDance();
-    queueTwitchMessage('StreamEvent', `We are being raided by ${username} with ${viewers} viewers! Welcome welcome welcome! Come in, come in!`);
-  });
-  client.on('subgift', (channel, username, streakMonths, recipient) => {
-    setStageLight('sub', 4000); triggerGiftPop();
-    queueTwitchMessage('StreamEvent', `${username} just gifted a sub to ${recipient}! Omo that is so generous! Big love!`);
-  });
+  return out;
 }
 
 // ── Message queue ────────────────────────────────────────────────
