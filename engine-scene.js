@@ -1,16 +1,14 @@
 // ================================================================
-//  engine-scene.js
-//  Three.js scene setup, lighting, House GLB loader, VRM loader.
-//  Exports: scene, camera, renderer, vrm (set after load),
-//           _houseFloorY, _houseSpawnX/Z, HOUSE_BOUNDS,
-//           _placeVRMOnFloor, _snapCameraToVRM (imported from engine-camera)
+//  engine-scene.js  — DUAL AVATAR (Miss + Mr OG Tinz)
+//  Loads both VRMs, positions them facing each other,
+//  exports getVrm() / getVrmMr() for the rest of the engine.
 // ================================================================
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
-import { cacheBones, setRestPose, ACTIVITY } from './engine-bones.js';
+import { cacheBones, cacheBonesMr, setRestPose, setRestPoseMr, ACTIVITY } from './engine-bones.js';
 import { _snapCameraToVRM, setCamFacingY } from './engine-camera.js';
 import {
   startTopicPolling, _initDeadAir, initTwitchChat,
@@ -22,6 +20,7 @@ import {
 
 // ── Config ─────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
+export const VRM_MR_PATH    = 'MrOgTinz_Master.vrm';
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -31,7 +30,7 @@ export const TWITCH_CHANNEL = 'Miss_ogtinz';
 
 // ── Elements ────────────────────────────────────────────────────
 export const canvas     = document.getElementById('canvas');
-export const loader_el2 = document.getElementById('loader');  // re-exported via engine-life
+export const loader_el2 = document.getElementById('loader');
 export const bar_fill   = document.getElementById('bar-fill');
 export const status_el  = document.getElementById('status');
 export const bubble     = document.getElementById('chat-bubble');
@@ -49,8 +48,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 export const scene  = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 999999);
-camera.position.set(0, 1.50, 2.6);
-camera.lookAt(0, 1.10, 0);
+// Wider shot to frame both characters
+camera.position.set(0, 1.55, 3.8);
+camera.lookAt(0, 1.15, 0);
 
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -75,7 +75,6 @@ const rimLight = new THREE.DirectionalLight(0xffb830, 0.5);
 rimLight.position.set(0, 2, -3);
 scene.add(rimLight);
 
-// ── RGB neon point lights ────────────────────────────────────────
 export const neonPink   = new THREE.PointLight(0xff2d78, 1.8, 12);
 neonPink.position.set(-4, 2.5, -3);
 scene.add(neonPink);
@@ -92,12 +91,12 @@ export const floorGlow  = new THREE.PointLight(0xff6a00, 0.4, 6);
 floorGlow.position.set(0, 0.5, -1);
 scene.add(floorGlow);
 
-// Mesh refs used by animation
+// Mesh refs
 export let monitorMesh      = null;
 export let monitorGlowLight = null;
 export let keyboardMesh     = null;
 export let chairMesh        = null;
-export let roofMesh         = null;   // populated after house load — used for Sims cutaway
+export let roofMesh         = null;
 export const roomLights     = {};
 
 // ── House spawn / bounds ─────────────────────────────────────────
@@ -109,74 +108,67 @@ export let _houseFloorY = 0;
 export const HOUSE_BOUNDS  = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
 export const AVATAR_RADIUS = 0.25;
 
-// ── VRM ref (populated after load) ──────────────────────────────
-// Use getVrm() in other modules — a plain `import { vrm }` captures the
-// initial null and never sees the update, because ES module live-bindings
-// only work when the exporting module writes its own variable.
+// ── Miss VRM ref ─────────────────────────────────────────────────
 export let vrm            = null;
 export let VRM_BASE_ROT_Y = Math.PI;
 export function getVrm()   { return vrm; }
 export function _setVrm(v) { vrm = v; }
 
-// ── Place VRM on house floor via raycast ─────────────────────────
-export function _placeVRMOnFloor() {
-  const vrm = getVrm();
-  if (!vrm) return;
-  vrmPos.x = _houseSpawnX;
-  vrmPos.z = _houseSpawnZ;
+// ── Mr VRM ref ───────────────────────────────────────────────────
+export let vrmMr            = null;
+export let VRM_MR_BASE_ROT_Y = 0;   // faces opposite direction (toward Miss)
+export function getVrmMr()   { return vrmMr; }
+export function _setVrmMr(v) { vrmMr = v; }
 
-  const offsets = [[0,0],[0.25,0],[-0.25,0],[0,0.25],[0,-0.25],[0.15,0.15],[-0.15,0.15]];
-  const floorCandidates = [];
+// ── Spawn positions — facing each other ──────────────────────────
+// Miss on the right, Mr on the left, both angled toward centre
+export const MISS_SPAWN_X = 1.1;
+export const MISS_SPAWN_Z = -0.6;
+export const MR_SPAWN_X   = -1.1;
+export const MR_SPAWN_Z   = -0.6;
+
+// Miss faces left (toward Mr):  rotation.y = Math.PI * 0.5  (~90° right-to-left)
+// Mr   faces right (toward Miss): rotation.y = -Math.PI * 0.5
+export const MISS_FACE_Y = Math.PI * 0.55;
+export const MR_FACE_Y   = -Math.PI * 0.55;
+
+// ── Place both VRMs on floor ─────────────────────────────────────
+export function _placeVRMOnFloor() {
+  _placeOneVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
+  _placeOneVRM(vrmMr, MR_SPAWN_X,   MR_SPAWN_Z,   MR_FACE_Y);
+  _snapCameraToVRM();
+}
+
+function _rayFloor(spawnX, spawnZ) {
+  const offsets = [[0,0],[0.25,0],[-0.25,0],[0,0.25],[0,-0.25]];
+  const candidates = [];
   for (const [ox, oz] of offsets) {
     const ray = new THREE.Raycaster(
-      new THREE.Vector3(_houseSpawnX + ox, 50, _houseSpawnZ + oz),
-      new THREE.Vector3(0, -1, 0),
-      0, 100
+      new THREE.Vector3(spawnX + ox, 50, spawnZ + oz),
+      new THREE.Vector3(0, -1, 0), 0, 100
     );
     const hits = ray.intersectObjects(scene.children, true)
-      .filter(h => h.object.isMesh && h.object !== vrm?.scene)
+      .filter(h => h.object.isMesh)
       .sort((a, b) => b.point.y - a.point.y);
     if (hits.length > 0) {
       const y = hits[0].point.y;
-      if (y > -0.5 && y < 5) floorCandidates.push(y);
+      if (y > -0.5 && y < 5) candidates.push(y);
     }
   }
+  if (!candidates.length) return _houseFloorY;
+  candidates.sort((a, b) => a - b);
+  return candidates[Math.floor(candidates.length / 2)];
+}
 
-  if (floorCandidates.length > 0) {
-    floorCandidates.sort((a, b) => a - b);
-    let bestClusterY = floorCandidates[0], bestCount = 1, curCount = 1;
-    for (let i = 1; i < floorCandidates.length; i++) {
-      if (floorCandidates[i] - floorCandidates[i - 1] < 0.15) {
-        curCount++;
-        if (curCount > bestCount) { bestCount = curCount; bestClusterY = floorCandidates[i]; }
-      } else {
-        curCount = 1;
-      }
-    }
-    _houseFloorY = bestClusterY;
-    console.log(`[VRM] Floor cluster Y=${_houseFloorY.toFixed(4)} (${bestCount}/${floorCandidates.length} rays agreed)`);
-  }
-
-  // Keep the box-detected floor as fallback — never fall to 0 unless house says so
-  if (_houseFloorY < -1 || isNaN(_houseFloorY)) {
-    _houseFloorY = 0;
-    console.warn('[VRM] Raycast gave no good floor — defaulting to Y=0');
-  } else if (floorCandidates.length === 0) {
-    console.warn(`[VRM] No raycast hits — using box floor Y=${_houseFloorY.toFixed(4)}`);
-  }
-
-  const feetOffset    = vrm._feetOffset ?? 0;
-  const safeFeetOffset = feetOffset < 0.05 ? 0.82 : feetOffset;
-  const finalY        = _houseFloorY + safeFeetOffset;
-
-  vrm.scene.position.set(_houseSpawnX, finalY, _houseSpawnZ);
-  vrm._restPosY          = finalY;
-  vrm.scene.rotation.y   = Math.PI;
-  vrmPos.x = _houseSpawnX;
-  vrmPos.z = _houseSpawnZ;
-  setTargetFacing(Math.PI);
-  setCamFacingY(Math.PI);
-  console.log(`[VRM] floor=${_houseFloorY.toFixed(4)} feetOffset=${safeFeetOffset.toFixed(4)} finalY=${finalY.toFixed(4)}`);
+function _placeOneVRM(v, spawnX, spawnZ, faceY) {
+  if (!v) return;
+  const floorY       = _rayFloor(spawnX, spawnZ);
+  const feetOffset   = v._feetOffset ?? 0;
+  const safeFeet     = feetOffset < 0.05 ? 0.82 : feetOffset;
+  const finalY       = floorY + safeFeet;
+  v.scene.position.set(spawnX, finalY, spawnZ);
+  v._restPosY        = finalY;
+  v.scene.rotation.y = faceY;
 }
 
 // ── House GLB loader ─────────────────────────────────────────────
@@ -201,7 +193,6 @@ _gltfLoader.load(
     _houseFloorY   = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
     if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
 
-    // Tighter bounds — keep avatar well away from wall geometry
     HOUSE_BOUNDS.minX = -5.195 * hScale * 0.72;
     HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.72;
     HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.72;
@@ -210,15 +201,13 @@ _gltfLoader.load(
     console.log(`[House] hScale=${hScale.toFixed(3)} floorY=${_houseFloorY.toFixed(4)}`);
     house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
 
-    // ── Roof mesh — hidden in Sims mode so camera can look down inside ──
-    // Matches common names used in house GLBs; add more patterns if needed.
     house.traverse(n => {
       if (n.isMesh && /roof|strecha|ceiling|dach|techo|plafond/i.test(n.name)) {
         roofMesh = n;
         console.log(`[House] roofMesh found: "${n.name}"`);
       }
     });
-    if (!roofMesh) console.warn('[House] No roof mesh found — Sims cutaway will not hide roof. Check mesh names.');
+    if (!roofMesh) console.warn('[House] No roof mesh found.');
 
     _houseLoaded = true;
 
@@ -229,7 +218,6 @@ _gltfLoader.load(
         for (const spot of roomDef.spots) {
           spot.x *= hScale;
           spot.z *= hScale;
-          // Clamp each spot inside the walkable bounds with extra margin
           const margin = AVATAR_RADIUS + 0.3;
           spot.x = Math.max(HOUSE_BOUNDS.minX + margin, Math.min(HOUSE_BOUNDS.maxX - margin, spot.x));
           spot.z = Math.max(HOUSE_BOUNDS.minZ + margin, Math.min(HOUSE_BOUNDS.maxZ - margin, spot.z));
@@ -237,27 +225,14 @@ _gltfLoader.load(
         if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
       }
       for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
-
-      // Scale door-threshold waypoints inside ROOM_CONNECTIONS (added in engine-life.js)
-      // These must match house geometry just like spot coords and ROOM_WAYPOINT_DEFS.
       if (window.ROOM_CONNECTIONS_REF) {
         for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
-          for (const wp of Object.values(targets)) {
-            wp.x *= hScale;
-            wp.z *= hScale;
-          }
+          for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
         }
       }
-      _houseSpawnX *= hScale;
-      _houseSpawnZ *= hScale;
-      // Clamp spawn inside bounds too
-      const spawnMargin = AVATAR_RADIUS + 0.5;
-      _houseSpawnX = Math.max(HOUSE_BOUNDS.minX + spawnMargin, Math.min(HOUSE_BOUNDS.maxX - spawnMargin, _houseSpawnX));
-      _houseSpawnZ = Math.max(HOUSE_BOUNDS.minZ + spawnMargin, Math.min(HOUSE_BOUNDS.maxZ - spawnMargin, _houseSpawnZ));
-      console.log(`[House] Spot coords scaled by hScale=${hScale.toFixed(3)}, spawn=(${_houseSpawnX.toFixed(2)},${_houseSpawnZ.toFixed(2)})`);
     }
 
-    if (vrm) {
+    if (vrm || vrmMr) {
       requestAnimationFrame(() => {
         _placeVRMOnFloor();
         _snapCameraToVRM();
@@ -269,145 +244,218 @@ _gltfLoader.load(
   (err) => console.warn('[House] GLB load failed:', err)
 );
 
-// ── VRM loader ───────────────────────────────────────────────────
+// ── Shared GLTF loader (VRM plugin registered once) ──────────────
 const gltfLoader = new GLTFLoader();
 gltfLoader.register(parser => new VRMLoaderPlugin(parser));
 
+// ── Miss OG Tinz colours ─────────────────────────────────────────
+const MISS_COLOURS = {
+  Julie_Figure: 0x7B3F00,
+  Brow:         0x1a0a00,
+  Teargum:      0x7B3F00,
+  Ear_Jewel:    0xFFD700,
+  Eye_R:        0x3b2314,
+  Eyes_L:       0x3b2314,
+  Lashes:       0x050505,
+  Teeth:        0xfffaf0,
+  Hair_Block:   0x0d0d0d,
+  Top:          0xff69b4,
+  Bottom:       0xff1493,
+  Shoe_R:       0x222222,
+  Shoe_L:       0x222222,
+  Necklece:     0xFFD700,
+};
+
+// ── Mr OG Tinz colours — dark skin, streetwear ───────────────────
+const MR_COLOURS = {
+  // Add mesh names from MrOgTinz_Master.vrm — these are best-guess defaults.
+  // Open browser console after load; it will log any unmatched mesh names.
+  Body:         0x4a2000,
+  Head:         0x4a2000,
+  Skin:         0x4a2000,
+  Figure:       0x4a2000,
+  Brow:         0x0d0600,
+  Teargum:      0x4a2000,
+  Eye_R:        0x2a1205,
+  Eyes_L:       0x2a1205,
+  Lashes:       0x030202,
+  Teeth:        0xfff8f0,
+  Hair:         0x0a0a0a,
+  Hair_Block:   0x0a0a0a,
+  Shirt:        0x1a1a2e,   // dark navy
+  Top:          0x1a1a2e,
+  Pants:        0x101010,   // black jeans
+  Bottom:       0x101010,
+  Shoe_R:       0xeeeeee,   // white kicks
+  Shoe_L:       0xeeeeee,
+  Chain:        0xFFD700,
+  Necklece:     0xFFD700,
+  Ring:         0xFFD700,
+  Ear_Jewel:    0xFFD700,
+  Cap:          0x111111,
+  Snapback:     0x111111,
+};
+
+function applyVRMColours(vrmObj, colourMap, isMr = false) {
+  vrmObj.scene.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.frustumCulled = false;
+    const name = obj.name;
+
+    const isMetallic = /jewel|chain|ring|necklec/i.test(name);
+    const isSkin     = /figure|body|head|skin|teargum/i.test(name);
+    const isEye      = /eye/i.test(name);
+    const isLash     = /lash/i.test(name);
+    const isTooth    = /teeth|tooth/i.test(name);
+
+    if (isEye) {
+      const eyeCanvas  = document.createElement('canvas');
+      eyeCanvas.width  = 128; eyeCanvas.height = 128;
+      const ctx = eyeCanvas.getContext('2d');
+      ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
+      const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
+      grad.addColorStop(0, isMr ? '#0d0400' : '#1a0a00');
+      grad.addColorStop(0.4, isMr ? '#2a1005' : '#3b1f0a');
+      grad.addColorStop(0.8, isMr ? '#3d1e08' : '#5c3010');
+      grad.addColorStop(1,   isMr ? '#1a0800' : '#2a1205');
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#030101'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
+      const eyeTex = new THREE.CanvasTexture(eyeCanvas);
+      obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, side: THREE.FrontSide });
+    } else if (isLash) {
+      obj.material = new THREE.MeshStandardMaterial({ color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+    } else if (isTooth) {
+      obj.material = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide });
+    } else {
+      // Try exact match first, then fall back to pattern match, then default
+      let hexColour = colourMap[name];
+      if (hexColour === undefined) {
+        for (const [key, val] of Object.entries(colourMap)) {
+          if (name.toLowerCase().includes(key.toLowerCase())) { hexColour = val; break; }
+        }
+      }
+      if (hexColour === undefined) {
+        hexColour = isMr ? 0x4a2000 : 0xb5743a;
+        console.log(`[VRM${isMr?'Mr':'Miss'}] unmatched mesh: "${name}" — using default`);
+      }
+      obj.material = new THREE.MeshStandardMaterial({
+        color:             hexColour,
+        roughness:         isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
+        metalness:         isMetallic ? 0.88 : 0.0,
+        emissive:          isSkin ? new THREE.Color(hexColour) : new THREE.Color(0x000000),
+        emissiveIntensity: isSkin ? 0.12 : 0.0,
+        side:              THREE.FrontSide,
+        depthWrite:        true,
+      });
+    }
+  });
+}
+
+// ── Track load state ─────────────────────────────────────────────
+let _missLoaded = false;
+let _mrLoaded   = false;
+
+function _onBothLoaded() {
+  if (!_missLoaded || !_mrLoaded) return;
+
+  setProgress(100);
+  setTimeout(() => {
+    loader_el.classList.add('hidden');
+    setStatus('Ready ✦', 'ready');
+    showBubble("Heyyy! Welcome to the stream! 💕", "Miss OG Tinz");
+    setTimeout(() => speak("Heyyy! Welcome to the stream!", 'happy'), 600);
+    startTopicPolling();
+    _initDeadAir();
+    initTwitchChat();
+    // Kick off couple conversation engine
+    import('./engine-couple.js').then(m => m.startCoupleEngine());
+  }, 400);
+}
+
+function _finaliseVRM(v, spawnX, spawnZ, faceY, restoreHouseFloor) {
+  VRMUtils.rotateVRM0(v);
+  v.scene.scale.set(1,1,1);
+  v.scene.position.set(0,0,0);
+  scene.add(v.scene);
+
+  v.scene.updateMatrixWorld(true);
+  const boxRaw  = new THREE.Box3().setFromObject(v.scene);
+  const sizeRaw = boxRaw.getSize(new THREE.Vector3());
+  const centerRaw = boxRaw.getCenter(new THREE.Vector3());
+  const scaleVal  = 1.65 / sizeRaw.y;
+  v.scene.scale.set(scaleVal, scaleVal, scaleVal);
+  v.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
+
+  v.update(0);
+  v.scene.updateMatrixWorld(true);
+  const boxPosed   = new THREE.Box3().setFromObject(v.scene);
+  const feetOffset = Math.max(0, -boxPosed.min.y);
+  v._feetOffset    = feetOffset;
+
+  const floorY   = _houseLoaded ? _rayFloor(spawnX, spawnZ) : _houseFloorY;
+  const safeFeet = feetOffset < 0.05 ? 0.82 : feetOffset;
+  const finalY   = floorY + safeFeet;
+  v.scene.position.set(spawnX, finalY, spawnZ);
+  v._restPosY        = finalY;
+  v.scene.rotation.y = faceY;
+  console.log(`[VRM] placed at (${spawnX},${finalY.toFixed(3)},${spawnZ}) faceY=${faceY.toFixed(3)}`);
+}
+
+// ── Load Miss OG Tinz ────────────────────────────────────────────
 setProgress(10);
 setStatus('Loading Miss OG Tinz...');
 
 gltfLoader.load(
   VRM_PATH,
   (gltf) => {
-    setProgress(80);
+    setProgress(50);
     vrm = gltf.userData.vrm;
     VRMUtils.removeUnnecessaryJoints(gltf.scene);
-
-    // ── Skin / mesh colours ──────────────────────────────────────
-    const SKIN_HEX    = 0x7B3F00;
-    const MESH_COLOURS = {
-      Julie_Figure: SKIN_HEX,
-      Brow:         0x1a0a00,
-      Teargum:      SKIN_HEX,
-      Ear_Jewel:    0xFFD700,
-      Eye_R:        0x3b2314,
-      Eyes_L:       0x3b2314,
-      Lashes:       0x050505,
-      Teeth:        0xfffaf0,
-      Hair_Block:   0x0d0d0d,
-      Top:          0xff69b4,
-      Bottom:       0xff1493,
-      Shoe_R:       0x222222,
-      Shoe_L:       0x222222,
-      Necklece:     0xFFD700,
-    };
-
-    vrm.scene.traverse((obj) => {
-      if (!obj.isMesh) return;
-      obj.frustumCulled = false;
-      const name       = obj.name;
-      const isMetallic = name.includes('Jewel') || name.includes('Necklece');
-      const isSkin     = name === 'Julie_Figure' || name === 'Teargum';
-      const isEye      = name === 'Eye_R' || name === 'Eyes_L';
-      const isLash     = name === 'Lashes';
-      const isTooth    = name === 'Teeth';
-
-      if (isEye) {
-        const eyeCanvas  = document.createElement('canvas');
-        eyeCanvas.width  = 128; eyeCanvas.height = 128;
-        const ctx = eyeCanvas.getContext('2d');
-        ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
-        const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
-        grad.addColorStop(0,'#1a0a00'); grad.addColorStop(0.4,'#3b1f0a');
-        grad.addColorStop(0.8,'#5c3010'); grad.addColorStop(1,'#2a1205');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#050202'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
-        const eyeTex = new THREE.CanvasTexture(eyeCanvas);
-        obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, side: THREE.FrontSide });
-      } else if (isLash) {
-        obj.material = new THREE.MeshStandardMaterial({ color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-      } else if (isTooth) {
-        obj.material = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide });
-      } else {
-        const hexColour = MESH_COLOURS[name] ?? 0xb5743a;
-        obj.material = new THREE.MeshStandardMaterial({
-          color:             hexColour,
-          roughness:         isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
-          metalness:         isMetallic ? 0.88 : 0.0,
-          emissive:          isSkin ? new THREE.Color(0x7B3F00) : new THREE.Color(0x000000),
-          emissiveIntensity: isSkin ? 0.15 : 0.0,
-          side:              THREE.FrontSide,
-          depthWrite:        true,
-        });
-      }
-    });
-
-    VRMUtils.rotateVRM0(vrm);
-    vrm.scene.scale.set(1,1,1);
-    vrm.scene.position.set(0,0,0);
-    VRM_BASE_ROT_Y = vrm.scene.rotation.y;
-    scene.add(vrm.scene);
-
-    // Scale to target height 1.65m
-    vrm.scene.updateMatrixWorld(true);
-    const boxRaw    = new THREE.Box3().setFromObject(vrm.scene);
-    const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
-    const centerRaw = boxRaw.getCenter(new THREE.Vector3());
-    const scaleVal  = 1.65 / sizeRaw.y;
-    vrm.scene.scale.set(scaleVal, scaleVal, scaleVal);
-    vrm.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
-
-    const scaleSlider = document.getElementById('scale');
-    const scaleValEl  = document.getElementById('scale-val');
-    if (scaleSlider) scaleSlider.value = scaleVal;
-    if (scaleValEl)  scaleValEl.textContent = scaleVal.toFixed(2);
+    applyVRMColours(vrm, MISS_COLOURS, false);
+    VRM_BASE_ROT_Y = 0;
+    _finaliseVRM(vrm, MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y, true);
 
     cacheBones();
     setRestPose();
 
-    vrm.update(0);
-    vrm.scene.updateMatrixWorld(true);
-    const boxPosed     = new THREE.Box3().setFromObject(vrm.scene);
-    const feetToOrigin = Math.max(0, -boxPosed.min.y);
-    vrm._feetOffset    = feetToOrigin;
-    vrm.scene.position.y = feetToOrigin;
-    console.log('[VRM] feetOffset after pose:', feetToOrigin.toFixed(4));
-
-    if (_houseLoaded) {
-      requestAnimationFrame(() => _placeVRMOnFloor());
-    } else {
-      vrmPos.x = 0; vrmPos.z = 0;
-      vrm.scene.position.set(0, feetToOrigin, 0);
-      vrm._restPosY        = feetToOrigin;
-      vrm.scene.rotation.y = Math.PI;
-    }
-
-    // Activity system starts after a short idle
     ACTIVITY.current  = 'idle';
     ACTIVITY.timer    = 0;
     ACTIVITY.duration = 3;
 
-    setProgress(100);
-    setTimeout(() => {
-      loader_el.classList.add('hidden');
-      setStatus('Ready ✦', 'ready');
-      showBubble("Heyyy! Welcome to the stream! What's good?", "Miss OG Tinz");
-      setTimeout(() => speak("Heyyy! Welcome to the stream! What's good?", 'happy'), 600);
-      startTopicPolling();
-      _initDeadAir();
-      initTwitchChat();
-    }, 400);
+    _missLoaded = true;
+    setStatus('Loading Mr OG Tinz...');
+    _onBothLoaded();
   },
-  (progress) => setProgress(Math.min(10 + (progress.loaded / (progress.total || 1)) * 65, 75)),
-  (error) => {
-    console.error(error);
-    setStatus('Failed to load VRM — check file path', 'error');
-    loader_el.querySelector('.sub').textContent = 'Error loading avatar. Check console.';
-  }
+  (p) => setProgress(Math.min(10 + (p.loaded / (p.total || 1)) * 35, 45)),
+  (err) => { console.error(err); setStatus('Failed to load Miss VRM', 'error'); }
+);
+
+// ── Load Mr OG Tinz ──────────────────────────────────────────────
+const gltfLoaderMr = new GLTFLoader();
+gltfLoaderMr.register(parser => new VRMLoaderPlugin(parser));
+
+gltfLoaderMr.load(
+  VRM_MR_PATH,
+  (gltf) => {
+    setProgress(90);
+    vrmMr = gltf.userData.vrm;
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+    applyVRMColours(vrmMr, MR_COLOURS, true);
+    VRM_MR_BASE_ROT_Y = 0;
+    _finaliseVRM(vrmMr, MR_SPAWN_X, MR_SPAWN_Z, MR_FACE_Y, false);
+
+    cacheBonesMr();
+    setRestPoseMr();
+
+    _mrLoaded = true;
+    _onBothLoaded();
+  },
+  (p) => setProgress(Math.min(50 + (p.loaded / (p.total || 1)) * 38, 88)),
+  (err) => { console.error(err); setStatus('Failed to load Mr VRM', 'error'); }
 );
