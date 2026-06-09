@@ -1010,8 +1010,20 @@ function _parseTags(tagStr) {
 let _msgQueue = [];
 let _msgBusy  = false;
 
+// Spam patterns — she won't waste tokens on these
+const _spamPatterns = [
+  /^(lol|lmao|lmfao|haha|hehe|xd|😂|💀|🔥|👀|😭|❤️|🫶|gg|ggs|w|l|f|oof|rip|omg|wow|yep|nope|yes|no|ok|okay|k|hi|hey|hello|ayo|yo|sup|np|ily|ty|thx|thanks|pog|poggers|kappa|5head|pepehands|lulw|monkas)\s*[!?.]*$/i,
+  /^(.)\1{4,}$/, // "aaaaa" / "!!!!!!!"
+];
+
+function _isSpam(message) {
+  const clean = message.trim();
+  if (clean.split(/\s+/).length < 4 && !clean.includes('?')) return true;
+  return _spamPatterns.some(p => p.test(clean));
+}
+
 function queueTwitchMessage(username, message) {
-  if (message.trim().split(' ').length < 2 && !message.includes('?')) return;
+  if (_isSpam(message)) return;
   _msgQueue.push({ username, message });
   if (_msgQueue.length > 5) _msgQueue.shift();
   if (!_msgBusy) processNextMessage();
@@ -1032,7 +1044,8 @@ async function sendMessage(message, displayName = 'Viewer') {
   if (!message.trim()) return;
   deadAir?.reset();
   setStatus('Thinking...', 'thinking');
-  sendBtn.disabled  = true;
+  // Only disable the send button if it exists (not in Streamlabs browser source)
+  if (sendBtn) sendBtn.disabled = true;
   _apiOverride      = true;
   _apiOverrideTimer = API_OVERRIDE_DURATION;
   _targetFacing     = Math.PI;
@@ -1070,7 +1083,8 @@ async function sendMessage(message, displayName = 'Viewer') {
       try { const d = await res.json(); if (d?.retry_after_ms) retryMs = d.retry_after_ms; } catch(_) {}
       const fallback = `Hold on, I'm getting too many messages! Try again in ${Math.ceil(retryMs/1000)} seconds.`;
       showBubble(fallback, 'Miss OG Tinz'); await speak(fallback, 'neutral');
-      setStatus('Ready ✦', 'ready'); setCamMode('IDLE'); sendBtn.disabled = false;
+      setStatus('Ready ✦', 'ready'); setCamMode('IDLE');
+      if (sendBtn) sendBtn.disabled = false;
       await new Promise(r => setTimeout(r, retryMs)); return;
     }
     if (!res.ok) throw new Error('API error ' + res.status);
@@ -1107,7 +1121,7 @@ async function sendMessage(message, displayName = 'Viewer') {
     setStatus('Ready ✦', 'ready');
     setCamMode('IDLE');
   }
-  sendBtn.disabled = false;
+  if (sendBtn) sendBtn.disabled = false;
 }
 
 // ── UI events ────────────────────────────────────────────────────
