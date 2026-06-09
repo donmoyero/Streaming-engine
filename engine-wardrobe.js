@@ -3,7 +3,7 @@
 // Guarantees they are NEVER in the same outfit combination
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ─────────────────────────────────────────────
 // WARDROBE INVENTORY
