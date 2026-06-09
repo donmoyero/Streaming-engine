@@ -791,7 +791,7 @@ function _pickVoice() {
 // ── TTS + lip sync ───────────────────────────────────────────────
 export let _isSpeaking = false;
 
-async function speak(text, mood = 'neutral') {
+export async function speak(text, mood = 'neutral') {
   // Wake speech synthesis — essential when running as OBS/Streamlabs browser source
   // where no user interaction ever fires to unlock audio normally.
   if (!_audioUnlocked) _unlockAudio();
