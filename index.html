@@ -4,14 +4,14 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="theme-color" content="#0a0a0f"/>
-<title>OG Tinz — Live</title>
+<title>Miss OG Tinz & Lora — Live</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div id="loader">
-  <div class="logo">OG TINZ</div>
+  <div class="logo">OG TINZ & LORA</div>
   <div class="sub">Loading avatars...</div>
   <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
 </div>
@@ -21,6 +21,7 @@
 
 <canvas id="canvas"></canvas>
 
+<!-- Single LIVE badge — top left only -->
 <div id="live-badge">
   <div class="dot"></div>
   <span>LIVE</span>
@@ -39,31 +40,50 @@
   </div>
 </div>
 
+<!-- Miss OG Tinz chat bubble — right side -->
 <div id="chat-bubble">
   <div class="speaker" id="miss-speaker-name">Miss OG Tinz</div>
   <div id="bubble-text">Heyyy! Welcome to the stream!</div>
 </div>
 
+<!-- Miss OG Tinz nameplate — bottom right -->
 <div id="nameplate">
   <div class="dot"></div>
   <div class="name">Miss OG Tinz</div>
   <div class="tag">AI Presenter</div>
 </div>
 
-<div id="chat-input-area">
-  <input id="chat-input" type="text" placeholder="Chat with Miss OG Tinz..." maxlength="200"/>
-  <button id="send-btn">SEND</button>
+<!-- Lora chat bubble — left side -->
+<div id="lora-chat-bubble">
+  <div class="speaker" style="color:#c084fc">Lora</div>
+  <div id="lora-bubble-text"></div>
 </div>
 
+<!-- Lora nameplate — bottom left -->
+<div id="lora-nameplate">
+  <div class="dot" style="background:#c084fc"></div>
+  <div class="name">Lora</div>
+  <div class="tag">AI Co-Host</div>
+</div>
+
+<!-- Controls toggle — no chat input on screen -->
 <button id="panel-toggle">CONTROLS</button>
 <div id="control-panel" class="hidden">
+
+  <!-- Chat input lives here now, hidden from stream view -->
+  <div class="ctrl-label">Send a Message</div>
+  <div class="ctrl-chat-row">
+    <input id="chat-input" type="text" placeholder="Chat with Miss & Lora..." maxlength="200"/>
+    <button id="send-btn">SEND</button>
+  </div>
+
+  <hr class="ctrl-sep">
   <div class="ctrl-label">Position</div>
   <div class="ctrl-row"><label>X</label><input type="range" id="posX" min="-5" max="5" step="0.05" value="0"><span id="posX-val">0</span></div>
   <div class="ctrl-row"><label>Y</label><input type="range" id="posY" min="-2" max="5" step="0.01" value="0"><span id="posY-val">0</span></div>
   <div class="ctrl-row"><label>Z</label><input type="range" id="posZ" min="-5" max="5" step="0.05" value="0"><span id="posZ-val">0</span></div>
 
   <div class="ctrl-label">Scale</div>
-  <!-- value is set by engine-scene.js after VRM loads to reflect the actual auto-computed scale -->
   <div class="ctrl-row"><label>S</label><input type="range" id="scale" min="0.3" max="3.0" step="0.01" value="1.0"><span id="scale-val">1.0</span></div>
 
   <hr class="ctrl-sep">
