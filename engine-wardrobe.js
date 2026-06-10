@@ -94,26 +94,40 @@ function attachToBone(vrmHumanoid, boneKey, mesh) {
   if (!mesh) return;
 
   const boneName = BONE_MAP[boneKey];
-  const bone     = vrmHumanoid.getRawBoneNode(boneName);
+
+  // IMPORTANT: use getNormalizedBoneNode, NOT getRawBoneNode.
+  // The VRM was exported from Blender at ~1.6 cm scale, so raw bones live
+  // in a tiny 0.016-unit space. The normalized skeleton is remapped to
+  // proper metre-scale world space — the same space the outfit GLBs use.
+  const bone = vrmHumanoid.getNormalizedBoneNode(boneName);
 
   if (!bone) {
     console.warn(`[Wardrobe] Bone not found: ${boneName}`);
     return;
   }
 
-  // Zero out transform — the GLB artist should have modelled at origin
+  // Detect outfit GLB unit scale before zeroing transform.
+  // Blender GLBs come in two flavours:
+  //   metres  (max extent ~0.1–3)  → unitFix 1.0
+  //   cm      (max extent > 10)    → unitFix 0.01
+  const bbox = new THREE.Box3().setFromObject(mesh);
+  const size = bbox.getSize(new THREE.Vector3());
+  const maxExtent = Math.max(size.x, size.y, size.z);
+  const unitFix = maxExtent > 10 ? 0.01 : 1.0;
+
   mesh.position.set(0, 0, 0);
   mesh.rotation.set(0, 0, 0);
-  mesh.scale.set(1, 1, 1);
+  mesh.scale.setScalar(unitFix);
 
   bone.add(mesh);
+  console.log(`[Wardrobe] ${boneName} ← ${boneKey} (maxExtent=${maxExtent.toFixed(3)}, unitFix=${unitFix})`);
 
   // Mirror shoes to right foot as well
   if (boneKey === 'shoes') {
-    const rightBone = vrmHumanoid.getRawBoneNode('rightFoot');
+    const rightBone = vrmHumanoid.getNormalizedBoneNode('rightFoot');
     if (rightBone) {
       const clone = mesh.clone();
-      clone.scale.x = -1; // mirror
+      clone.scale.set(-unitFix, unitFix, unitFix); // mirror on X
       rightBone.add(clone);
     }
   }
