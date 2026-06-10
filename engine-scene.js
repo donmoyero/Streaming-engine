@@ -331,7 +331,8 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
       const eyeTex = new THREE.CanvasTexture(eyeCanvas);
-      obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, side: THREE.FrontSide });
+      eyeTex.colorSpace = THREE.SRGBColorSpace;   // FIX: must mark sRGB or Three.js r163 renders washed-out white
+      obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, envMapIntensity: 0, side: THREE.FrontSide });
     } else if (isLash) {
       obj.material = new THREE.MeshStandardMaterial({ color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
     } else if (isTooth) {
