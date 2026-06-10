@@ -19,7 +19,7 @@ import {
 
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
-export const VRM_LORA_PATH  = 'MrOgTinz_Master.vrm';   // Lora's VRM file
+export const VRM_LORA_PATH  = 'Lora_Master.vrm';
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
