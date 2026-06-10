@@ -1257,7 +1257,7 @@ function bindColour(id, meshNames) {
 //        Lashesmesh, Shoe_R/Lmesh, Necklecemesh, Ear_Jewelmesh, Teethmesh
 // Lora:  Figure_mesh, Shirt_mesh, Trousers_mesh, Hair_mesh, Browmesh,
 //        Lashes_mesh, Shoe_R/Lmesh, Chain_mesh, Ear_mesh, Teethmesh
-bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh','Teargummesh']);
+bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh']);
 bindColour('col-hair',   ['Hair_Blockmesh','Browmesh','Lashesmesh','Hair_mesh','Lashes_mesh']);
 bindColour('col-top',    ['Topmesh','Shirt_mesh']);
 bindColour('col-bottom', ['Bottommesh','Trousers_mesh']);
