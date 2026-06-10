@@ -210,6 +210,18 @@ const LORA_COLOURS = {
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
   // VRMs export with ONE shared default material, 0 textures.
   // Every mesh needs its own MeshStandardMaterial or colours bleed into each other.
+
+  // ── DIAGNOSTIC: dump every mesh name so we can verify against colour maps ──
+  const label = isLora ? 'Lora' : 'Miss';
+  const allMeshNames = [];
+  vrmObj.scene.traverse(o => { if (o.isMesh) allMeshNames.push(o.name); });
+  const mapped   = allMeshNames.filter(n => colourMap[n]);
+  const unmapped = allMeshNames.filter(n => !colourMap[n]);
+  console.groupCollapsed(`[Colours] ${label} mesh audit`);
+  console.log(`%c✓ MAPPED (${mapped.length})`,    'color:#60ff90;font-weight:bold', mapped);
+  console.log(`%c✗ UNMAPPED (${unmapped.length})`, 'color:#ff6060;font-weight:bold', unmapped);
+  console.groupEnd();
+
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
@@ -333,7 +345,7 @@ function _onBothLoaded() {
     startTopicPolling();
     _initDeadAir();
     initTwitchChat();
-    import('./engine-bff.js').then(m => m.startCoupleEngine());
+    import('./engine-bff.js').then(m => m.startCoupleEngine()).catch(() => console.warn('[BFF] engine-bff.js not found — couple engine skipped'));
     // ── Inline Lora walk system (no separate file needed) ────────────
     _initLoraWalk();
   }, 400);
