@@ -31,6 +31,13 @@ import {
   boneLFoot, boneRFoot, boneLToes, boneRToes,
   boneLUpperArm, boneRUpperArm, boneLLowerArm, boneRLowerArm,
   boneLHand, boneRHand, boneJaw, teethNode,
+  // Lora (Mr) bones — for her idle sway in the render loop
+  boneHeadMr, boneNeckMr, boneSpineMr, boneChestMr, boneHipsMr,
+  boneLUpperArmMr, boneRUpperArmMr, boneLLowerArmMr, boneRLowerArmMr,
+  boneLHandMr, boneRHandMr,
+  boneLUpperLegMr, boneRUpperLegMr, boneLLowerLegMr, boneRLowerLegMr,
+  boneLFootMr, boneRFootMr,
+  setLeftFingerRelaxMr, setRightFingerRelaxMr,
 } from './engine-bones.js';
 
 // ── Dead air ─────────────────────────────────────────────────────
@@ -1473,6 +1480,50 @@ function render() {
     // ── Blink ──────────────────────────────────────────────────
     if (blinkTimer > nextBlink) {
       blinkTimer = 0; nextBlink = 2.5 + Math.random() * 3; doBlink();
+    }
+  }
+
+  // ── Lora idle sway — mirrors Miss's logic using Mr bones ──────
+  // Without this, Lora stays in T-pose (arms out at 90°) because
+  // nothing drives her bones per frame. This block runs every frame
+  // regardless of activity — it only sets arms/spine/head so it
+  // doesn't clash with any activity system running on Miss.
+  {
+    const lora = getVrmLora ? getVrmLora() : null;
+    if (lora) {
+      // Use a slightly offset phase so Lora doesn't move in sync with Miss
+      const lt = idleTime + 1.3;
+      const loraHipSway      = Math.sin(lt * 0.95) * 0.07;
+      const loraHipBob       = Math.abs(Math.sin(lt * 0.95)) * 0.028;
+      const loraBreathe      = Math.sin(lt * 0.68) * 0.013;
+      const loraChestOpp     = Math.sin(lt * 0.95 + 0.6) * 0.035;
+      const loraShoulderRoll = Math.sin(lt * 0.48) * 0.020;
+
+      if (boneHipsMr)  { boneHipsMr.rotation.z = loraHipSway; boneHipsMr.rotation.x = loraHipBob * 0.5; boneHipsMr.rotation.y = Math.sin(lt * 0.5) * 0.05; }
+      if (boneSpineMr) { boneSpineMr.rotation.z = -loraHipSway * 0.6; boneSpineMr.rotation.x = loraBreathe; boneSpineMr.rotation.y = Math.sin(lt * 0.5) * 0.022; }
+      if (boneChestMr) { boneChestMr.rotation.z = loraChestOpp; boneChestMr.rotation.x = loraBreathe * 0.85; boneChestMr.rotation.y = loraShoulderRoll; }
+      if (boneHeadMr)  { boneHeadMr.rotation.z = Math.sin(lt * 0.42) * 0.04; boneHeadMr.rotation.x = Math.sin(lt * 0.65) * 0.03 + 0.02; boneHeadMr.rotation.y = Math.sin(lt * 0.30) * 0.07; }
+      if (boneNeckMr)  { boneNeckMr.rotation.z = Math.sin(lt * 0.42) * 0.018; boneNeckMr.rotation.y = Math.sin(lt * 0.30) * 0.035; }
+
+      // Arms — bring down from T-pose and add gentle sway
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.9 + Math.sin(lt*0.82)*0.06 + loraChestOpp*0.4; boneLUpperArmMr.rotation.x =  0.07 + Math.sin(lt*0.52)*0.035; boneLUpperArmMr.rotation.y =  0.04 + loraShoulderRoll*0.5; }
+      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.50 + Math.sin(lt*0.95)*0.04; boneLLowerArmMr.rotation.x = -0.04; }
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.9 - Math.sin(lt*0.82+0.5)*0.06 - loraChestOpp*0.4; boneRUpperArmMr.rotation.x =  0.07 + Math.sin(lt*0.52+0.5)*0.035; boneRUpperArmMr.rotation.y = -0.04 - loraShoulderRoll*0.5; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.50 - Math.sin(lt*0.95+0.5)*0.04; boneRLowerArmMr.rotation.x = -0.04; }
+      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.24 + Math.sin(lt*2.0)*0.07; boneLHandMr.rotation.x =  0.10 + Math.sin(lt*2.4)*0.04; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.24 - Math.sin(lt*2.0+1.0)*0.07; boneRHandMr.rotation.x =  0.10 + Math.sin(lt*2.4+1.0)*0.04; }
+      if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
+      if (setRightFingerRelaxMr) setRightFingerRelaxMr();
+
+      // Legs — natural standing weight
+      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.z = -0.04; boneLUpperLegMr.rotation.x = 0; }
+      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.z =  0.06; boneRUpperLegMr.rotation.x = 0; }
+      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = 0.04;
+      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = 0.04;
+      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.05; boneLFootMr.rotation.z = -0.03; }
+      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.05; boneRFootMr.rotation.z =  0.04; }
+
+      lora.update(delta);
     }
   }
 
