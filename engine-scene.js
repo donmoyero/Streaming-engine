@@ -175,60 +175,58 @@ function _placeOneVRM(v, spawnX, spawnZ, faceY) {
 // ── Wardrobe: DISABLED — VRM body meshes used directly ────────────
 
 
-// ── Miss OG Tinz — CONFIRMED mesh names extracted from MissOgTinz_Master.vrm ──
+// ── Miss OG Tinz — keyed by NODE name (what Three.js obj.name returns in traverse) ──
+// node name  →  mesh name  (for reference)
+// Julie_Figure → Julie_Figuremesh   Brow → Browmesh   Teargum → Teargummesh
+// Ear_Jewel → Ear_Jewelmesh   Lashes → Lashesmesh   Teeth → Teethmesh
+// Hair_Block → Hair_Blockmesh   Top → Topmesh   Bottom → Bottommesh
+// Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Necklecemesh
 const MISS_COLOURS = {
-  Julie_Figuremesh: { hex: 0x7B3F00, isSkin: true              },  // dark brown body
-  Browmesh:         { hex: 0x1a0a00, isSkin: false             },  // dark brows
-  Teargummesh:      { hex: 0x7B3F00, isSkin: true              },  // gums (skin tone)
-  Ear_Jewelmesh:    { hex: 0xFFD700, isSkin: false, metallic: true },  // gold earrings
-  Lashesmesh:       { hex: 0x050505, isSkin: false             },  // black lashes
-  Teethmesh:        { hex: 0xfffaf0, isSkin: false             },  // off-white teeth
-  Hair_Blockmesh:   { hex: 0x0d0d0d, isSkin: false             },  // black hair
-  Topmesh:          { hex: 0xff69b4, isSkin: false             },  // pink top clothing
-  Bottommesh:       { hex: 0xff1493, isSkin: false             },  // deep pink bottoms
-  Shoe_Rmesh:       { hex: 0x111111, isSkin: false             },  // black shoe R
-  Shoe_Lmesh:       { hex: 0x111111, isSkin: false             },  // black shoe L
-  Necklecemesh:     { hex: 0xFFD700, isSkin: false, metallic: true },  // gold necklace
+  Julie_Figure: { hex: 0x7B3F00, isSkin: true              },  // dark brown body
+  Brow:         { hex: 0x1a0a00, isSkin: false             },  // dark brows
+  Teargum:      { hex: 0x7B3F00, isSkin: true              },  // gums (skin tone)
+  Ear_Jewel:    { hex: 0xFFD700, isSkin: false, metallic: true },  // gold earrings
+  Lashes:       { hex: 0x050505, isSkin: false             },  // black lashes
+  Teeth:        { hex: 0xfffaf0, isSkin: false             },  // off-white teeth
+  Hair_Block:   { hex: 0x0d0d0d, isSkin: false             },  // black hair
+  Top:          { hex: 0xff69b4, isSkin: false             },  // pink top
+  Bottom:       { hex: 0xff1493, isSkin: false             },  // deep pink bottoms
+  Shoe_R:       { hex: 0x111111, isSkin: false             },  // black shoe R
+  Shoe_L:       { hex: 0x111111, isSkin: false             },  // black shoe L
+  Necklece:     { hex: 0xFFD700, isSkin: false, metallic: true },  // gold necklace
 };
 
-// ── Lora — CONFIRMED mesh names extracted from Lora_Master.vrm ──────────────
+// ── Lora — keyed by NODE name (what Three.js obj.name returns in traverse) ──
+// node name  →  mesh name  (for reference)
+// Mr_OgTinz_Figure → Figure_mesh   Brow → Browmesh   Teargum → Teargummesh
+// Ear_Jewel → Ear_mesh   Lashes → Lashes_mesh   Teeth → Teethmesh
+// Hair_Block → Hair_mesh   Top → Shirt_mesh   Bottom → Trousers_mesh
+// Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Chain_mesh
 const LORA_COLOURS = {
-  Figure_mesh:   { hex: 0xc68642, isSkin: true              },  // medium brown body
-  Browmesh:      { hex: 0x2a1500, isSkin: false             },  // dark brows
-  Teargummesh:   { hex: 0xc68642, isSkin: true              },  // gums (skin tone)
-  Ear_mesh:      { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver earrings
-  Lashes_mesh:   { hex: 0x080808, isSkin: false             },  // black lashes
-  Teethmesh:     { hex: 0xfff9f0, isSkin: false             },  // off-white teeth
-  Hair_mesh:     { hex: 0x3d1a00, isSkin: false             },  // dark auburn hair
-  Shirt_mesh:    { hex: 0x7c3aed, isSkin: false             },  // purple top clothing
-  Trousers_mesh: { hex: 0x1a1a1a, isSkin: false             },  // black bottoms
-  Shoe_Rmesh:    { hex: 0xf5f5f5, isSkin: false             },  // white shoe R
-  Shoe_Lmesh:    { hex: 0xf5f5f5, isSkin: false             },  // white shoe L
-  Chain_mesh:    { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver chain
+  Mr_OgTinz_Figure: { hex: 0xc68642, isSkin: true              },  // medium brown body
+  Brow:             { hex: 0x2a1500, isSkin: false             },  // dark brows
+  Teargum:          { hex: 0xc68642, isSkin: true              },  // gums (skin tone)
+  Ear_Jewel:        { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver earrings
+  Lashes:           { hex: 0x080808, isSkin: false             },  // black lashes
+  Teeth:            { hex: 0xfff9f0, isSkin: false             },  // off-white teeth
+  Hair_Block:       { hex: 0x3d1a00, isSkin: false             },  // dark auburn hair
+  Top:              { hex: 0x7c3aed, isSkin: false             },  // purple top
+  Bottom:           { hex: 0x1a1a1a, isSkin: false             },  // black bottoms
+  Shoe_R:           { hex: 0xf5f5f5, isSkin: false             },  // white shoe R
+  Shoe_L:           { hex: 0xf5f5f5, isSkin: false             },  // white shoe L
+  Necklece:         { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver chain
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
   // VRMs export with ONE shared default material, 0 textures.
   // Every mesh needs its own MeshStandardMaterial or colours bleed into each other.
-
-  // ── DIAGNOSTIC: dump every mesh name so we can verify against colour maps ──
-  const label = isLora ? 'Lora' : 'Miss';
-  const allMeshNames = [];
-  vrmObj.scene.traverse(o => { if (o.isMesh) allMeshNames.push(o.name); });
-  const mapped   = allMeshNames.filter(n => colourMap[n]);
-  const unmapped = allMeshNames.filter(n => !colourMap[n]);
-  console.groupCollapsed(`[Colours] ${label} mesh audit`);
-  console.log(`%c✓ MAPPED (${mapped.length})`,    'color:#60ff90;font-weight:bold', mapped);
-  console.log(`%c✗ UNMAPPED (${unmapped.length})`, 'color:#ff6060;font-weight:bold', unmapped);
-  console.groupEnd();
-
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name    = obj.name;
-    const isEye   = name === 'Eye_Rmesh'  || name === 'Eyes_Lmesh';
-    const isLash  = name === 'Lashesmesh' || name === 'Lashes_mesh';
-    const isTooth = name === 'Teethmesh';
+    const isEye   = name === 'Eye_R'  || name === 'Eyes_L';
+    const isLash  = name === 'Lashes';
+    const isTooth = name === 'Teeth';
 
     if (isEye) {
       const eyeCanvas = document.createElement('canvas');
@@ -345,7 +343,7 @@ function _onBothLoaded() {
     startTopicPolling();
     _initDeadAir();
     initTwitchChat();
-    import('./engine-bff.js').then(m => m.startCoupleEngine()).catch(() => console.warn('[BFF] engine-bff.js not found — couple engine skipped'));
+    import('./engine-bff.js').then(m => m.startCoupleEngine());
     // ── Inline Lora walk system (no separate file needed) ────────────
     _initLoraWalk();
   }, 400);
