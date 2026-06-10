@@ -91,8 +91,12 @@ export function floatEmoji(who = 'miss', emojiStr, count) {
 const _missBubble    = document.getElementById('chat-bubble');
 const _missBubbleTxt = document.getElementById('bubble-text');
 
-// Lora bubble — injected dynamically
+// Lora bubble — reuse the element already in index.html (#lora-chat-bubble)
+// Creating a second one with the same ID breaks getElementById lookups everywhere.
 const _loraBubble = (() => {
+  const existing = document.getElementById('lora-chat-bubble');
+  if (existing) return existing;
+  // Fallback: create only if index.html somehow doesn't have it
   const el = document.createElement('div');
   el.id = 'lora-chat-bubble';
   el.innerHTML = `<div class="speaker" style="color:#a78bfa;font-weight:700;font-size:12px;letter-spacing:1px;margin-bottom:4px;">LORA</div><div id="lora-bubble-text" style="font-size:15px;line-height:1.5;"></div>`;
@@ -108,7 +112,7 @@ const _loraBubble = (() => {
   document.body.appendChild(el);
   return el;
 })();
-const _loraBubbleTxt = document.getElementById('lora-bubble-text');
+const _loraBubbleTxt = _loraBubble.querySelector('#lora-bubble-text') || document.getElementById('lora-bubble-text');
 
 // Lora nameplate
 (() => {
