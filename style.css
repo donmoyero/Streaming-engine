@@ -182,37 +182,6 @@ body {
   margin-bottom: 5px;
 }
 
-/* ── Miss OG Tinz nameplate — bottom centre ── */
-#nameplate {
-  position:  absolute;
-  bottom:    72px;
-  left:      50%;
-  transform: translateX(-50%);
-  display:   flex;
-  align-items: center;
-  gap:       10px;
-  z-index:   15;
-}
-#nameplate .dot {
-  width:8px; height:8px;
-  border-radius:50%;
-  background:var(--gold);
-  box-shadow: 0 0 8px var(--gold);
-  animation: pulse 2s infinite;
-}
-#nameplate .name {
-  font-family:'Syne', sans-serif;
-  font-size:13px;
-  font-weight:700;
-  letter-spacing:0.15em;
-  text-transform:uppercase;
-  color:var(--gold);
-}
-#nameplate .tag {
-  font-size:11px;
-  color:var(--muted);
-  letter-spacing:0.05em;
-}
 
 /* ── Lora nameplate — bottom left ── */
 #lora-nameplate {
