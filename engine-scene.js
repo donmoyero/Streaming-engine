@@ -255,40 +255,46 @@ function _loadOutfit(vrmObj, outfitList) {
   }
 }
 
-// ── Miss OG Tinz skin colours ────────────────────────────────────
+// ── Miss OG Tinz skin colours — real mesh names from VRM ─────────
+// Confirmed meshes: Browmesh, Teargummesh, Ear_Jewelmesh, Eye_Rmesh,
+// Eyes_Lmesh, Topmesh, Julie_Figuremesh, Lashesmesh, Bottommesh,
+// Shoe_Rmesh, Hair_Blockmesh, Necklecemesh, Teethmesh, Shoe_Lmesh
 const MISS_COLOURS = {
-  Julie_Figure: 0x7B3F00,
-  Brow:         0x1a0a00,
-  Teargum:      0x7B3F00,
-  Ear_Jewel:    0xFFD700,
-  Eye_R:        0x3b2314,
-  Eyes_L:       0x3b2314,
-  Lashes:       0x050505,
-  Teeth:        0xfffaf0,
-  Hair_Block:   0x0d0d0d,
-  Top:          0xff69b4,   // hot pink
-  Bottom:       0xff1493,   // deep pink
-  Shoe_R:       0x222222,
-  Shoe_L:       0x222222,
-  Necklece:     0xFFD700,
+  Julie_Figuremesh: 0x7B3F00,
+  Browmesh:         0x1a0a00,
+  Teargummesh:      0x7B3F00,
+  Ear_Jewelmesh:    0xFFD700,
+  Eye_Rmesh:        0x3b2314,
+  Eyes_Lmesh:       0x3b2314,
+  Lashesmesh:       0x050505,
+  Teethmesh:        0xfffaf0,
+  Hair_Blockmesh:   0x0d0d0d,
+  Topmesh:          0xff69b4,
+  Bottommesh:       0xff1493,
+  Shoe_Rmesh:       0x222222,
+  Shoe_Lmesh:       0x222222,
+  Necklecemesh:     0xFFD700,
 };
 
-// ── Lora skin colours — lighter skin, purple/white vibe ──────────
+// ── Lora skin colours — real mesh names from VRM ─────────────────
+// Confirmed: Browmesh, Teargummesh, Ear_mesh, Eye_Rmesh, Eyes_Lmesh,
+// Shirt_mesh, Figure_mesh, Lashes_mesh, Trousers_mesh, Shoe_Rmesh,
+// Hair_mesh, Chain_mesh, Teethmesh, Shoe_Lmesh
 const LORA_COLOURS = {
-  Julie_Figure: 0xc68642,   // lighter brown skin
-  Brow:         0x2a1500,
-  Teargum:      0xc68642,
-  Ear_Jewel:    0xC0C0C0,   // silver
-  Eye_R:        0x1a2a3a,   // dark blue-brown eyes
-  Eyes_L:       0x1a2a3a,
-  Lashes:       0x080808,
-  Teeth:        0xfff9f0,
-  Hair_Block:   0x3d1a00,   // dark auburn hair
-  Top:          0x7c3aed,   // purple
-  Bottom:       0x1a1a1a,   // black
-  Shoe_R:       0xf5f5f5,   // white
-  Shoe_L:       0xf5f5f5,
-  Necklece:     0xC0C0C0,   // silver
+  Figure_mesh:   0xc68642,   // lighter brown skin
+  Browmesh:      0x2a1500,
+  Teargummesh:   0xc68642,
+  Ear_mesh:      0xC0C0C0,   // silver earrings
+  Eye_Rmesh:     0x1a2a3a,
+  Eyes_Lmesh:    0x1a2a3a,
+  Lashes_mesh:   0x080808,
+  Teethmesh:     0xfff9f0,
+  Hair_mesh:     0x3d1a00,   // dark auburn
+  Shirt_mesh:    0x7c3aed,   // purple top
+  Trousers_mesh: 0x1a1a1a,   // black bottom
+  Shoe_Rmesh:    0xf5f5f5,   // white shoes
+  Shoe_Lmesh:    0xf5f5f5,
+  Chain_mesh:    0xC0C0C0,   // silver chain
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
