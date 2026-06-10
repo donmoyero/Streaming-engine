@@ -676,32 +676,33 @@ function animateRoomLights(delta) {
 //
 //  Each outfit key has a `miss` block (Miss OG Tinz colours) and
 //  a `lora` block (Lora colours) — same vibe, distinct palette.
+//  Keys are NODE names (Three.js obj.name): Top, Bottom, Shoe_R, Shoe_L
 // ================================================================
 const OUTFITS = {
   streaming: {
     label: 'Streaming Look',
-    miss: { Topmesh: { color: 0xff69b4, emissive: 0x330011, emissiveIntensity: 0.1  }, Bottommesh: { color: 0xff1493, emissive: 0x330011, emissiveIntensity: 0.1  }, Shoe_Rmesh: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_Lmesh: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 } },
-    lora: { Shirt_mesh: { color: 0x9b59b6, emissive: 0x200030, emissiveIntensity: 0.12 }, Trousers_mesh: { color: 0x6c3483, emissive: 0x180028, emissiveIntensity: 0.1  }, Shoe_Rmesh: { color: 0xf5f5dc, emissive: 0x111100, emissiveIntensity: 0.04 }, Shoe_Lmesh: { color: 0xf5f5dc, emissive: 0x111100, emissiveIntensity: 0.04 } },
+    miss: { Top: { color: 0xff69b4, emissive: 0x330011, emissiveIntensity: 0.1  }, Bottom: { color: 0xff1493, emissive: 0x330011, emissiveIntensity: 0.1  }, Shoe_R: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_L: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 } },
+    lora: { Top: { color: 0x9b59b6, emissive: 0x200030, emissiveIntensity: 0.12 }, Bottom: { color: 0x6c3483, emissive: 0x180028, emissiveIntensity: 0.1  }, Shoe_R: { color: 0xf5f5dc, emissive: 0x111100, emissiveIntensity: 0.04 }, Shoe_L: { color: 0xf5f5dc, emissive: 0x111100, emissiveIntensity: 0.04 } },
   },
   loungewear: {
     label: 'Loungewear',
-    miss: { Topmesh: { color: 0x8b4513, emissive: 0x1a0a00, emissiveIntensity: 0.05 }, Bottommesh: { color: 0x6b3410, emissive: 0x1a0a00, emissiveIntensity: 0.05 }, Shoe_Rmesh: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_Lmesh: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 } },
-    lora: { Shirt_mesh: { color: 0x2c3e50, emissive: 0x050a10, emissiveIntensity: 0.05 }, Trousers_mesh: { color: 0x1a252f, emissive: 0x050a10, emissiveIntensity: 0.05 }, Shoe_Rmesh: { color: 0x7f8c8d, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_Lmesh: { color: 0x7f8c8d, emissive: 0x000000, emissiveIntensity: 0 } },
+    miss: { Top: { color: 0x8b4513, emissive: 0x1a0a00, emissiveIntensity: 0.05 }, Bottom: { color: 0x6b3410, emissive: 0x1a0a00, emissiveIntensity: 0.05 }, Shoe_R: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_L: { color: 0x5c3317, emissive: 0x000000, emissiveIntensity: 0 } },
+    lora: { Top: { color: 0x2c3e50, emissive: 0x050a10, emissiveIntensity: 0.05 }, Bottom: { color: 0x1a252f, emissive: 0x050a10, emissiveIntensity: 0.05 }, Shoe_R: { color: 0x7f8c8d, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_L: { color: 0x7f8c8d, emissive: 0x000000, emissiveIntensity: 0 } },
   },
   streetwear: {
     label: 'Streetwear',
-    miss: { Topmesh: { color: 0x111111, emissive: 0x000000, emissiveIntensity: 0    }, Bottommesh: { color: 0x1a1a2e, emissive: 0x000022, emissiveIntensity: 0.08 }, Shoe_Rmesh: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 }, Shoe_Lmesh: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 } },
-    lora: { Shirt_mesh: { color: 0x1a5276, emissive: 0x001020, emissiveIntensity: 0.08 }, Trousers_mesh: { color: 0x0d0d0d, emissive: 0x000000, emissiveIntensity: 0    }, Shoe_Rmesh: { color: 0xe8daef, emissive: 0x0a0010, emissiveIntensity: 0.04 }, Shoe_Lmesh: { color: 0xe8daef, emissive: 0x0a0010, emissiveIntensity: 0.04 } },
+    miss: { Top: { color: 0x111111, emissive: 0x000000, emissiveIntensity: 0    }, Bottom: { color: 0x1a1a2e, emissive: 0x000022, emissiveIntensity: 0.08 }, Shoe_R: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 }, Shoe_L: { color: 0xffffff, emissive: 0x111111, emissiveIntensity: 0.05 } },
+    lora: { Top: { color: 0x1a5276, emissive: 0x001020, emissiveIntensity: 0.08 }, Bottom: { color: 0x0d0d0d, emissive: 0x000000, emissiveIntensity: 0    }, Shoe_R: { color: 0xe8daef, emissive: 0x0a0010, emissiveIntensity: 0.04 }, Shoe_L: { color: 0xe8daef, emissive: 0x0a0010, emissiveIntensity: 0.04 } },
   },
   pyjamas: {
     label: 'Pyjamas',
-    miss: { Topmesh: { color: 0x6a0dad, emissive: 0x200020, emissiveIntensity: 0.06 }, Bottommesh: { color: 0x7b1fa2, emissive: 0x200020, emissiveIntensity: 0.06 }, Shoe_Rmesh: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 }, Shoe_Lmesh: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 } },
-    lora: { Shirt_mesh: { color: 0x117a65, emissive: 0x001a10, emissiveIntensity: 0.06 }, Trousers_mesh: { color: 0x0e6655, emissive: 0x001a10, emissiveIntensity: 0.06 }, Shoe_Rmesh: { color: 0x48c9b0, emissive: 0x001510, emissiveIntensity: 0.04 }, Shoe_Lmesh: { color: 0x48c9b0, emissive: 0x001510, emissiveIntensity: 0.04 } },
+    miss: { Top: { color: 0x6a0dad, emissive: 0x200020, emissiveIntensity: 0.06 }, Bottom: { color: 0x7b1fa2, emissive: 0x200020, emissiveIntensity: 0.06 }, Shoe_R: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 }, Shoe_L: { color: 0x9c4dcc, emissive: 0x100010, emissiveIntensity: 0.04 } },
+    lora: { Top: { color: 0x117a65, emissive: 0x001a10, emissiveIntensity: 0.06 }, Bottom: { color: 0x0e6655, emissive: 0x001a10, emissiveIntensity: 0.06 }, Shoe_R: { color: 0x48c9b0, emissive: 0x001510, emissiveIntensity: 0.04 }, Shoe_L: { color: 0x48c9b0, emissive: 0x001510, emissiveIntensity: 0.04 } },
   },
   afrobeats: {
     label: 'Afrobeats Night',
-    miss: { Topmesh: { color: 0xFFB830, emissive: 0x331a00, emissiveIntensity: 0.15 }, Bottommesh: { color: 0xff6600, emissive: 0x331100, emissiveIntensity: 0.12 }, Shoe_Rmesh: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  }, Shoe_Lmesh: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  } },
-    lora: { Shirt_mesh: { color: 0xe74c3c, emissive: 0x2d0000, emissiveIntensity: 0.15 }, Trousers_mesh: { color: 0x922b21, emissive: 0x1a0000, emissiveIntensity: 0.12 }, Shoe_Rmesh: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 }, Shoe_Lmesh: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 } },
+    miss: { Top: { color: 0xFFB830, emissive: 0x331a00, emissiveIntensity: 0.15 }, Bottom: { color: 0xff6600, emissive: 0x331100, emissiveIntensity: 0.12 }, Shoe_R: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  }, Shoe_L: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  } },
+    lora: { Top: { color: 0xe74c3c, emissive: 0x2d0000, emissiveIntensity: 0.15 }, Bottom: { color: 0x922b21, emissive: 0x1a0000, emissiveIntensity: 0.12 }, Shoe_R: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 }, Shoe_L: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 } },
   },
 };
 const OUTFIT_CONTEXT = {
@@ -1252,16 +1253,14 @@ function bindColour(id, meshNames) {
     }
   });
 }
-// ── Colour pickers — mesh names CONFIRMED from VRM files ──────────
-// Miss:  Julie_Figuremesh, Topmesh, Bottommesh, Hair_Blockmesh, Browmesh,
-//        Lashesmesh, Shoe_R/Lmesh, Necklecemesh, Ear_Jewelmesh, Teethmesh
-// Lora:  Figure_mesh, Shirt_mesh, Trousers_mesh, Hair_mesh, Browmesh,
-//        Lashes_mesh, Shoe_R/Lmesh, Chain_mesh, Ear_mesh, Teethmesh
-bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh']);
-bindColour('col-hair',   ['Hair_Blockmesh','Browmesh','Lashesmesh','Hair_mesh','Lashes_mesh']);
-bindColour('col-top',    ['Topmesh','Shirt_mesh']);
-bindColour('col-bottom', ['Bottommesh','Trousers_mesh']);
-bindColour('col-gold',   ['Ear_Jewelmesh','Necklecemesh','Ear_mesh','Chain_mesh']);
+// ── Colour pickers — NODE names (what Three.js obj.name returns in traverse) ──
+// Miss nodes:  Julie_Figure, Top, Bottom, Hair_Block, Brow, Lashes, Shoe_R, Shoe_L, Necklece, Ear_Jewel, Teeth, Teargum
+// Lora nodes:  Mr_OgTinz_Figure, Top, Bottom, Hair_Block, Brow, Lashes, Shoe_R, Shoe_L, Necklece, Ear_Jewel, Teeth, Teargum
+bindColour('col-skin',   ['Julie_Figure', 'Mr_OgTinz_Figure', 'Teargum']);
+bindColour('col-hair',   ['Hair_Block', 'Brow', 'Lashes']);
+bindColour('col-top',    ['Top']);
+bindColour('col-bottom', ['Bottom']);
+bindColour('col-gold',   ['Ear_Jewel', 'Necklece']);
 
 document.getElementById('btn-log')?.addEventListener('click', () => {
   const vrm = _vrm(); if (!vrm) return;
