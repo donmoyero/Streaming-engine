@@ -298,34 +298,16 @@ const LORA_COLOURS = {
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
-  // ── CRITICAL: All VRM meshes share a single material[0] in this export.
-  // Assigning obj.material = new Material() creates per-mesh instances,
-  // but Three.js VRM may re-share them via the VRM material system.
-  // Fix: collect all meshes first, dispose the shared material once,
-  // then assign a BRAND NEW unique MeshStandardMaterial to every mesh.
-  // This guarantees each mesh is independently coloured.
-
-  const meshes = [];
-  vrmObj.scene.traverse((obj) => { if (obj.isMesh) meshes.push(obj); });
-
-  // Dispose shared material once
-  if (meshes.length > 0 && meshes[0].material) {
-    const shared = meshes[0].material;
-    // Only dispose if it's actually shared (same ref across multiple meshes)
-    const isShared = meshes.filter(m => m.material === shared).length > 1;
-    if (isShared) { try { shared.dispose(); } catch(e){} }
-  }
-
-  for (const obj of meshes) {
+  vrmObj.scene.traverse((obj) => {
+    if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name = obj.name;
 
-    const isMetallic = /jewel|chain|ring|necklec|ear_mesh|chain_mesh/i.test(name);
-    const isSkin     = /figure|body|skin|teargum/i.test(name);
-    const isEye      = /^eye/i.test(name);
+    const isMetallic = /jewel|chain|ring|necklec/i.test(name);
+    const isSkin     = /figure|body|head|skin|teargum/i.test(name);
+    const isEye      = /eye/i.test(name);
     const isLash     = /lash/i.test(name);
     const isTooth    = /teeth|tooth/i.test(name);
-    const isHair     = /hair|brow/i.test(name);
 
     if (isEye) {
       const eyeCanvas  = document.createElement('canvas');
@@ -349,15 +331,11 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
       const eyeTex = new THREE.CanvasTexture(eyeCanvas);
-      // Force unique material instance
       obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, side: THREE.FrontSide });
-      obj.material.uuid = THREE.MathUtils.generateUUID();
     } else if (isLash) {
       obj.material = new THREE.MeshStandardMaterial({ color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-      obj.material.uuid = THREE.MathUtils.generateUUID();
     } else if (isTooth) {
       obj.material = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide });
-      obj.material.uuid = THREE.MathUtils.generateUUID();
     } else {
       let hexColour = colourMap[name];
       if (hexColour === undefined) {
@@ -369,21 +347,17 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
         hexColour = isLora ? 0xc68642 : 0xb5743a;
         console.log(`[VRM${isLora?'Lora':'Miss'}] unmatched mesh: "${name}" — default applied`);
       }
-      // Always create a brand new material — never reuse the shared one
-      const mat = new THREE.MeshStandardMaterial({
+      obj.material = new THREE.MeshStandardMaterial({
         color:             hexColour,
-        roughness:         isSkin ? 0.65 : isMetallic ? 0.18 : isHair ? 0.82 : 0.72,
+        roughness:         isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
         metalness:         isMetallic ? 0.88 : 0.0,
         emissive:          isSkin ? new THREE.Color(hexColour) : new THREE.Color(0x000000),
-        emissiveIntensity: isSkin ? 0.10 : 0.0,
+        emissiveIntensity: isSkin ? 0.12 : 0.0,
         side:              THREE.FrontSide,
         depthWrite:        true,
       });
-      mat.uuid   = THREE.MathUtils.generateUUID();
-      obj.material = mat;
     }
-    console.log(`[VRM colour] ${isLora?'Lora':'Miss'} ${name} → #${(obj.material.color?.getHexString?.() ?? 'tex')}`);
-  }
+  });
 }
 
 // ── VRM finalise (scale, floor, rotation) ────────────────────────
