@@ -131,7 +131,14 @@ function showLoraBubble(text) {
 // ════════════════════════════════════════════════════════════════
 const BACKEND = 'https://impactgrid-dijo.onrender.com/chat/message';
 
+let _askBackoff = 0;  // ms to wait after a 429
+
 async function _ask(systemPrompt, userMessage) {
+  // Respect backoff after 429
+  if (_askBackoff > 0) {
+    console.log(`[BFF] backing off ${Math.round(_askBackoff/1000)}s`);
+    return '';
+  }
   try {
     const res = await fetch(BACKEND, {
       method: 'POST',
@@ -141,6 +148,13 @@ async function _ask(systemPrompt, userMessage) {
         message: `[PERSONA]\n${systemPrompt}\n\n[SAY]\n${userMessage}`,
       }),
     });
+    if (res.status === 429) {
+      _askBackoff = 5 * 60_000;  // 5 min backoff
+      setTimeout(() => { _askBackoff = 0; }, _askBackoff);
+      console.warn('[BFF] 429 — backing off 5 min');
+      return '';
+    }
+    if (!res.ok) { console.warn('[BFF] HTTP', res.status); return ''; }
     const data = await res.json();
     if (!_ask._logged) { _ask._logged = true; console.log('[BFF] backend shape:', data); }
     return data.reply || data.response || data.text || data.message || data.content || '';
@@ -331,8 +345,8 @@ function _delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 export function startCoupleEngine() {
   console.log('[BFF Engine] Miss OG Tinz & Lora are LIVE 💕');
 
-  // First exchange after 3s
-  setTimeout(() => _exchange(), 3000);
+  // First exchange after 18s — gives backend (Render free tier) time to wake
+  setTimeout(() => _exchange(), 18000);
 
   // Schedule ongoing exchanges every 20-38s
   function next() {
