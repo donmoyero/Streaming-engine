@@ -383,7 +383,7 @@ function _onBothLoaded() {
     startTopicPolling();
     _initDeadAir();
     initTwitchChat();
-    import('./engine-couple.js').then(m => m.startCoupleEngine());
+    import('./engine-bff.js').then(m => m.startCoupleEngine());
   }, 400);
 }
 
