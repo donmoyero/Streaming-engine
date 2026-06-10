@@ -1,7 +1,6 @@
 // ================================================================
 //  engine-scene.js  — DUAL AVATAR (Miss OG Tinz + Lora)
-//  Loads both VRMs, positions them facing each other,
-//  exports getVrm() / getVrmLora() for the rest of the engine.
+//  Two best friends, different outfits, facing each other.
 // ================================================================
 
 import * as THREE from 'three';
@@ -17,12 +16,10 @@ import {
   setTargetFacing,
   vrmPos, showBubble, speak,
 } from './engine-life.js';
-import { dressBothCharacters } from './engine-wardrobe.js';
 
-// ── Config ─────────────────────────────────────────────────────
+// ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
-export const VRM_LORA_PATH  = 'Lora_Master.vrm';
-export const VRM_MR_PATH    = 'MrOgTinz_Master.vrm';  // kept for backwards compat
+export const VRM_LORA_PATH  = 'MrOgTinz_Master.vrm';   // Lora's VRM file
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -41,7 +38,7 @@ export const chatInput  = document.getElementById('chat-input');
 export const sendBtn    = document.getElementById('send-btn');
 export const stageLight = document.getElementById('stage-light');
 
-// ── Three.js renderer & camera ──────────────────────────────────
+// ── Three.js renderer & camera ───────────────────────────────────
 export const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setClearColor(0x080510, 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -50,7 +47,6 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 export const scene  = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 999999);
-// Wider shot to frame both characters
 camera.position.set(0, 1.55, 3.8);
 camera.lookAt(0, 1.15, 0);
 
@@ -60,7 +56,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
-// ── Lighting ─────────────────────────────────────────────────────
+// ── Lighting ────────────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0xffffff, 2.5);
 scene.add(ambient);
 export { ambient };
@@ -101,51 +97,38 @@ export let chairMesh        = null;
 export let roofMesh         = null;
 export const roomLights     = {};
 
-// ── House spawn / bounds ─────────────────────────────────────────
+// ── House bounds ─────────────────────────────────────────────────
 export let _houseLoaded = false;
 export let _houseSpawnX = -2.7;
 export let _houseSpawnZ = -3.8;
 export let _houseFloorY = 0;
-
 export const HOUSE_BOUNDS  = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
 export const AVATAR_RADIUS = 0.25;
 
-// ── Miss VRM ref ─────────────────────────────────────────────────
+// ── Miss OG Tinz VRM ref ─────────────────────────────────────────
 export let vrm            = null;
 export let VRM_BASE_ROT_Y = Math.PI;
 export function getVrm()   { return vrm; }
 export function _setVrm(v) { vrm = v; }
 
 // ── Lora VRM ref ─────────────────────────────────────────────────
-export let vrmMr             = null;   // alias kept so engine-bones.js still works
-export let vrmLora           = null;
+export let vrmMr            = null;   // kept as vrmMr internally for bone compat
 export let VRM_MR_BASE_ROT_Y = 0;
-export function getVrmMr()    { return vrmLora; }  // legacy alias
-export function getVrmLora()  { return vrmLora; }
-export function _setVrmMr(v)  { vrmMr = v; vrmLora = v; }
-export function _setVrmLora(v){ vrmMr = v; vrmLora = v; }
+export function getVrmMr()   { return vrmMr; }
+export function getVrmLora() { return vrmMr; }   // alias for engine-life.js
+export function _setVrmMr(v) { vrmMr = v; }
 
 // ── Spawn positions — facing each other ──────────────────────────
-// Miss on the right, Lora on the left, both angled toward centre
-export const MISS_SPAWN_X = 1.1;
+export const MISS_SPAWN_X =  1.1;
 export const MISS_SPAWN_Z = -0.6;
-export const MR_SPAWN_X   = -1.1;   // kept name for engine-bones compat
-export const MR_SPAWN_Z   = -0.6;
+export const LORA_SPAWN_X = -1.1;
+export const LORA_SPAWN_Z = -0.6;
+export const MISS_FACE_Y  =  Math.PI * 0.55;   // Miss faces left toward Lora
+export const LORA_FACE_Y  = -Math.PI * 0.55;   // Lora faces right toward Miss
 
-// Miss faces left (toward Lora): rotation.y = Math.PI * 0.5
-// Lora faces right (toward Miss): rotation.y = -Math.PI * 0.5
-export const MISS_FACE_Y = Math.PI * 0.55;
-export const MR_FACE_Y   = -Math.PI * 0.55;
-
-// ── Place both VRMs on floor ─────────────────────────────────────
-export function _placeVRMOnFloor() {
-  _placeOneVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
-  _placeOneVRM(vrmMr, MR_SPAWN_X,   MR_SPAWN_Z,   MR_FACE_Y);
-  _snapCameraToVRM();
-}
-
+// ── Raycast floor helper ─────────────────────────────────────────
 function _rayFloor(spawnX, spawnZ) {
-  const offsets = [[0,0],[0.25,0],[-0.25,0],[0,0.25],[0,-0.25]];
+  const offsets = [[0,0],[0.2,0],[-0.2,0],[0,0.2],[0,-0.2]];
   const candidates = [];
   for (const [ox, oz] of offsets) {
     const ray = new THREE.Raycaster(
@@ -165,95 +148,98 @@ function _rayFloor(spawnX, spawnZ) {
   return candidates[Math.floor(candidates.length / 2)];
 }
 
+export function _placeVRMOnFloor() {
+  _placeOneVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
+  _placeOneVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
+  _snapCameraToVRM();
+}
+
 function _placeOneVRM(v, spawnX, spawnZ, faceY) {
   if (!v) return;
-  const floorY       = _rayFloor(spawnX, spawnZ);
-  const feetOffset   = v._feetOffset ?? 0;
-  const safeFeet     = feetOffset < 0.05 ? 0.82 : feetOffset;
-  const finalY       = floorY + safeFeet;
+  const floorY   = _rayFloor(spawnX, spawnZ);
+  const safeFeet = (v._feetOffset ?? 0) < 0.05 ? 0.82 : v._feetOffset;
+  const finalY   = floorY + safeFeet;
   v.scene.position.set(spawnX, finalY, spawnZ);
   v._restPosY        = finalY;
   v.scene.rotation.y = faceY;
 }
 
-// ── House GLB loader ─────────────────────────────────────────────
-const _gltfLoader = new GLTFLoader();
+// ── Wardrobe loader ──────────────────────────────────────────────
+const _wLoader = new GLTFLoader();
 
-_gltfLoader.load(
-  'House.glb',
-  (gltf) => {
-    const house   = gltf.scene;
-    scene.add(house);
+// Miss OG Tinz outfit — pink/black streetwear glam
+const MISS_OUTFIT = [
+  'wardrope/female_mini_skirt.glb',
+  'wardrope/female_crop_hoodie.glb',
+  'wardrope/female_platform_sneakers.glb',
+  'wardrope/female_gold_hoops.glb',
+  'wardrope/female_layered_necklace.glb',
+  'wardrope/unisex_gold_bracelet.glb',
+];
 
-    const rawBox  = new THREE.Box3().setFromObject(house);
-    const rawSize = rawBox.getSize(new THREE.Vector3());
-    const hScale  = 16 / Math.max(rawSize.x, rawSize.z);
-    house.scale.setScalar(hScale);
+// Lora outfit — edgy/biker different vibe
+const LORA_OUTFIT = [
+  'wardrope/female_biker_set.glb',
+  'wardrope/female_thigh_boots.glb',
+  'wardrope/female_bucket_hat.glb',
+  'wardrope/female_butterfly_clip.glb',
+  'wardrope/unisex_crossbody_bag.glb',
+];
 
-    const sBox    = new THREE.Box3().setFromObject(house);
-    const sCenter = sBox.getCenter(new THREE.Vector3());
-    house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z);
+// Bone names to attach each outfit piece to (by filename keyword)
+const ATTACH_MAP = {
+  skirt:      'hips',
+  hoodie:     'chest',      crop:      'chest',
+  jacket:     'chest',      biker:     'chest',
+  sneakers:   'leftFoot',   boots:     'leftFoot',
+  hoops:      'head',       hat:       'head',       clip: 'head',
+  necklace:   'chest',      chain:     'chest',
+  bracelet:   'leftHand',
+  bag:        'hips',
+  rings:      'rightHand',
+};
 
-    const finalBox = new THREE.Box3().setFromObject(house);
-    _houseFloorY   = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
-    if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
+function _getBoneForItem(filename) {
+  const f = filename.toLowerCase();
+  for (const [key, bone] of Object.entries(ATTACH_MAP)) {
+    if (f.includes(key)) return bone;
+  }
+  return 'hips';
+}
 
-    HOUSE_BOUNDS.minX = -5.195 * hScale * 0.72;
-    HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.72;
-    HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.72;
-    HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.72;
+function _attachOutfitToVRM(vrmObj, glbPath) {
+  if (!vrmObj) return;
+  _wLoader.load(glbPath, (gltf) => {
+    const item    = gltf.scene;
+    const boneName = _getBoneForItem(glbPath);
+    const bone    = vrmObj.humanoid?.getNormalizedBoneNode(boneName);
 
-    console.log(`[House] hScale=${hScale.toFixed(3)} floorY=${_houseFloorY.toFixed(4)}`);
-    house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-
-    house.traverse(n => {
-      if (n.isMesh && /roof|strecha|ceiling|dach|techo|plafond/i.test(n.name)) {
-        roofMesh = n;
-        console.log(`[House] roofMesh found: "${n.name}"`);
-      }
-    });
-    if (!roofMesh) console.warn('[House] No roof mesh found.');
-
-    _houseLoaded = true;
-
-    if (!window._houseScaled) {
-      window._houseScaled = true;
-      for (const roomDef of Object.values(HOUSE)) {
-        if (!roomDef.spots) continue;
-        for (const spot of roomDef.spots) {
-          spot.x *= hScale;
-          spot.z *= hScale;
-          const margin = AVATAR_RADIUS + 0.3;
-          spot.x = Math.max(HOUSE_BOUNDS.minX + margin, Math.min(HOUSE_BOUNDS.maxX - margin, spot.x));
-          spot.z = Math.max(HOUSE_BOUNDS.minZ + margin, Math.min(HOUSE_BOUNDS.maxZ - margin, spot.z));
-        }
-        if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
-      }
-      for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
-      if (window.ROOM_CONNECTIONS_REF) {
-        for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
-          for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
-        }
-      }
+    if (bone) {
+      // Scale outfit to match avatar scale
+      const sc = vrmObj.scene.scale.x;
+      item.scale.setScalar(sc * 0.01);  // GLBs are often in cm; adjust if needed
+      bone.add(item);
+      console.log(`[Wardrobe] attached ${glbPath} → ${boneName}`);
+    } else {
+      // Fallback: add to scene at avatar position
+      item.scale.setScalar(vrmObj.scene.scale.x * 0.01);
+      item.position.copy(vrmObj.scene.position);
+      scene.add(item);
+      console.warn(`[Wardrobe] bone "${boneName}" not found for ${glbPath}, placed in scene`);
     }
-
-    if (vrm || vrmMr) {
-      requestAnimationFrame(() => {
-        _placeVRMOnFloor();
-        _snapCameraToVRM();
-      });
-    }
-    console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}`);
   },
-  (xhr) => setProgress(Math.round(xhr.loaded / xhr.total * 100)),
-  (err) => console.warn('[House] GLB load failed:', err)
-);
+  undefined,
+  (err) => console.warn(`[Wardrobe] failed to load ${glbPath}:`, err)
+  );
+}
 
-// ── Shared GLTF loader (VRM plugin registered once) ──────────────
-const gltfLoader = new GLTFLoader();
-gltfLoader.register(parser => new VRMLoaderPlugin(parser));
+function _loadOutfit(vrmObj, outfitList) {
+  for (const path of outfitList) {
+    _attachOutfitToVRM(vrmObj, path);
+  }
+}
 
-// ── Miss OG Tinz colours ─────────────────────────────────────────
+// ── Miss OG Tinz skin colours ────────────────────────────────────
 const MISS_COLOURS = {
   Julie_Figure: 0x7B3F00,
   Brow:         0x1a0a00,
@@ -264,67 +250,32 @@ const MISS_COLOURS = {
   Lashes:       0x050505,
   Teeth:        0xfffaf0,
   Hair_Block:   0x0d0d0d,
-  Top:          0xff69b4,
-  Bottom:       0xff1493,
+  Top:          0xff69b4,   // hot pink
+  Bottom:       0xff1493,   // deep pink
   Shoe_R:       0x222222,
   Shoe_L:       0x222222,
   Necklece:     0xFFD700,
 };
 
-// ── Lora colours — warm dark skin, street-chic (distinct from Miss) ─
+// ── Lora skin colours — lighter skin, purple/white vibe ──────────
 const LORA_COLOURS = {
-  Body:         0x4a2000,
-  Head:         0x4a2000,
-  Skin:         0x4a2000,
-  Figure:       0x4a2000,
-  Brow:         0x0d0600,
-  Teargum:      0x4a2000,
-  Eye_R:        0x2a1205,
-  Eyes_L:       0x2a1205,
-  Lashes:       0x030202,
-  Teeth:        0xfff8f0,
-  Hair:         0x1a0a00,     // dark brown (different from Miss's black)
-  Hair_Block:   0x1a0a00,
-  Shirt:        0x2d1b69,     // deep violet top
-  Top:          0x2d1b69,
-  Pants:        0x0d0d1a,     // near-black bottoms
-  Bottom:       0x0d0d1a,
-  Shoe_R:       0xf5f5dc,     // cream platform sneakers
-  Shoe_L:       0xf5f5dc,
-  Chain:        0xFFD700,
-  Necklece:     0xFFD700,
-  Ring:         0xC0C0C0,     // silver — different from Miss's gold
-  Ear_Jewel:    0xFFD700,
-  Cap:          0x2d1b69,     // matches top
-  Snapback:     0x2d1b69,
+  Julie_Figure: 0xc68642,   // lighter brown skin
+  Brow:         0x2a1500,
+  Teargum:      0xc68642,
+  Ear_Jewel:    0xC0C0C0,   // silver
+  Eye_R:        0x1a2a3a,   // dark blue-brown eyes
+  Eyes_L:       0x1a2a3a,
+  Lashes:       0x080808,
+  Teeth:        0xfff9f0,
+  Hair_Block:   0x3d1a00,   // dark auburn hair
+  Top:          0x7c3aed,   // purple
+  Bottom:       0x1a1a1a,   // black
+  Shoe_R:       0xf5f5f5,   // white
+  Shoe_L:       0xf5f5f5,
+  Necklece:     0xC0C0C0,   // silver
 };
 
-// ── Load Lora ─────────────────────────────────────────────────────
-const gltfLoaderLora = new GLTFLoader();
-gltfLoaderLora.register(parser => new VRMLoaderPlugin(parser));
-
-gltfLoaderLora.load(
-  VRM_LORA_PATH,
-  (gltf) => {
-    setProgress(90);
-    vrmLora = gltf.userData.vrm;
-    vrmMr   = vrmLora;  // keep alias in sync
-    VRMUtils.removeUnnecessaryJoints(gltf.scene);
-    applyVRMColours(vrmLora, LORA_COLOURS, true);
-    VRM_MR_BASE_ROT_Y = 0;
-    _finaliseVRM(vrmLora, MR_SPAWN_X, MR_SPAWN_Z, MR_FACE_Y, false);
-
-    cacheBonesMr();
-    setRestPoseMr();
-
-    _loraLoaded = true;
-    _onBothLoaded();
-  },
-  (p) => setProgress(Math.min(50 + (p.loaded / (p.total || 1)) * 38, 88)),
-  (err) => { console.error(err); setStatus('Failed to load Lora VRM', 'error'); }
-);
-
-function applyVRMColours(vrmObj, colourMap, isMr = false) {
+function applyVRMColours(vrmObj, colourMap, isLora = false) {
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
@@ -342,12 +293,15 @@ function applyVRMColours(vrmObj, colourMap, isMr = false) {
       const ctx = eyeCanvas.getContext('2d');
       ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
       const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
-      grad.addColorStop(0, isMr ? '#0d0400' : '#1a0a00');
-      grad.addColorStop(0.4, isMr ? '#2a1005' : '#3b1f0a');
-      grad.addColorStop(0.8, isMr ? '#3d1e08' : '#5c3010');
-      grad.addColorStop(1,   isMr ? '#1a0800' : '#2a1205');
+      if (isLora) {
+        grad.addColorStop(0,'#050a12'); grad.addColorStop(0.4,'#0e1f35');
+        grad.addColorStop(0.8,'#1a3050'); grad.addColorStop(1,'#0a1525');
+      } else {
+        grad.addColorStop(0,'#1a0a00'); grad.addColorStop(0.4,'#3b1f0a');
+        grad.addColorStop(0.8,'#5c3010'); grad.addColorStop(1,'#2a1205');
+      }
       ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#030101'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#020203'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -361,7 +315,6 @@ function applyVRMColours(vrmObj, colourMap, isMr = false) {
     } else if (isTooth) {
       obj.material = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide });
     } else {
-      // Try exact match first, then fall back to pattern match, then default
       let hexColour = colourMap[name];
       if (hexColour === undefined) {
         for (const [key, val] of Object.entries(colourMap)) {
@@ -369,8 +322,8 @@ function applyVRMColours(vrmObj, colourMap, isMr = false) {
         }
       }
       if (hexColour === undefined) {
-        hexColour = isMr ? 0x4a2000 : 0xb5743a;
-        console.log(`[VRM${isMr?'Mr':'Miss'}] unmatched mesh: "${name}" — using default`);
+        hexColour = isLora ? 0xc68642 : 0xb5743a;
+        console.log(`[VRM${isLora?'Lora':'Miss'}] unmatched mesh: "${name}" — default applied`);
       }
       obj.material = new THREE.MeshStandardMaterial({
         color:             hexColour,
@@ -385,43 +338,16 @@ function applyVRMColours(vrmObj, colourMap, isMr = false) {
   });
 }
 
-// ── Track load state ─────────────────────────────────────────────
-let _missLoaded = false;
-let _loraLoaded = false;
-
-function _onBothLoaded() {
-  if (!_missLoaded || !_loraLoaded) return;
-
-  setProgress(100);
-  setTimeout(async () => {
-    // Dress both characters from wardrobe before reveal
-    try {
-      await dressBothCharacters(vrm, vrmLora);
-    } catch (e) {
-      console.warn('[Wardrobe] outfit load failed (non-fatal):', e.message);
-    }
-
-    loader_el.classList.add('hidden');
-    setStatus('Ready ✦', 'ready');
-    showBubble("Heyyy! Welcome to the stream! 💕", "Miss OG Tinz");
-    setTimeout(() => speak("Heyyy! Welcome to the stream!", 'happy'), 600);
-    startTopicPolling();
-    _initDeadAir();
-    initTwitchChat();
-    // Kick off couple conversation engine
-    import('./engine-couple.js').then(m => m.startCoupleEngine());
-  }, 400);
-}
-
-function _finaliseVRM(v, spawnX, spawnZ, faceY, restoreHouseFloor) {
+// ── VRM finalise (scale, floor, rotation) ────────────────────────
+function _finaliseVRM(v, spawnX, spawnZ, faceY) {
   VRMUtils.rotateVRM0(v);
   v.scene.scale.set(1,1,1);
   v.scene.position.set(0,0,0);
   scene.add(v.scene);
 
   v.scene.updateMatrixWorld(true);
-  const boxRaw  = new THREE.Box3().setFromObject(v.scene);
-  const sizeRaw = boxRaw.getSize(new THREE.Vector3());
+  const boxRaw    = new THREE.Box3().setFromObject(v.scene);
+  const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
   const centerRaw = boxRaw.getCenter(new THREE.Vector3());
   const scaleVal  = 1.65 / sizeRaw.y;
   v.scene.scale.set(scaleVal, scaleVal, scaleVal);
@@ -442,31 +368,122 @@ function _finaliseVRM(v, spawnX, spawnZ, faceY, restoreHouseFloor) {
   console.log(`[VRM] placed at (${spawnX},${finalY.toFixed(3)},${spawnZ}) faceY=${faceY.toFixed(3)}`);
 }
 
+// ── Load state ───────────────────────────────────────────────────
+let _missLoaded = false;
+let _loraLoaded = false;
+
+function _onBothLoaded() {
+  if (!_missLoaded || !_loraLoaded) return;
+  setProgress(100);
+  setTimeout(() => {
+    loader_el.classList.add('hidden');
+    setStatus('Ready ✦', 'ready');
+    showBubble("Heyyy welcome to the stream!! 🎉💕", "Miss OG Tinz");
+    setTimeout(() => speak("Heyyy welcome to the stream!!", 'happy'), 600);
+    startTopicPolling();
+    _initDeadAir();
+    initTwitchChat();
+    import('./engine-couple.js').then(m => m.startCoupleEngine());
+  }, 400);
+}
+
+// ── House GLB loader ─────────────────────────────────────────────
+const _gltfLoader = new GLTFLoader();
+
+_gltfLoader.load('House.glb', (gltf) => {
+  const house   = gltf.scene;
+  scene.add(house);
+  const rawBox  = new THREE.Box3().setFromObject(house);
+  const rawSize = rawBox.getSize(new THREE.Vector3());
+  const hScale  = 16 / Math.max(rawSize.x, rawSize.z);
+  house.scale.setScalar(hScale);
+  const sBox    = new THREE.Box3().setFromObject(house);
+  const sCenter = sBox.getCenter(new THREE.Vector3());
+  house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z);
+  const finalBox = new THREE.Box3().setFromObject(house);
+  _houseFloorY   = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
+  if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
+  HOUSE_BOUNDS.minX = -5.195 * hScale * 0.72;
+  HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.72;
+  HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.72;
+  HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.72;
+  house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+  house.traverse(n => {
+    if (n.isMesh && /roof|strecha|ceiling|dach|techo|plafond/i.test(n.name)) {
+      roofMesh = n;
+    }
+  });
+  _houseLoaded = true;
+  if (!window._houseScaled) {
+    window._houseScaled = true;
+    for (const roomDef of Object.values(HOUSE)) {
+      if (!roomDef.spots) continue;
+      for (const spot of roomDef.spots) {
+        spot.x *= hScale; spot.z *= hScale;
+        const m = AVATAR_RADIUS + 0.3;
+        spot.x = Math.max(HOUSE_BOUNDS.minX+m, Math.min(HOUSE_BOUNDS.maxX-m, spot.x));
+        spot.z = Math.max(HOUSE_BOUNDS.minZ+m, Math.min(HOUSE_BOUNDS.maxZ-m, spot.z));
+      }
+      if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
+    }
+    for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
+    if (window.ROOM_CONNECTIONS_REF) {
+      for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
+        for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
+      }
+    }
+  }
+  if (vrm || vrmMr) {
+    requestAnimationFrame(() => { _placeVRMOnFloor(); _snapCameraToVRM(); });
+  }
+  console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}`);
+},
+(xhr) => setProgress(Math.round(xhr.loaded / xhr.total * 100)),
+(err) => console.warn('[House] GLB load failed:', err)
+);
+
 // ── Load Miss OG Tinz ────────────────────────────────────────────
+const gltfLoader = new GLTFLoader();
+gltfLoader.register(parser => new VRMLoaderPlugin(parser));
 setProgress(10);
 setStatus('Loading Miss OG Tinz...');
 
-gltfLoader.load(
-  VRM_PATH,
-  (gltf) => {
-    setProgress(50);
-    vrm = gltf.userData.vrm;
-    VRMUtils.removeUnnecessaryJoints(gltf.scene);
-    applyVRMColours(vrm, MISS_COLOURS, false);
-    VRM_BASE_ROT_Y = 0;
-    _finaliseVRM(vrm, MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y, true);
+gltfLoader.load(VRM_PATH, (gltf) => {
+  setProgress(50);
+  vrm = gltf.userData.vrm;
+  VRMUtils.removeUnnecessaryJoints(gltf.scene);
+  applyVRMColours(vrm, MISS_COLOURS, false);
+  _finaliseVRM(vrm, MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
+  cacheBones();
+  setRestPose();
+  ACTIVITY.current = 'idle'; ACTIVITY.timer = 0; ACTIVITY.duration = 3;
+  // Load Miss outfit after a short delay (VRM needs to settle)
+  setTimeout(() => _loadOutfit(vrm, MISS_OUTFIT), 1000);
+  _missLoaded = true;
+  setStatus('Loading Lora...');
+  _onBothLoaded();
+},
+(p) => setProgress(Math.min(10 + (p.loaded/(p.total||1))*35, 45)),
+(err) => { console.error(err); setStatus('Failed to load Miss VRM', 'error'); }
+);
 
-    cacheBones();
-    setRestPose();
+// ── Load Lora ────────────────────────────────────────────────────
+const gltfLoaderLora = new GLTFLoader();
+gltfLoaderLora.register(parser => new VRMLoaderPlugin(parser));
 
-    ACTIVITY.current  = 'idle';
-    ACTIVITY.timer    = 0;
-    ACTIVITY.duration = 3;
-
-    _missLoaded = true;
-    setStatus('Loading Lora...');
-    _onBothLoaded();
-  },
-  (p) => setProgress(Math.min(10 + (p.loaded / (p.total || 1)) * 35, 45)),
-  (err) => { console.error(err); setStatus('Failed to load Miss VRM', 'error'); }
+gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
+  setProgress(90);
+  vrmMr = gltf.userData.vrm;
+  VRMUtils.removeUnnecessaryJoints(gltf.scene);
+  applyVRMColours(vrmMr, LORA_COLOURS, true);
+  _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
+  cacheBonesMr();
+  setRestPoseMr();
+  // Load Lora outfit
+  setTimeout(() => _loadOutfit(vrmMr, LORA_OUTFIT), 1000);
+  _loraLoaded = true;
+  _onBothLoaded();
+},
+(p) => setProgress(Math.min(50 + (p.loaded/(p.total||1))*38, 88)),
+(err) => { console.error(err); setStatus('Failed to load Lora VRM', 'error'); }
 );
