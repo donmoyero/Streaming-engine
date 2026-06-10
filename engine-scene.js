@@ -16,6 +16,7 @@ import {
   setTargetFacing,
   vrmPos, showBubble, speak,
 } from './engine-life.js';
+import { dressBothCharacters } from './engine-wardrobe.js';
 
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
@@ -172,94 +173,8 @@ function _placeOneVRM(v, spawnX, spawnZ, faceY) {
   v.scene.rotation.y = faceY;
 }
 
-// ── Wardrobe loader ──────────────────────────────────────────────
-const _wLoader = new GLTFLoader();
-
-// Miss OG Tinz outfit — pink/black streetwear glam
-const MISS_OUTFIT = [
-  'wardrope/female_mini_skirt.glb',
-  'wardrope/female_crop_hoodie.glb',
-  'wardrope/female_platform_sneakers.glb',
-  'wardrope/female_gold_hoops.glb',
-  'wardrope/female_layered_necklace.glb',
-  'wardrope/unisex_gold_bracelet.glb',
-];
-
-// Lora outfit — edgy/biker different vibe
-const LORA_OUTFIT = [
-  'wardrope/female_biker_set.glb',
-  'wardrope/female_thigh_boots.glb',
-  'wardrope/female_bucket_hat.glb',
-  'wardrope/female_butterfly_clip.glb',
-  'wardrope/unisex_crossbody_bag.glb',
-];
-
-// Bone names to attach each outfit piece to (by filename keyword)
-const ATTACH_MAP = {
-  skirt:      'hips',
-  hoodie:     'chest',      crop:      'chest',
-  jacket:     'chest',      biker:     'chest',
-  sneakers:   'leftFoot',   boots:     'leftFoot',
-  hoops:      'head',       hat:       'head',       clip: 'head',
-  necklace:   'chest',      chain:     'chest',
-  bracelet:   'leftHand',
-  bag:        'hips',
-  rings:      'rightHand',
-};
-
-function _getBoneForItem(filename) {
-  const f = filename.toLowerCase();
-  for (const [key, bone] of Object.entries(ATTACH_MAP)) {
-    if (f.includes(key)) return bone;
-  }
-  return 'hips';
-}
-
-function _attachOutfitToVRM(vrmObj, glbPath) {
-  if (!vrmObj) return;
-  _wLoader.load(glbPath, (gltf) => {
-    const item    = gltf.scene;
-    const boneName = _getBoneForItem(glbPath);
-    const bone    = vrmObj.humanoid?.getNormalizedBoneNode(boneName);
-
-    // Auto-detect GLB unit: measure bounding box height.
-    // The VRM skeleton was exported at ~1.6 cm scale and then scaled up 102x
-    // by _finaliseVRM. Outfit pieces attached to a bone INHERIT that world
-    // scale — so we must NOT re-multiply by vrmObj.scene.scale.x (102).
-    // We only need to fix the outfit's own unit system:
-    //   • outfit in metres  (rawH 0.1–3)   → scale 1.0
-    //   • outfit in cm      (rawH 10–300)  → scale 0.01
-    //   • outfit in VRM-cm  (rawH < 0.05)  → scale 100  (rare, same tiny unit as VRM)
-    item.updateMatrixWorld(true);
-    const tmpBox  = new THREE.Box3().setFromObject(item);
-    const tmpSize = tmpBox.getSize(new THREE.Vector3());
-    const rawH    = Math.max(tmpSize.x, tmpSize.y, tmpSize.z);
-    let unitFix;
-    if      (rawH > 10)   unitFix = 0.01;   // cm → metres
-    else if (rawH < 0.05) unitFix = 100;    // VRM-cm → metres
-    else                  unitFix = 1.0;    // already metres
-
-    if (bone) {
-      item.scale.setScalar(unitFix);
-      bone.add(item);
-      console.log(`[Wardrobe] attached ${glbPath} → ${boneName} (rawH=${rawH.toFixed(3)}, unitFix=${unitFix})`);
-    } else {
-      item.scale.setScalar(unitFix);
-      item.position.copy(vrmObj.scene.position);
-      scene.add(item);
-      console.warn(`[Wardrobe] bone "${boneName}" not found for ${glbPath}, placed in scene`);
-    }
-  },
-  undefined,
-  (err) => console.warn(`[Wardrobe] failed to load ${glbPath}:`, err)
-  );
-}
-
-function _loadOutfit(vrmObj, outfitList) {
-  for (const path of outfitList) {
-    _attachOutfitToVRM(vrmObj, path);
-  }
-}
+// ── Wardrobe: handled by engine-wardrobe.js ─────────────────────
+// (inline loader removed — see dressBothCharacters call in _onBothLoaded)
 
 // ── Miss OG Tinz — CONFIRMED mesh names extracted from MissOgTinz_Master.vrm ──
 const MISS_COLOURS = {
@@ -296,14 +211,14 @@ const LORA_COLOURS = {
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
   // Both VRMs export with ONE shared 'glTF_2_0_default_material', 0 textures.
   // Every mesh MUST get its own fresh MeshStandardMaterial with the right colour.
-  // If we skip unmapped meshes they stay sharing the grey default — and because
-  // it's one shared object, the last colour written bleeds to all of them.
+  // Skipping unmapped meshes (old `if (!entry) return`) leaves them sharing the
+  // same grey object — the last colour written then bleeds to all of them.
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
-    const name   = obj.name;
-    const isEye  = name === 'Eye_Rmesh' || name === 'Eyes_Lmesh';
-    const isLash = name === 'Lashesmesh' || name === 'Lashes_mesh';
+    const name    = obj.name;
+    const isEye   = name === 'Eye_Rmesh'   || name === 'Eyes_Lmesh';
+    const isLash  = name === 'Lashesmesh'  || name === 'Lashes_mesh';
     const isTooth = name === 'Teethmesh';
 
     if (isEye) {
@@ -353,11 +268,10 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
     }
 
     // All other meshes — give every one its own material.
-    // Unmapped meshes (not in colourMap) get a neutral fallback so they
-    // don't accidentally share the skin material.
+    // Unmapped meshes get a neutral grey so they don't bleed into skin colour.
     const entry      = colourMap[name];
-    const hex        = entry ? entry.hex             : 0x999999;
-    const isSkin     = entry ? entry.isSkin === true : false;
+    const hex        = entry ? entry.hex              : 0x999999;
+    const isSkin     = entry ? entry.isSkin === true  : false;
     const isMetallic = entry ? entry.metallic === true : false;
 
     obj.material = new THREE.MeshStandardMaterial({
@@ -410,6 +324,8 @@ let _loraLoaded = false;
 function _onBothLoaded() {
   if (!_missLoaded || !_loraLoaded) return;
   setProgress(100);
+  // Dress both characters via engine-wardrobe.js (runs async, non-blocking)
+  dressBothCharacters(vrm, vrmMr);
   setTimeout(() => {
     loader_el.classList.add('hidden');
     setStatus('Ready ✦', 'ready');
@@ -514,8 +430,6 @@ gltfLoader.load(VRM_PATH, (gltf) => {
   cacheBones();
   setRestPose();
   ACTIVITY.current = 'idle'; ACTIVITY.timer = 0; ACTIVITY.duration = 3;
-  // Load Miss outfit after a short delay (VRM needs to settle)
-  setTimeout(() => _loadOutfit(vrm, MISS_OUTFIT), 1000);
   _missLoaded = true;
   setStatus('Loading Lora...');
   _onBothLoaded();
@@ -536,8 +450,6 @@ gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
   _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
   cacheBonesMr();
   setRestPoseMr();
-  // Load Lora outfit
-  setTimeout(() => _loadOutfit(vrmMr, LORA_OUTFIT), 1000);
   _loraLoaded = true;
   _onBothLoaded();
 },
