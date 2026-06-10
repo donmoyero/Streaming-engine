@@ -298,15 +298,21 @@ const LORA_COLOURS = {
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
+  // ── DUMP ALL MESH NAMES — open browser console (F12) after load ──
+  // Copy the logged names into MISS_COLOURS / LORA_COLOURS if colours look wrong
+  const allMeshNames = [];
+  vrmObj.scene.traverse(o => { if (o.isMesh) allMeshNames.push(o.name); });
+  console.log(`%c[VRM ${isLora ? 'Lora' : 'Miss'}] ALL MESH NAMES:`, 'color:#FFB830;font-weight:bold', allMeshNames);
+
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name = obj.name;
 
-    const isMetallic = /jewel|chain|ring|necklec/i.test(name);
-    const isSkin     = /figure|body|head|skin|teargum/i.test(name);
-    const isEye      = /eye/i.test(name);
-    const isLash     = /lash/i.test(name);
+    const isMetallic = /jewel|chain|ring|necklec|earring|gold|silver|metal/i.test(name);
+    const isSkin     = /figure|body|head|skin|teargum|face|torso|flesh/i.test(name);
+    const isEye      = /eye|iris|pupil|sclera/i.test(name);
+    const isLash     = /lash|eyelash/i.test(name);
     const isTooth    = /teeth|tooth/i.test(name);
 
     if (isEye) {
@@ -345,8 +351,11 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
         }
       }
       if (hexColour === undefined) {
-        hexColour = isLora ? 0xc68642 : 0xb5743a;
-        console.log(`[VRM${isLora?'Lora':'Miss'}] unmatched mesh: "${name}" — default applied`);
+        // No match — keep the VRM's original material so we don't override with orange blobs.
+        // The mesh name will be printed above in the ALL MESH NAMES log so you can add it.
+        console.log(`%c[VRM${isLora?'Lora':'Miss'}] unmatched mesh: "${name}" — keeping original material`, 'color:#ff6060');
+        obj.frustumCulled = false;
+        return;
       }
       obj.material = new THREE.MeshStandardMaterial({
         color:             hexColour,
