@@ -222,15 +222,23 @@ function _attachOutfitToVRM(vrmObj, glbPath) {
     const boneName = _getBoneForItem(glbPath);
     const bone    = vrmObj.humanoid?.getNormalizedBoneNode(boneName);
 
+    // Auto-detect GLB unit: measure bounding box height.
+    // If height > 10 the GLB is in cm → divide by 100.
+    // If height is already ~1-3 it's in metres → use as-is (scale 1.0).
+    item.updateMatrixWorld(true);
+    const tmpBox  = new THREE.Box3().setFromObject(item);
+    const tmpSize = tmpBox.getSize(new THREE.Vector3());
+    const rawH    = Math.max(tmpSize.x, tmpSize.y, tmpSize.z);
+    const unitFix = rawH > 10 ? 0.01 : 1.0;
+    // Avatar was auto-scaled to 1.65 m — outfit must match that same scale
+    const sc = vrmObj.scene.scale.x;
+
     if (bone) {
-      // Scale outfit to match avatar scale
-      const sc = vrmObj.scene.scale.x;
-      item.scale.setScalar(sc * 0.01);  // GLBs are often in cm; adjust if needed
+      item.scale.setScalar(sc * unitFix);
       bone.add(item);
-      console.log(`[Wardrobe] attached ${glbPath} → ${boneName}`);
+      console.log(`[Wardrobe] attached ${glbPath} → ${boneName} (unitFix=${unitFix})`);
     } else {
-      // Fallback: add to scene at avatar position
-      item.scale.setScalar(vrmObj.scene.scale.x * 0.01);
+      item.scale.setScalar(sc * unitFix);
       item.position.copy(vrmObj.scene.position);
       scene.add(item);
       console.warn(`[Wardrobe] bone "${boneName}" not found for ${glbPath}, placed in scene`);
@@ -392,22 +400,8 @@ function _onBothLoaded() {
     _initDeadAir();
     initTwitchChat();
     import('./engine-bff.js').then(m => m.startCoupleEngine());
-    // Start Lora's independent walk/room system
-    import('./engine-lora-life.js').then(m => {
-      m.initLoraPos();
-      let _lastT = performance.now();
-      function _loraTick() {
-        const now   = performance.now();
-        const delta = Math.min((now - _lastT) / 1000, 0.1);
-        _lastT      = now;
-        m.updateLoraWalk(delta);
-        m.updateLoraFacing(delta);
-        m.loraLifeUpdate(delta);
-        requestAnimationFrame(_loraTick);
-      }
-      requestAnimationFrame(_loraTick);
-      console.log('[Lora Life] walk system started ✓');
-    });
+    // ── Inline Lora walk system (no separate file needed) ────────────
+    _initLoraWalk();
   }, 400);
 }
 
@@ -531,3 +525,95 @@ gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
 (p) => setProgress(Math.min(50 + (p.loaded/(p.total||1))*38, 88)),
 (err) => { console.error(err); setStatus('Failed to load Lora VRM', 'error'); }
 );
+
+// ================================================================
+//  LORA INLINE WALK SYSTEM
+//  Mirrors Miss's room-walk logic independently for Lora.
+//  No separate file — lives here to avoid 404 on GitHub Pages.
+// ================================================================
+
+const _LORA_ROOMS = [
+  { name: 'studio',      x: -2.2, z: -3.2 },
+  { name: 'livingRoom',  x:  1.2, z: -1.8 },
+  { name: 'kitchen',     x:  2.8, z: -3.5 },
+  { name: 'hallway',     x:  0.0, z:  0.5 },
+  { name: 'bedroom',     x: -3.0, z:  1.8 },
+];
+
+let _loraRoom    = 0;
+let _loraTarget  = null;
+let _loraWalking = false;
+let _loraMoveT   = 0;
+let _loraOrigin  = null;
+let _loraIdleT   = 0;
+const _LORA_IDLE_MIN = 12;
+const _LORA_IDLE_MAX = 28;
+const _LORA_WALK_SPD = 0.9;   // m/s
+
+function _loraPickNextRoom() {
+  const options = _LORA_ROOMS.filter((_, i) => i !== _loraRoom);
+  const next    = options[Math.floor(Math.random() * options.length)];
+  _loraRoom = _LORA_ROOMS.indexOf(next);
+  return next;
+}
+
+function _initLoraWalk() {
+  if (!vrmMr) { setTimeout(_initLoraWalk, 500); return; }
+  // Scale room coords once (hScale already applied to spawn coords above,
+  // use the same ratio derived from LORA_SPAWN_X vs raw -3.2)
+  const hScale = Math.abs(LORA_SPAWN_X / -3.2);
+  if (!window._loraRoomsScaled) {
+    window._loraRoomsScaled = true;
+    for (const r of _LORA_ROOMS) { r.x *= hScale; r.z *= hScale; }
+  }
+  _loraIdleT = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
+  let _lastT  = performance.now();
+
+  function _loraTick() {
+    const now   = performance.now();
+    const delta = Math.min((now - _lastT) / 1000, 0.1);
+    _lastT      = now;
+    _updateLoraWalk(delta);
+    requestAnimationFrame(_loraTick);
+  }
+  requestAnimationFrame(_loraTick);
+  console.log('[Lora Walk] inline system started ✓');
+}
+
+function _updateLoraWalk(dt) {
+  if (!vrmMr) return;
+
+  if (_loraWalking && _loraTarget) {
+    // Advance toward target
+    const pos   = vrmMr.scene.position;
+    const dx    = _loraTarget.x - pos.x;
+    const dz    = _loraTarget.z - pos.z;
+    const dist  = Math.sqrt(dx*dx + dz*dz);
+    const step  = _LORA_WALK_SPD * dt;
+
+    if (dist <= step + 0.05) {
+      // Arrived
+      pos.x         = _loraTarget.x;
+      pos.z         = _loraTarget.z;
+      _loraWalking  = false;
+      _loraTarget   = null;
+      _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
+    } else {
+      // Face walk direction
+      vrmMr.scene.rotation.y = Math.atan2(dx, dz);
+      pos.x += (dx / dist) * step;
+      pos.z += (dz / dist) * step;
+    }
+    return;
+  }
+
+  // Idle countdown
+  _loraIdleT -= dt;
+  if (_loraIdleT <= 0) {
+    const room    = _loraPickNextRoom();
+    _loraTarget   = { x: room.x, z: room.z };
+    _loraOrigin   = { x: vrmMr.scene.position.x, z: vrmMr.scene.position.z };
+    _loraMoveT    = 0;
+    _loraWalking  = true;
+  }
+}
