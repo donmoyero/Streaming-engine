@@ -255,65 +255,48 @@ function _loadOutfit(vrmObj, outfitList) {
   }
 }
 
-// ── Miss OG Tinz skin colours — real mesh names from VRM ─────────
-// Confirmed meshes: Browmesh, Teargummesh, Ear_Jewelmesh, Eye_Rmesh,
-// Eyes_Lmesh, Topmesh, Julie_Figuremesh, Lashesmesh, Bottommesh,
-// Shoe_Rmesh, Hair_Blockmesh, Necklecemesh, Teethmesh, Shoe_Lmesh
+// ── Miss OG Tinz — CONFIRMED mesh names extracted from MissOgTinz_Master.vrm ──
 const MISS_COLOURS = {
-  Julie_Figuremesh: 0x7B3F00,
-  Browmesh:         0x1a0a00,
-  Teargummesh:      0x7B3F00,
-  Ear_Jewelmesh:    0xFFD700,
-  Eye_Rmesh:        0x3b2314,
-  Eyes_Lmesh:       0x3b2314,
-  Lashesmesh:       0x050505,
-  Teethmesh:        0xfffaf0,
-  Hair_Blockmesh:   0x0d0d0d,
-  Topmesh:          0xff69b4,
-  Bottommesh:       0xff1493,
-  Shoe_Rmesh:       0x222222,
-  Shoe_Lmesh:       0x222222,
-  Necklecemesh:     0xFFD700,
+  Julie_Figuremesh: { hex: 0x7B3F00, isSkin: true              },  // dark brown body
+  Browmesh:         { hex: 0x1a0a00, isSkin: false             },  // dark brows
+  Teargummesh:      { hex: 0x7B3F00, isSkin: true              },  // gums (skin tone)
+  Ear_Jewelmesh:    { hex: 0xFFD700, isSkin: false, metallic: true },  // gold earrings
+  Lashesmesh:       { hex: 0x050505, isSkin: false             },  // black lashes
+  Teethmesh:        { hex: 0xfffaf0, isSkin: false             },  // off-white teeth
+  Hair_Blockmesh:   { hex: 0x0d0d0d, isSkin: false             },  // black hair
+  Topmesh:          { hex: 0xff69b4, isSkin: false             },  // pink top clothing
+  Bottommesh:       { hex: 0xff1493, isSkin: false             },  // deep pink bottoms
+  Shoe_Rmesh:       { hex: 0x111111, isSkin: false             },  // black shoe R
+  Shoe_Lmesh:       { hex: 0x111111, isSkin: false             },  // black shoe L
+  Necklecemesh:     { hex: 0xFFD700, isSkin: false, metallic: true },  // gold necklace
 };
 
-// ── Lora skin colours — real mesh names from VRM ─────────────────
-// Confirmed: Browmesh, Teargummesh, Ear_mesh, Eye_Rmesh, Eyes_Lmesh,
-// Shirt_mesh, Figure_mesh, Lashes_mesh, Trousers_mesh, Shoe_Rmesh,
-// Hair_mesh, Chain_mesh, Teethmesh, Shoe_Lmesh
+// ── Lora — CONFIRMED mesh names extracted from Lora_Master.vrm ──────────────
 const LORA_COLOURS = {
-  Figure_mesh:   0xc68642,   // lighter brown skin
-  Browmesh:      0x2a1500,
-  Teargummesh:   0xc68642,
-  Ear_mesh:      0xC0C0C0,   // silver earrings
-  Eye_Rmesh:     0x1a2a3a,
-  Eyes_Lmesh:    0x1a2a3a,
-  Lashes_mesh:   0x080808,
-  Teethmesh:     0xfff9f0,
-  Hair_mesh:     0x3d1a00,   // dark auburn
-  Shirt_mesh:    0x7c3aed,   // purple top
-  Trousers_mesh: 0x1a1a1a,   // black bottom
-  Shoe_Rmesh:    0xf5f5f5,   // white shoes
-  Shoe_Lmesh:    0xf5f5f5,
-  Chain_mesh:    0xC0C0C0,   // silver chain
+  Figure_mesh:   { hex: 0xc68642, isSkin: true              },  // medium brown body
+  Browmesh:      { hex: 0x2a1500, isSkin: false             },  // dark brows
+  Teargummesh:   { hex: 0xc68642, isSkin: true              },  // gums (skin tone)
+  Ear_mesh:      { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver earrings
+  Lashes_mesh:   { hex: 0x080808, isSkin: false             },  // black lashes
+  Teethmesh:     { hex: 0xfff9f0, isSkin: false             },  // off-white teeth
+  Hair_mesh:     { hex: 0x3d1a00, isSkin: false             },  // dark auburn hair
+  Shirt_mesh:    { hex: 0x7c3aed, isSkin: false             },  // purple top clothing
+  Trousers_mesh: { hex: 0x1a1a1a, isSkin: false             },  // black bottoms
+  Shoe_Rmesh:    { hex: 0xf5f5f5, isSkin: false             },  // white shoe R
+  Shoe_Lmesh:    { hex: 0xf5f5f5, isSkin: false             },  // white shoe L
+  Chain_mesh:    { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver chain
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
-  // ── DUMP ALL MESH NAMES — open browser console (F12) after load ──
-  // Copy the logged names into MISS_COLOURS / LORA_COLOURS if colours look wrong
-  const allMeshNames = [];
-  vrmObj.scene.traverse(o => { if (o.isMesh) allMeshNames.push(o.name); });
-  console.log(`%c[VRM ${isLora ? 'Lora' : 'Miss'}] ALL MESH NAMES:`, 'color:#FFB830;font-weight:bold', allMeshNames);
-
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name = obj.name;
 
-    const isMetallic = /jewel|chain|ring|necklec|earring|gold|silver|metal/i.test(name);
-    const isSkin     = /figure|body|head|skin|teargum|face|torso|flesh/i.test(name);
-    const isEye      = /eye|iris|pupil|sclera/i.test(name);
-    const isLash     = /lash|eyelash/i.test(name);
-    const isTooth    = /teeth|tooth/i.test(name);
+    // Eye meshes — canvas-painted iris so they look real
+    const isEye  = name === 'Eye_Rmesh' || name === 'Eyes_Lmesh';
+    const isLash = name === 'Lashesmesh' || name === 'Lashes_mesh';
+    const isTooth = name === 'Teethmesh';
 
     if (isEye) {
       const eyeCanvas  = document.createElement('canvas');
@@ -337,32 +320,37 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
       const eyeTex = new THREE.CanvasTexture(eyeCanvas);
-      eyeTex.colorSpace = THREE.SRGBColorSpace;   // FIX: must mark sRGB or Three.js r163 renders washed-out white
-      obj.material = new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.05, metalness: 0.0, envMapIntensity: 0, side: THREE.FrontSide });
-    } else if (isLash) {
-      obj.material = new THREE.MeshStandardMaterial({ color: 0x050202, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-    } else if (isTooth) {
-      obj.material = new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.4, metalness: 0, side: THREE.FrontSide });
-    } else {
-      let hexColour = colourMap[name];
-      if (hexColour === undefined) {
-        for (const [key, val] of Object.entries(colourMap)) {
-          if (name.toLowerCase().includes(key.toLowerCase())) { hexColour = val; break; }
-        }
-      }
-      if (hexColour === undefined) {
-        // No match — keep the VRM's original material so we don't override with orange blobs.
-        // The mesh name will be printed above in the ALL MESH NAMES log so you can add it.
-        console.log(`%c[VRM${isLora?'Lora':'Miss'}] unmatched mesh: "${name}" — keeping original material`, 'color:#ff6060');
-        obj.frustumCulled = false;
-        return;
-      }
+      eyeTex.colorSpace = THREE.SRGBColorSpace;
       obj.material = new THREE.MeshStandardMaterial({
-        color:             hexColour,
-        roughness:         isSkin ? 0.65 : isMetallic ? 0.18 : 0.72,
-        metalness:         isMetallic ? 0.88 : 0.0,
-        emissive:          isSkin ? new THREE.Color(hexColour) : new THREE.Color(0x000000),
-        emissiveIntensity: isSkin ? 0.12 : 0.0,
+        map: eyeTex, roughness: 0.05, metalness: 0.0,
+        envMapIntensity: 0, side: THREE.FrontSide
+      });
+    } else if (isLash) {
+      obj.material = new THREE.MeshStandardMaterial({
+        color: 0x050202, roughness: 0.9, metalness: 0,
+        envMapIntensity: 0, side: THREE.DoubleSide
+      });
+    } else if (isTooth) {
+      obj.material = new THREE.MeshStandardMaterial({
+        color: 0xfff8f0, roughness: 0.4, metalness: 0,
+        envMapIntensity: 0, side: THREE.FrontSide
+      });
+    } else {
+      const entry = colourMap[name];
+      if (!entry) return;  // not in map — keep VRM original material
+
+      // IMPORTANT: The VRM has ONE shared material for ALL meshes.
+      // We MUST create a brand-new material per mesh or changing one changes all.
+      const hex        = entry.hex;
+      const isSkin     = entry.isSkin   === true;
+      const isMetallic = entry.metallic === true;
+      obj.material = new THREE.MeshStandardMaterial({
+        color:             hex,
+        roughness:         isMetallic ? 0.15 : isSkin ? 0.65 : 0.72,
+        metalness:         isMetallic ? 0.85 : 0.0,
+        emissive:          new THREE.Color(isSkin ? hex : 0x000000),
+        emissiveIntensity: isSkin ? 0.10 : 0.0,
+        envMapIntensity:   0,
         side:              THREE.FrontSide,
         depthWrite:        true,
       });
