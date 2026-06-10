@@ -1252,11 +1252,15 @@ function bindColour(id, meshNames) {
     }
   });
 }
-bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh']);
-bindColour('col-hair',   ['Hair_Blockmesh','Browmesh','Lashesmesh','Hair_mesh','Lashes_mesh']);
-bindColour('col-top',    ['Topmesh','Shirt_mesh']);
-bindColour('col-bottom', ['Bottommesh','Trousers_mesh']);
-bindColour('col-gold',   ['Ear_Jewelmesh','Necklecemesh','Ear_mesh','Chain_mesh']);
+// ── Colour picker mesh targets ────────────────────────────────────
+// If your avatars turn a solid colour when you use the pickers, open
+// the browser console (F12) — the [VRM Miss/Lora] ALL MESH NAMES log
+// will show the real names. Update the arrays below to match.
+bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh','Body_mesh','Skin_mesh']);
+bindColour('col-hair',   ['Hair_Blockmesh','Browmesh','Lashesmesh','Hair_mesh','Lashes_mesh','Brow_mesh']);
+bindColour('col-top',    ['Topmesh','Shirt_mesh','Top_mesh','Clothes_top','Upper_mesh']);
+bindColour('col-bottom', ['Bottommesh','Trousers_mesh','Bottom_mesh','Pants_mesh','Skirt_mesh']);
+bindColour('col-gold',   ['Ear_Jewelmesh','Necklecemesh','Ear_mesh','Chain_mesh','Jewelry_mesh']);
 
 document.getElementById('btn-log')?.addEventListener('click', () => {
   const vrm = _vrm(); if (!vrm) return;
