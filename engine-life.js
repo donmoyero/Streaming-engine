@@ -676,8 +676,8 @@ function animateRoomLights(delta) {
 //
 //  Each outfit key has a `miss` block (Miss OG Tinz colours) and
 //  a `lora` block (Lora colours) — same vibe, distinct palette.
-//  Keys are NODE names (Three.js obj.name): Top, Bottom, Shoe_R, Shoe_L
 // ================================================================
+// Keys are NODE names (Three.js obj.name): Top, Bottom, Shoe_R, Shoe_L
 const OUTFITS = {
   streaming: {
     label: 'Streaming Look',
@@ -704,16 +704,23 @@ const OUTFITS = {
     miss: { Top: { color: 0xFFB830, emissive: 0x331a00, emissiveIntensity: 0.15 }, Bottom: { color: 0xff6600, emissive: 0x331100, emissiveIntensity: 0.12 }, Shoe_R: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  }, Shoe_L: { color: 0xFFB830, emissive: 0x221100, emissiveIntensity: 0.1  } },
     lora: { Top: { color: 0xe74c3c, emissive: 0x2d0000, emissiveIntensity: 0.15 }, Bottom: { color: 0x922b21, emissive: 0x1a0000, emissiveIntensity: 0.12 }, Shoe_R: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 }, Shoe_L: { color: 0xf1948a, emissive: 0x200000, emissiveIntensity: 0.08 } },
   },
+  nightout: {
+    label: 'Night Out',
+    // Miss keeps her streaming look when this fires — nightout is Lora's moment
+    miss: { Top: { color: 0xff69b4, emissive: 0x330011, emissiveIntensity: 0.1  }, Bottom: { color: 0xff1493, emissive: 0x330011, emissiveIntensity: 0.1  }, Shoe_R: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 }, Shoe_L: { color: 0x222222, emissive: 0x000000, emissiveIntensity: 0 } },
+    // Lora: deep cobalt blue top, sleek black trousers, metallic silver shoes
+    lora: { Top: { color: 0x1a237e, emissive: 0x000520, emissiveIntensity: 0.18 }, Bottom: { color: 0x0d0d0d, emissive: 0x000000, emissiveIntensity: 0    }, Shoe_R: { color: 0xc0c0c0, emissive: 0x111118, emissiveIntensity: 0.12 }, Shoe_L: { color: 0xc0c0c0, emissive: 0x111118, emissiveIntensity: 0.12 } },
+  },
 };
 const OUTFIT_CONTEXT = {
   bedroom:       ['pyjamas','loungewear'],
   bathroom:      ['pyjamas','loungewear'],
-  'living-room': ['loungewear','streetwear','afrobeats'],
+  'living-room': ['loungewear','streetwear','afrobeats','nightout'],
   kitchen:       ['loungewear','pyjamas'],
-  studio:        ['streaming','afrobeats','streetwear'],
+  studio:        ['streaming','afrobeats','streetwear','nightout'],
 };
 let _currentOutfit     = 'streaming';
-let _currentOutfitLora = 'streetwear'; // Lora starts on a different one
+let _currentOutfitLora = 'nightout'; // Lora debuts in her Night Out look
 let _lastOutfitRoom    = null;
 
 // Apply a named outfit to a single VRM using its `miss` or `lora` colour block
@@ -1253,9 +1260,8 @@ function bindColour(id, meshNames) {
     }
   });
 }
-// ── Colour pickers — NODE names (what Three.js obj.name returns in traverse) ──
-// Miss nodes:  Julie_Figure, Top, Bottom, Hair_Block, Brow, Lashes, Shoe_R, Shoe_L, Necklece, Ear_Jewel, Teeth, Teargum
-// Lora nodes:  Mr_OgTinz_Figure, Top, Bottom, Hair_Block, Brow, Lashes, Shoe_R, Shoe_L, Necklece, Ear_Jewel, Teeth, Teargum
+// ── Colour pickers — NODE names (Three.js obj.name in traverse) ──────────
+// Both avatars share the same node names: Top, Bottom, Hair_Block, Brow, Lashes etc.
 bindColour('col-skin',   ['Julie_Figure', 'Mr_OgTinz_Figure', 'Teargum']);
 bindColour('col-hair',   ['Hair_Block', 'Brow', 'Lashes']);
 bindColour('col-top',    ['Top']);
