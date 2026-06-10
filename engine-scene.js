@@ -115,8 +115,12 @@ export function _setVrm(v) { vrm = v; }
 export let vrmMr            = null;   // kept as vrmMr internally for bone compat
 export let VRM_MR_BASE_ROT_Y = 0;
 export function getVrmMr()   { return vrmMr; }
-export function getVrmLora() { return vrmMr; }   // alias for engine-life.js
+export function getVrmLora() { return vrmMr; }   // named alias
 export function _setVrmMr(v) { vrmMr = v; }
+
+// Expose getVrmLora as a global so engine-life.js render loop can call it
+// without a static import (avoids circular dependency)
+window.getVrmLora = () => vrmMr;
 
 // ── Spawn positions — facing each other ──────────────────────────
 export const MISS_SPAWN_X =  1.1;
