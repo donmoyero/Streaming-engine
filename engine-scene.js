@@ -122,11 +122,15 @@ export function _setVrmMr(v) { vrmMr = v; }
 // without a static import (avoids circular dependency)
 window.getVrmLora = () => vrmMr;
 
-// ── Spawn positions — facing each other ──────────────────────────
-export const MISS_SPAWN_X =  1.1;
-export const MISS_SPAWN_Z = -0.6;
-export const LORA_SPAWN_X = -1.1;
-export const LORA_SPAWN_Z = -0.6;
+// ── Spawn positions — inside the studio floor (solid mesh confirmed) ─
+// Raw coords are in unscaled house units. They get multiplied by hScale
+// inside the house load callback so they always match the scaled house.
+// Studio origin: x=-2.7, z=-3.5 (desk spot). We place them either side
+// of the desk, facing each other across it.
+export let MISS_SPAWN_X = -2.2;   // slightly right of desk centre
+export let MISS_SPAWN_Z = -3.2;
+export let LORA_SPAWN_X = -3.2;   // slightly left of desk centre
+export let LORA_SPAWN_Z = -3.2;
 export const MISS_FACE_Y  =  Math.PI * 0.55;   // Miss faces left toward Lora
 export const LORA_FACE_Y  = -Math.PI * 0.55;   // Lora faces right toward Miss
 
@@ -420,6 +424,16 @@ _gltfLoader.load('House.glb', (gltf) => {
   _houseLoaded = true;
   if (!window._houseScaled) {
     window._houseScaled = true;
+
+    // Scale spawn coords to match the house — this is the fix for the
+    // hScale mismatch. Spawn coords are defined in raw house units above
+    // and must be multiplied by hScale exactly once here.
+    MISS_SPAWN_X *= hScale;
+    MISS_SPAWN_Z *= hScale;
+    LORA_SPAWN_X *= hScale;
+    LORA_SPAWN_Z *= hScale;
+    console.log(`[House] spawns scaled → Miss(${MISS_SPAWN_X.toFixed(2)},${MISS_SPAWN_Z.toFixed(2)}) Lora(${LORA_SPAWN_X.toFixed(2)},${LORA_SPAWN_Z.toFixed(2)})`);
+
     for (const roomDef of Object.values(HOUSE)) {
       if (!roomDef.spots) continue;
       for (const spot of roomDef.spots) {
@@ -438,7 +452,12 @@ _gltfLoader.load('House.glb', (gltf) => {
     }
   }
   if (vrm || vrmMr) {
-    requestAnimationFrame(() => { _placeVRMOnFloor(); _snapCameraToVRM(); });
+    // Use rAF so the scaled spawn coords are set before placement
+    requestAnimationFrame(() => {
+      if (vrm)   _finaliseVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
+      if (vrmMr) _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
+      _snapCameraToVRM();
+    });
   }
   console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}`);
 },
