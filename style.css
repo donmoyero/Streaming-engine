@@ -183,40 +183,6 @@ body {
 }
 
 
-/* ── Lora nameplate — bottom left ── */
-#lora-nameplate {
-  position:    fixed;
-  bottom:      72px;
-  left:        24px;
-  display:     flex;
-  align-items: center;
-  gap:         8px;
-  font-family: 'DM Sans', sans-serif;
-  color:       #fff;
-  font-size:   13px;
-  z-index:     15;
-}
-#lora-nameplate .dot {
-  width:8px; height:8px;
-  border-radius:50%;
-  background: var(--lora);
-  box-shadow: 0 0 8px var(--lora);
-  animation: pulse 2s infinite;
-}
-#lora-nameplate .name {
-  font-family:'Syne', sans-serif;
-  font-size:13px;
-  font-weight:700;
-  letter-spacing:0.15em;
-  text-transform:uppercase;
-  color: var(--lora);
-  text-shadow: 0 0 8px var(--lora);
-}
-#lora-nameplate .tag {
-  font-size:11px;
-  color:var(--muted);
-  letter-spacing:0.05em;
-}
 
 /* ── Live badge — top right, single instance ── */
 #live-badge {
