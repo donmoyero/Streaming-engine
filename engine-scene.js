@@ -16,7 +16,6 @@ import {
   setTargetFacing,
   vrmPos, showBubble, speak,
 } from './engine-life.js';
-import { dressBothCharacters } from './engine-wardrobe.js';
 
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = 'MissOgTinz_Master.vrm';
@@ -173,8 +172,8 @@ function _placeOneVRM(v, spawnX, spawnZ, faceY) {
   v.scene.rotation.y = faceY;
 }
 
-// ── Wardrobe: handled by engine-wardrobe.js ─────────────────────
-// (inline loader removed — see dressBothCharacters call in _onBothLoaded)
+// ── Wardrobe: DISABLED — VRM body meshes used directly ────────────
+
 
 // ── Miss OG Tinz — CONFIRMED mesh names extracted from MissOgTinz_Master.vrm ──
 const MISS_COLOURS = {
@@ -209,44 +208,45 @@ const LORA_COLOURS = {
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
-  // Both VRMs export with ONE shared 'glTF_2_0_default_material', 0 textures.
-  // Every mesh MUST get its own fresh MeshStandardMaterial with the right colour.
-  // Skipping unmapped meshes (old `if (!entry) return`) leaves them sharing the
-  // same grey object — the last colour written then bleeds to all of them.
+  // VRMs export with ONE shared default material, 0 textures.
+  // Every mesh needs its own MeshStandardMaterial or colours bleed into each other.
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name    = obj.name;
-    const isEye   = name === 'Eye_Rmesh'   || name === 'Eyes_Lmesh';
-    const isLash  = name === 'Lashesmesh'  || name === 'Lashes_mesh';
+    const isEye   = name === 'Eye_Rmesh'  || name === 'Eyes_Lmesh';
+    const isLash  = name === 'Lashesmesh' || name === 'Lashes_mesh';
     const isTooth = name === 'Teethmesh';
 
     if (isEye) {
-      const eyeCanvas  = document.createElement('canvas');
-      eyeCanvas.width  = 128; eyeCanvas.height = 128;
-      const ctx = eyeCanvas.getContext('2d');
-      ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0,0,128,128);
-      const grad = ctx.createRadialGradient(64,64,4, 64,64,38);
+      const eyeCanvas = document.createElement('canvas');
+      eyeCanvas.width = eyeCanvas.height = 128;
+      const ctx  = eyeCanvas.getContext('2d');
+      // White sclera
+      ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0, 0, 128, 128);
+      // Iris gradient
+      const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 38);
       if (isLora) {
-        grad.addColorStop(0,'#050a12'); grad.addColorStop(0.4,'#0e1f35');
-        grad.addColorStop(0.8,'#1a3050'); grad.addColorStop(1,'#0a1525');
+        grad.addColorStop(0, '#050a12'); grad.addColorStop(0.4, '#0e1f35');
+        grad.addColorStop(0.8, '#1a3050'); grad.addColorStop(1, '#0a1525');
       } else {
-        grad.addColorStop(0,'#1a0a00'); grad.addColorStop(0.4,'#3b1f0a');
-        grad.addColorStop(0.8,'#5c3010'); grad.addColorStop(1,'#2a1205');
+        grad.addColorStop(0, '#1a0a00'); grad.addColorStop(0.4, '#3b1f0a');
+        grad.addColorStop(0.8, '#5c3010'); grad.addColorStop(1, '#2a1205');
       }
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#020203'; ctx.beginPath(); ctx.arc(64,64,18,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.beginPath(); ctx.arc(74,52,8,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.beginPath(); ctx.arc(54,72,4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64, 64, 38, 0, Math.PI * 2); ctx.fill();
+      // Pupil
+      ctx.fillStyle = '#020203'; ctx.beginPath(); ctx.arc(64, 64, 18, 0, Math.PI * 2); ctx.fill();
+      // Catchlights
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(74, 52, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';  ctx.beginPath(); ctx.arc(54, 72, 4, 0, Math.PI * 2); ctx.fill();
+      // Limbal ring
       ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(64,64,38,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(64, 64, 38, 0, Math.PI * 2); ctx.stroke();
       const eyeTex = new THREE.CanvasTexture(eyeCanvas);
       eyeTex.colorSpace = THREE.SRGBColorSpace;
       obj.material = new THREE.MeshStandardMaterial({
         map: eyeTex, roughness: 0.05, metalness: 0.0,
-        envMapIntensity: 0, side: THREE.FrontSide
+        envMapIntensity: 0, side: THREE.FrontSide,
       });
       return;
     }
@@ -254,7 +254,7 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
     if (isLash) {
       obj.material = new THREE.MeshStandardMaterial({
         color: 0x050202, roughness: 0.9, metalness: 0,
-        envMapIntensity: 0, side: THREE.DoubleSide
+        envMapIntensity: 0, side: THREE.DoubleSide,
       });
       return;
     }
@@ -262,13 +262,14 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
     if (isTooth) {
       obj.material = new THREE.MeshStandardMaterial({
         color: 0xfff8f0, roughness: 0.4, metalness: 0,
-        envMapIntensity: 0, side: THREE.FrontSide
+        envMapIntensity: 0, side: THREE.FrontSide,
       });
       return;
     }
 
-    // All other meshes — give every one its own material.
-    // Unmapped meshes get a neutral grey so they don't bleed into skin colour.
+    // Every other mesh — mapped ones get their colour, unmapped get neutral grey.
+    // Never skip/return-early: that leaves meshes sharing the one default material
+    // and the last colour written wins for all of them.
     const entry      = colourMap[name];
     const hex        = entry ? entry.hex              : 0x999999;
     const isSkin     = entry ? entry.isSkin === true  : false;
@@ -324,8 +325,6 @@ let _loraLoaded = false;
 function _onBothLoaded() {
   if (!_missLoaded || !_loraLoaded) return;
   setProgress(100);
-  // Dress both characters via engine-wardrobe.js (runs async, non-blocking)
-  dressBothCharacters(vrm, vrmMr);
   setTimeout(() => {
     loader_el.classList.add('hidden');
     setStatus('Ready ✦', 'ready');
