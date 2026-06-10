@@ -1323,247 +1323,27 @@ export function setExpressionMr(mood) {
   (map[mood] || map.neutral)();
 }
 
-// ── Lora finger helpers ──────────────────────────────────────────
-export function setLeftFingerRelaxMr() {
-  const c = 0.12 * 1.4;
-  if (mr_boneL_ThumbPx) { mr_boneL_ThumbPx.rotation.z =  0.18; mr_boneL_ThumbPx.rotation.y =  0.1; }
-  if (mr_boneL_IndexPx) { mr_boneL_IndexPx.rotation.x = c; }
-  if (mr_boneL_MidPx)   { mr_boneL_MidPx.rotation.x   = c; }
-}
-export function setRightFingerRelaxMr() {
-  const c = 0.12 * 1.4;
-  if (mr_boneR_ThumbPx) { mr_boneR_ThumbPx.rotation.z = -0.18; mr_boneR_ThumbPx.rotation.y = -0.1; }
-  if (mr_boneR_IndexPx) { mr_boneR_IndexPx.rotation.x = c; }
-  if (mr_boneR_MidPx)   { mr_boneR_MidPx.rotation.x   = c; }
-}
-
-// ── Lora activity update — full mirror of Miss's switch ──────────
-export let LORA_ACTIVITY = { current: 'idle', timer: 0 };
-
+// ── Mr idle animation tick (called from activityUpdate with who='mr') ──
 export function activityUpdateMr(delta) {
   const v = _vrmMr();
   if (!v) return;
-  LORA_ACTIVITY.timer += delta;
-  const t = LORA_ACTIVITY.timer;
+  const t = (Date.now() % 100000) / 1000;
+  const breathe  = Math.sin(t * 0.5) * 0.011;
+  const headNod  = Math.sin(t * 0.22) * 0.018;
+  const headTurn = Math.sin(t * 0.14) * 0.055; // subtle glance toward Miss
 
-  switch (LORA_ACTIVITY.current) {
+  if (mr_boneSpine) { mr_boneSpine.rotation.x = 0.03 + breathe; }
+  if (mr_boneChest) { mr_boneChest.rotation.x = 0.02 + breathe * 0.6; }
+  if (mr_boneHead)  { mr_boneHead.rotation.x = 0.04 + headNod; mr_boneHead.rotation.y = headTurn; }
+  if (mr_boneNeck)  { mr_boneNeck.rotation.y = headTurn * 0.4; }
+  if (mr_boneHips)  { mr_boneHips.rotation.z = Math.sin(t * 0.3) * 0.015; }
 
-    case 'sofaSit': {
-      const breathe  = Math.sin(t * 0.55) * 0.012;
-      const microZ   = Math.sin(t * 0.38) * 0.018;
-      const headNod  = Math.sin(t * 0.28) * 0.022;
-      const headTurn = Math.sin(t * 0.19) * 0.07;
-      if (mr_boneHips)      { mr_boneHips.rotation.x = 0.58; mr_boneHips.rotation.z = 0.055 + microZ; }
-      if (mr_boneSpine)     { mr_boneSpine.rotation.x = -0.06 + breathe; mr_boneSpine.rotation.z = -microZ * 0.5; }
-      if (mr_boneChest)     { mr_boneChest.rotation.x = 0.04 + breathe * 0.6; }
-      if (mr_boneLUpperLeg) { mr_boneLUpperLeg.rotation.x = 1.48; mr_boneLUpperLeg.rotation.z = -0.08; }
-      if (mr_boneRUpperLeg) { mr_boneRUpperLeg.rotation.x = 1.48; mr_boneRUpperLeg.rotation.z =  0.10; }
-      if (mr_boneLLowerLeg) mr_boneLLowerLeg.rotation.x = -1.32;
-      if (mr_boneRLowerLeg) mr_boneRLowerLeg.rotation.x = -1.32;
-      if (mr_boneLFoot)     { mr_boneLFoot.rotation.x = -0.05; mr_boneLFoot.rotation.z = -0.03; }
-      if (mr_boneRFoot)     { mr_boneRFoot.rotation.x = -0.05; mr_boneRFoot.rotation.z =  0.04; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.68 + Math.sin(t*0.6)*0.02; mr_boneLUpperArm.rotation.x = 0.45; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.55; mr_boneLLowerArm.rotation.x = 0.12; }
-      if (mr_boneLHand)     { mr_boneLHand.rotation.z =  0.22 + Math.sin(t*1.4)*0.04; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.68 - Math.sin(t*0.6+1.0)*0.02; mr_boneRUpperArm.rotation.x = 0.45; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.55; mr_boneRLowerArm.rotation.x = 0.12; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -0.22 - Math.sin(t*1.4+1.0)*0.04; }
-      if (mr_boneHead)      { mr_boneHead.rotation.x = 0.06 + headNod; mr_boneHead.rotation.y = headTurn; }
-      if (mr_boneNeck)      { mr_boneNeck.rotation.x = 0.03; mr_boneNeck.rotation.y = headTurn * 0.4; }
-      const exprCycle = t % 14.0;
-      if (exprCycle > 10.0 && exprCycle < 12.5) setExpressionMr('happy'); else setExpressionMr('neutral');
-      setLeftFingerRelaxMr(); setRightFingerRelaxMr();
-      break;
-    }
-
-    case 'phoneScroll': {
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.55; mr_boneRUpperArm.rotation.x = 0.65; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.3;  mr_boneRLowerArm.rotation.x = 0.25; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -0.12; mr_boneRHand.rotation.x = -0.15 + Math.sin(t*2)*0.04; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z = 0.6;  mr_boneLUpperArm.rotation.x = 0.4; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z = 0.4;  mr_boneLLowerArm.rotation.x = 0.2; }
-      if (mr_boneHead)      { mr_boneHead.rotation.x = 0.22 + Math.sin(t*0.4)*0.03; }
-      if (mr_boneSpine)     mr_boneSpine.rotation.x = 0.06;
-      const scrollCycle = t % 8.0;
-      if (scrollCycle > 6.5) setExpressionMr('happy'); else setExpressionMr('neutral');
-      setLeftFingerRelaxMr();
-      break;
-    }
-
-    case 'tvReact': {
-      const reactCycle = t % 10.0;
-      if (mr_boneHead)      { mr_boneHead.rotation.y = Math.sin(t*0.2)*0.12; mr_boneHead.rotation.x = 0.04; }
-      if (mr_boneSpine)     mr_boneSpine.rotation.z = Math.sin(t*0.3)*0.03;
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.8; mr_boneLUpperArm.rotation.x = 0.1; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.8; mr_boneRUpperArm.rotation.x = 0.1; }
-      if (reactCycle > 7.5 && reactCycle < 8.5) setExpressionMr('surprised');
-      else if (reactCycle > 4.0 && reactCycle < 5.5) setExpressionMr('happy');
-      else setExpressionMr('neutral');
-      setLeftFingerRelaxMr(); setRightFingerRelaxMr();
-      break;
-    }
-
-    case 'readBook': {
-      if (mr_boneSpine)     { mr_boneSpine.rotation.x = 0.06; }
-      if (mr_boneHead)      { mr_boneHead.rotation.x = 0.14 + Math.sin(t*0.25)*0.03; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.55; mr_boneLUpperArm.rotation.x = 0.5; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.55; mr_boneRUpperArm.rotation.x = 0.5; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.35; mr_boneLLowerArm.rotation.x = 0.2; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.35; mr_boneRLowerArm.rotation.x = 0.2; }
-      if (mr_boneLHand)     { mr_boneLHand.rotation.z =  0.15; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -0.15; }
-      setExpressionMr('neutral');
-      break;
-    }
-
-    case 'dance': {
-      const shimmy   = Math.sin(t * 6.5);
-      const bob      = Math.abs(Math.sin(t * 6.5)) * 0.055;
-      if (mr_boneHips)      { mr_boneHips.rotation.z = shimmy*0.16; mr_boneHips.rotation.y = shimmy*0.09; }
-      if (mr_boneSpine)     { mr_boneSpine.rotation.z = -shimmy*0.09; mr_boneSpine.rotation.x = bob*0.8; }
-      if (mr_boneChest)     { mr_boneChest.rotation.z = shimmy*0.06; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.65 + Math.sin(t*6.5+1.5)*0.28; mr_boneLUpperArm.rotation.x = 0.18; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -(0.65 + Math.sin(t*6.5)*0.28);    mr_boneRUpperArm.rotation.x = 0.18; }
-      if (mr_boneLLowerArm) mr_boneLLowerArm.rotation.z =  0.5 + Math.sin(t*6.5+0.8)*0.2;
-      if (mr_boneRLowerArm) mr_boneRLowerArm.rotation.z = -(0.5 + Math.sin(t*6.5-0.8)*0.2);
-      if (mr_boneLHand)     { mr_boneLHand.rotation.z =  0.25 + Math.sin(t*9)*0.18; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -(0.25 + Math.sin(t*9+1)*0.18); }
-      if (mr_boneLUpperLeg) { mr_boneLUpperLeg.rotation.z = shimmy*0.08; }
-      if (mr_boneRUpperLeg) { mr_boneRUpperLeg.rotation.z = -shimmy*0.08; }
-      if (mr_boneLFoot)     mr_boneLFoot.rotation.x = -0.04 + Math.max(0, shimmy)*0.12;
-      if (mr_boneRFoot)     mr_boneRFoot.rotation.x = -0.04 + Math.max(0,-shimmy)*0.12;
-      if (mr_boneHead)      { mr_boneHead.rotation.z = Math.sin(t*3.25)*0.06; mr_boneHead.rotation.y = shimmy*0.05; }
-      setExpressionMr('excited');
-      setBSMr('A', Math.max(0, Math.sin(t*6.5)) * 0.22);
-      break;
-    }
-
-    case 'stretch': {
-      const cycle = t % 6.0;
-      if (cycle < 1.2) {
-        const p = Math.min(cycle/1.0, 1);
-        if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  1.0 - p*1.08; mr_boneLUpperArm.rotation.x = p*0.18; }
-        if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -(1.0 - p*1.08); mr_boneRUpperArm.rotation.x = p*0.18; }
-        if (mr_boneLLowerArm) mr_boneLLowerArm.rotation.z =  0.35 - p*0.3;
-        if (mr_boneRLowerArm) mr_boneRLowerArm.rotation.z = -(0.35 - p*0.3);
-        if (mr_boneSpine)     { mr_boneSpine.rotation.x = -p*0.08; }
-        setExpressionMr('neutral');
-      } else if (cycle < 4.5) {
-        if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z = -0.08; mr_boneLUpperArm.rotation.x = 0.18; }
-        if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z =  0.08; mr_boneRUpperArm.rotation.x = 0.18; }
-        if (mr_boneSpine)     { mr_boneSpine.rotation.x = -0.08 + Math.sin(cycle*0.5)*0.03; }
-        if (mr_boneHead)      { mr_boneHead.rotation.x = -0.05; }
-        setExpressionMr('neutral');
-      } else {
-        const p = Math.min((cycle - 4.5)/1.5, 1);
-        if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  -0.08 + p*(0.08 + 0.9); }
-        if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z =   0.08 - p*(0.08 + 0.9); }
-        if (mr_boneSpine)     mr_boneSpine.rotation.x = -0.08 + p*0.1;
-        if (mr_boneHead)      mr_boneHead.rotation.x = -0.05 + p*0.09;
-      }
-      break;
-    }
-
-    case 'hairflick': {
-      const cycle = t % 5.0;
-      const p     = Math.min(cycle / 1.2, 1);
-      const ret   = cycle > 2.5 ? Math.min((cycle - 2.5) / 2.5, 1) : 0;
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.9 + p*0.5; mr_boneRUpperArm.rotation.x = p*0.45; mr_boneRUpperArm.rotation.y = p * 0.2; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -(0.35 - p*0.3); mr_boneRLowerArm.rotation.x = p*0.35; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -(0.18 - p*0.3); mr_boneRHand.rotation.y = Math.sin(cycle*4)*0.12*p; }
-      if (mr_boneHead)      { mr_boneHead.rotation.z = p*0.06 - ret*0.06; mr_boneHead.rotation.y = -p*0.1 + ret*0.1; }
-      if (mr_boneSpine)     mr_boneSpine.rotation.z = p*0.04;
-      if (cycle > 1.2) setExpressionMr('happy'); else setExpressionMr('neutral');
-      setLeftFingerRelaxMr();
-      break;
-    }
-
-    case 'hiponhip': {
-      const sway = Math.sin(t * 1.1) * 0.08;
-      if (mr_boneHips)      { mr_boneHips.rotation.z = sway; mr_boneHips.rotation.x = 0.02; }
-      if (mr_boneSpine)     { mr_boneSpine.rotation.z = -sway * 0.6; }
-      if (mr_boneChest)     { mr_boneChest.rotation.z = sway * 0.3; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.55; mr_boneLUpperArm.rotation.x = 0.8; mr_boneLUpperArm.rotation.y = -0.3; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.45; mr_boneLLowerArm.rotation.x = 0.15; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.55; mr_boneRUpperArm.rotation.x = 0.8; mr_boneRUpperArm.rotation.y =  0.3; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.45; mr_boneRLowerArm.rotation.x = 0.15; }
-      if (mr_boneHead)      { mr_boneHead.rotation.z = Math.sin(t*0.5)*0.04; mr_boneHead.rotation.y = Math.sin(t*0.35)*0.06; }
-      setExpressionMr('happy');
-      setLeftFingerRelaxMr(); setRightFingerRelaxMr();
-      break;
-    }
-
-    case 'stirring': case 'chopping': case 'tasting':
-    case 'washingUp': case 'cabinetOpen': case 'noseCover':
-    case 'windowLook': case 'fireGaze': case 'monitor': case 'typing': {
-      // For kitchen/desk activities Lora mirrors a relaxed observing pose
-      const breathe = Math.sin(t * 0.6) * 0.012;
-      if (mr_boneSpine)     mr_boneSpine.rotation.x = 0.04 + breathe;
-      if (mr_boneChest)     mr_boneChest.rotation.x = 0.02 + breathe * 0.5;
-      if (mr_boneHead)      { mr_boneHead.rotation.x = 0.05 + Math.sin(t*0.3)*0.025; mr_boneHead.rotation.y = Math.sin(t*0.2)*0.06; }
-      if (mr_boneNeck)      mr_boneNeck.rotation.y = Math.sin(t*0.2)*0.03;
-      if (mr_boneHips)      mr_boneHips.rotation.z = Math.sin(t*0.4)*0.018;
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.9 + Math.sin(t*0.6)*0.04; mr_boneLUpperArm.rotation.x = 0.07; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.9 - Math.sin(t*0.6+0.5)*0.04; mr_boneRUpperArm.rotation.x = 0.07; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.5 + Math.sin(t*0.9)*0.03; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.5 - Math.sin(t*0.9+0.5)*0.03; }
-      if (mr_boneLHand)     { mr_boneLHand.rotation.z =  0.22 + Math.sin(t*1.8)*0.06; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -0.22 - Math.sin(t*1.8+1.0)*0.06; }
-      setExpressionMr('neutral');
-      setLeftFingerRelaxMr(); setRightFingerRelaxMr();
-      break;
-    }
-
-    default: {
-      // idle — gentle breathing sway with offset phase from Miss
-      const lt = t + 1.3;
-      const hipSway      = Math.sin(lt * 0.95) * 0.07;
-      const breathe      = Math.sin(lt * 0.68) * 0.013;
-      const chestOpp     = Math.sin(lt * 0.95 + 0.6) * 0.035;
-      const shoulderRoll = Math.sin(lt * 0.48) * 0.020;
-      if (mr_boneHips)      { mr_boneHips.rotation.z = hipSway; mr_boneHips.rotation.x = Math.abs(hipSway)*0.3; mr_boneHips.rotation.y = Math.sin(lt*0.5)*0.05; }
-      if (mr_boneSpine)     { mr_boneSpine.rotation.z = -hipSway*0.6; mr_boneSpine.rotation.x = breathe; mr_boneSpine.rotation.y = Math.sin(lt*0.5)*0.022; }
-      if (mr_boneChest)     { mr_boneChest.rotation.z = chestOpp; mr_boneChest.rotation.x = breathe*0.85; mr_boneChest.rotation.y = shoulderRoll; }
-      if (mr_boneHead)      { mr_boneHead.rotation.z = Math.sin(lt*0.42)*0.04; mr_boneHead.rotation.x = Math.sin(lt*0.65)*0.03+0.02; mr_boneHead.rotation.y = Math.sin(lt*0.30)*0.07; }
-      if (mr_boneNeck)      { mr_boneNeck.rotation.z = Math.sin(lt*0.42)*0.018; mr_boneNeck.rotation.y = Math.sin(lt*0.30)*0.035; }
-      if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z =  0.9 + Math.sin(lt*0.82)*0.06 + chestOpp*0.4; mr_boneLUpperArm.rotation.x =  0.07 + Math.sin(lt*0.52)*0.035; mr_boneLUpperArm.rotation.y =  0.04 + shoulderRoll*0.5; }
-      if (mr_boneLLowerArm) { mr_boneLLowerArm.rotation.z =  0.50 + Math.sin(lt*0.95)*0.04; mr_boneLLowerArm.rotation.x = -0.04; }
-      if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.9 - Math.sin(lt*0.82+0.5)*0.06 - chestOpp*0.4; mr_boneRUpperArm.rotation.x =  0.07 + Math.sin(lt*0.52+0.5)*0.035; mr_boneRUpperArm.rotation.y = -0.04 - shoulderRoll*0.5; }
-      if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.z = -0.50 - Math.sin(lt*0.95+0.5)*0.04; mr_boneRLowerArm.rotation.x = -0.04; }
-      if (mr_boneLHand)     { mr_boneLHand.rotation.z =  0.24 + Math.sin(lt*2.0)*0.07; mr_boneLHand.rotation.x =  0.10 + Math.sin(lt*2.4)*0.04; }
-      if (mr_boneRHand)     { mr_boneRHand.rotation.z = -0.24 - Math.sin(lt*2.0+1.0)*0.07; mr_boneRHand.rotation.x =  0.10 + Math.sin(lt*2.4+1.0)*0.04; }
-      if (mr_boneLUpperLeg) { mr_boneLUpperLeg.rotation.z = -0.04; mr_boneLUpperLeg.rotation.x = 0; }
-      if (mr_boneRUpperLeg) { mr_boneRUpperLeg.rotation.z =  0.06; mr_boneRUpperLeg.rotation.x = 0; }
-      if (mr_boneLLowerLeg) mr_boneLLowerLeg.rotation.x = 0.04;
-      if (mr_boneRLowerLeg) mr_boneRLowerLeg.rotation.x = 0.04;
-      if (mr_boneLFoot)     { mr_boneLFoot.rotation.x = -0.05; mr_boneLFoot.rotation.z = -0.03; }
-      if (mr_boneRFoot)     { mr_boneRFoot.rotation.x = -0.05; mr_boneRFoot.rotation.z =  0.04; }
-      setLeftFingerRelaxMr(); setRightFingerRelaxMr();
-      break;
-    }
-  }
+  // Right hand stays near chin/face — flirty lean
+  if (mr_boneRUpperArm) { mr_boneRUpperArm.rotation.z = -0.80 + Math.sin(t*0.7)*0.04; mr_boneRUpperArm.rotation.x = 0.35; }
+  if (mr_boneRLowerArm) { mr_boneRLowerArm.rotation.x = 0.60 + Math.sin(t*0.9)*0.03; }
+  // Left arm relaxed sway
+  if (mr_boneLUpperArm) { mr_boneLUpperArm.rotation.z = 0.95 + Math.sin(t*0.55)*0.03; }
 }
-
-// ── Aliased exports so engine-life.js can import consistent names ─
-// engine-life.js imports boneHeadMr, boneHipsMr etc. — these
-// point at the same mr_ variables so no duplication.
-export { mr_boneHead      as boneHeadMr      };
-export { mr_boneNeck      as boneNeckMr      };
-export { mr_boneSpine     as boneSpineMr     };
-export { mr_boneChest     as boneChestMr     };
-export { mr_boneHips      as boneHipsMr      };
-export { mr_boneLUpperLeg as boneLUpperLegMr  };
-export { mr_boneRUpperLeg as boneRUpperLegMr  };
-export { mr_boneLLowerLeg as boneLLowerLegMr  };
-export { mr_boneRLowerLeg as boneRLowerLegMr  };
-export { mr_boneLFoot     as boneLFootMr      };
-export { mr_boneRFoot     as boneRFootMr      };
-export { mr_boneLUpperArm as boneLUpperArmMr  };
-export { mr_boneRUpperArm as boneRUpperArmMr  };
-export { mr_boneLLowerArm as boneLLowerArmMr  };
-export { mr_boneRLowerArm as boneRLowerArmMr  };
-export { mr_boneLHand     as boneLHandMr      };
-export { mr_boneRHand     as boneRHandMr      };
 
 // ── Mr lip sync ──────────────────────────────────────────────────
 let _mrLipActive  = false;
