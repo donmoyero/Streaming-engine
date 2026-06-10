@@ -223,22 +223,28 @@ function _attachOutfitToVRM(vrmObj, glbPath) {
     const bone    = vrmObj.humanoid?.getNormalizedBoneNode(boneName);
 
     // Auto-detect GLB unit: measure bounding box height.
-    // If height > 10 the GLB is in cm → divide by 100.
-    // If height is already ~1-3 it's in metres → use as-is (scale 1.0).
+    // The VRM skeleton was exported at ~1.6 cm scale and then scaled up 102x
+    // by _finaliseVRM. Outfit pieces attached to a bone INHERIT that world
+    // scale — so we must NOT re-multiply by vrmObj.scene.scale.x (102).
+    // We only need to fix the outfit's own unit system:
+    //   • outfit in metres  (rawH 0.1–3)   → scale 1.0
+    //   • outfit in cm      (rawH 10–300)  → scale 0.01
+    //   • outfit in VRM-cm  (rawH < 0.05)  → scale 100  (rare, same tiny unit as VRM)
     item.updateMatrixWorld(true);
     const tmpBox  = new THREE.Box3().setFromObject(item);
     const tmpSize = tmpBox.getSize(new THREE.Vector3());
     const rawH    = Math.max(tmpSize.x, tmpSize.y, tmpSize.z);
-    const unitFix = rawH > 10 ? 0.01 : 1.0;
-    // Avatar was auto-scaled to 1.65 m — outfit must match that same scale
-    const sc = vrmObj.scene.scale.x;
+    let unitFix;
+    if      (rawH > 10)   unitFix = 0.01;   // cm → metres
+    else if (rawH < 0.05) unitFix = 100;    // VRM-cm → metres
+    else                  unitFix = 1.0;    // already metres
 
     if (bone) {
-      item.scale.setScalar(sc * unitFix);
+      item.scale.setScalar(unitFix);
       bone.add(item);
-      console.log(`[Wardrobe] attached ${glbPath} → ${boneName} (unitFix=${unitFix})`);
+      console.log(`[Wardrobe] attached ${glbPath} → ${boneName} (rawH=${rawH.toFixed(3)}, unitFix=${unitFix})`);
     } else {
-      item.scale.setScalar(sc * unitFix);
+      item.scale.setScalar(unitFix);
       item.position.copy(vrmObj.scene.position);
       scene.add(item);
       console.warn(`[Wardrobe] bone "${boneName}" not found for ${glbPath}, placed in scene`);
@@ -288,18 +294,19 @@ const LORA_COLOURS = {
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
-  // ── Diagnosis confirmed: both VRMs export with a single shared
-  //    'glTF_2_0_default_material', 0 textures, 0 images.
-  //    Every mesh MUST get its own fresh MeshStandardMaterial.
-  //    Without this, the last colour written wins and all meshes
-  //    end up the same flat grey/tan clay colour you see.
+  // Both VRMs export with ONE shared 'glTF_2_0_default_material', 0 textures.
+  // Every mesh MUST get its own fresh MeshStandardMaterial with the right colour.
+  // If we skip unmapped meshes they stay sharing the grey default — and because
+  // it's one shared object, the last colour written bleeds to all of them.
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
-    const name = obj.name;
+    const name   = obj.name;
+    const isEye  = name === 'Eye_Rmesh' || name === 'Eyes_Lmesh';
+    const isLash = name === 'Lashesmesh' || name === 'Lashes_mesh';
+    const isTooth = name === 'Teethmesh';
 
-    // ── Eyes: canvas-painted iris ────────────────────────────────
-    if (name === 'Eye_Rmesh' || name === 'Eyes_Lmesh') {
+    if (isEye) {
       const eyeCanvas  = document.createElement('canvas');
       eyeCanvas.width  = 128; eyeCanvas.height = 128;
       const ctx = eyeCanvas.getContext('2d');
@@ -329,39 +336,40 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       return;
     }
 
-    // ── All other meshes: assign colour from map ─────────────────
-    // Even meshes NOT in colourMap still need a fresh material
-    // (otherwise they share the grey default with the skin mesh
-    // and the last colour assigned overwrites everything).
-    const entry      = colourMap[name];
-    const hex        = entry ? entry.hex        : 0x888888;
-    const isSkin     = entry ? entry.isSkin === true   : false;
-    const isMetallic = entry ? entry.metallic === true : false;
-    const isLash     = name === 'Lashesmesh' || name === 'Lashes_mesh';
-    const isTooth    = name === 'Teethmesh';
-
     if (isLash) {
       obj.material = new THREE.MeshStandardMaterial({
         color: 0x050202, roughness: 0.9, metalness: 0,
         envMapIntensity: 0, side: THREE.DoubleSide
       });
-    } else if (isTooth) {
+      return;
+    }
+
+    if (isTooth) {
       obj.material = new THREE.MeshStandardMaterial({
         color: 0xfff8f0, roughness: 0.4, metalness: 0,
         envMapIntensity: 0, side: THREE.FrontSide
       });
-    } else {
-      obj.material = new THREE.MeshStandardMaterial({
-        color:             hex,
-        roughness:         isMetallic ? 0.15 : isSkin ? 0.6 : 0.72,
-        metalness:         isMetallic ? 0.85 : 0.0,
-        emissive:          new THREE.Color(isSkin ? hex : 0x000000),
-        emissiveIntensity: isSkin ? 0.12 : 0.0,
-        envMapIntensity:   0,
-        side:              THREE.FrontSide,
-        depthWrite:        true,
-      });
+      return;
     }
+
+    // All other meshes — give every one its own material.
+    // Unmapped meshes (not in colourMap) get a neutral fallback so they
+    // don't accidentally share the skin material.
+    const entry      = colourMap[name];
+    const hex        = entry ? entry.hex             : 0x999999;
+    const isSkin     = entry ? entry.isSkin === true : false;
+    const isMetallic = entry ? entry.metallic === true : false;
+
+    obj.material = new THREE.MeshStandardMaterial({
+      color:             hex,
+      roughness:         isMetallic ? 0.15 : isSkin ? 0.6 : 0.72,
+      metalness:         isMetallic ? 0.85 : 0.0,
+      emissive:          new THREE.Color(isSkin ? hex : 0x000000),
+      emissiveIntensity: isSkin ? 0.12 : 0.0,
+      envMapIntensity:   0,
+      side:              THREE.FrontSide,
+      depthWrite:        true,
+    });
   });
 }
 
