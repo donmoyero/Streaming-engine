@@ -288,17 +288,18 @@ const LORA_COLOURS = {
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
+  // ── Diagnosis confirmed: both VRMs export with a single shared
+  //    'glTF_2_0_default_material', 0 textures, 0 images.
+  //    Every mesh MUST get its own fresh MeshStandardMaterial.
+  //    Without this, the last colour written wins and all meshes
+  //    end up the same flat grey/tan clay colour you see.
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
     const name = obj.name;
 
-    // Eye meshes — canvas-painted iris so they look real
-    const isEye  = name === 'Eye_Rmesh' || name === 'Eyes_Lmesh';
-    const isLash = name === 'Lashesmesh' || name === 'Lashes_mesh';
-    const isTooth = name === 'Teethmesh';
-
-    if (isEye) {
+    // ── Eyes: canvas-painted iris ────────────────────────────────
+    if (name === 'Eye_Rmesh' || name === 'Eyes_Lmesh') {
       const eyeCanvas  = document.createElement('canvas');
       eyeCanvas.width  = 128; eyeCanvas.height = 128;
       const ctx = eyeCanvas.getContext('2d');
@@ -325,7 +326,21 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
         map: eyeTex, roughness: 0.05, metalness: 0.0,
         envMapIntensity: 0, side: THREE.FrontSide
       });
-    } else if (isLash) {
+      return;
+    }
+
+    // ── All other meshes: assign colour from map ─────────────────
+    // Even meshes NOT in colourMap still need a fresh material
+    // (otherwise they share the grey default with the skin mesh
+    // and the last colour assigned overwrites everything).
+    const entry      = colourMap[name];
+    const hex        = entry ? entry.hex        : 0x888888;
+    const isSkin     = entry ? entry.isSkin === true   : false;
+    const isMetallic = entry ? entry.metallic === true : false;
+    const isLash     = name === 'Lashesmesh' || name === 'Lashes_mesh';
+    const isTooth    = name === 'Teethmesh';
+
+    if (isLash) {
       obj.material = new THREE.MeshStandardMaterial({
         color: 0x050202, roughness: 0.9, metalness: 0,
         envMapIntensity: 0, side: THREE.DoubleSide
@@ -336,20 +351,12 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
         envMapIntensity: 0, side: THREE.FrontSide
       });
     } else {
-      const entry = colourMap[name];
-      if (!entry) return;  // not in map — keep VRM original material
-
-      // IMPORTANT: The VRM has ONE shared material for ALL meshes.
-      // We MUST create a brand-new material per mesh or changing one changes all.
-      const hex        = entry.hex;
-      const isSkin     = entry.isSkin   === true;
-      const isMetallic = entry.metallic === true;
       obj.material = new THREE.MeshStandardMaterial({
         color:             hex,
-        roughness:         isMetallic ? 0.15 : isSkin ? 0.65 : 0.72,
+        roughness:         isMetallic ? 0.15 : isSkin ? 0.6 : 0.72,
         metalness:         isMetallic ? 0.85 : 0.0,
         emissive:          new THREE.Color(isSkin ? hex : 0x000000),
-        emissiveIntensity: isSkin ? 0.10 : 0.0,
+        emissiveIntensity: isSkin ? 0.12 : 0.0,
         envMapIntensity:   0,
         side:              THREE.FrontSide,
         depthWrite:        true,
