@@ -1229,12 +1229,27 @@ bindSlider('scale', v => { const vrm = _vrm(); if (vrm) vrm.scene.scale.set(v,v,
 function bindColour(id, meshNames) {
   const el = document.getElementById(id); if (!el) return;
   el.addEventListener('input', () => {
-    const vrm = _vrm();
-    if (!vrm) return;
     const col = new THREE.Color(el.value);
-    vrm.scene.traverse(obj => {
-      if (obj.isMesh && meshNames.includes(obj.name)) { const m = obj.material; if (m) { m.color.set(col); m.needsUpdate = true; } }
-    });
+    // Apply to BOTH Miss and Lora — their mesh names differ, both lists covered in the callers below
+    const targets = [_vrm(), window.getVrmLora ? window.getVrmLora() : null].filter(Boolean);
+    for (const vrmObj of targets) {
+      vrmObj.scene.traverse(obj => {
+        if (!obj.isMesh || !meshNames.includes(obj.name)) return;
+        const m = obj.material;
+        if (!m) return;
+        // Eye meshes use a canvas map — replace with plain colour so the picker takes effect
+        if (m.map) {
+          obj.material = new THREE.MeshStandardMaterial({
+            color: col, roughness: m.roughness ?? 0.5, metalness: m.metalness ?? 0,
+            envMapIntensity: 0, side: THREE.FrontSide, depthWrite: true,
+          });
+        } else {
+          m.color.set(col);
+          if (m.emissive) m.emissive.set(col).multiplyScalar(0.12);
+          m.needsUpdate = true;
+        }
+      });
+    }
   });
 }
 bindColour('col-skin',   ['Julie_Figuremesh','Teargummesh','Figure_mesh']);
