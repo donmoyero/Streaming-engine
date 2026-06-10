@@ -392,6 +392,22 @@ function _onBothLoaded() {
     _initDeadAir();
     initTwitchChat();
     import('./engine-bff.js').then(m => m.startCoupleEngine());
+    // Start Lora's independent walk/room system
+    import('./engine-lora-life.js').then(m => {
+      m.initLoraPos();
+      let _lastT = performance.now();
+      function _loraTick() {
+        const now   = performance.now();
+        const delta = Math.min((now - _lastT) / 1000, 0.1);
+        _lastT      = now;
+        m.updateLoraWalk(delta);
+        m.updateLoraFacing(delta);
+        m.loraLifeUpdate(delta);
+        requestAnimationFrame(_loraTick);
+      }
+      requestAnimationFrame(_loraTick);
+      console.log('[Lora Life] walk system started ✓');
+    });
   }, 400);
 }
 
@@ -447,6 +463,11 @@ _gltfLoader.load('House.glb', (gltf) => {
     for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
     if (window.ROOM_CONNECTIONS_REF) {
       for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
+        for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
+      }
+    }
+    if (window.LORA_ROOM_CONNECTIONS_REF) {
+      for (const targets of Object.values(window.LORA_ROOM_CONNECTIONS_REF)) {
         for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
       }
     }
