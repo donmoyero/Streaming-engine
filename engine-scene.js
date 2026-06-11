@@ -1,6 +1,12 @@
 // ================================================================
 //  engine-scene.js  — DUAL AVATAR (Miss OG Tinz + Lora)
 //  Two best friends, different outfits, facing each other.
+//
+//  FIXES in this version:
+//  1. VRM_MR_BASE_ROT_Y = Math.PI  (Lora was facing backwards)
+//  2. LORA_FACE_Y corrected to Math.PI * 0.45
+//  3. _updateLoraWalk facing uses Math.atan2(dx,dz) + Math.PI
+//  4. _LORA_ROOMS corrected to actual house furniture positions
 // ================================================================
 
 import * as THREE from 'three';
@@ -112,27 +118,23 @@ export function getVrm()   { return vrm; }
 export function _setVrm(v) { vrm = v; }
 
 // ── Lora VRM ref ─────────────────────────────────────────────────
-export let vrmMr            = null;   // kept as vrmMr internally for bone compat
-export let VRM_MR_BASE_ROT_Y = 0;
+export let vrmMr             = null;
+// FIX: was 0 — Lora's model forward is +Z same as Miss, so needs Math.PI
+export let VRM_MR_BASE_ROT_Y = Math.PI;
 export function getVrmMr()   { return vrmMr; }
-export function getVrmLora() { return vrmMr; }   // named alias
+export function getVrmLora() { return vrmMr; }
 export function _setVrmMr(v) { vrmMr = v; }
 
-// Expose getVrmLora as a global so engine-life.js render loop can call it
-// without a static import (avoids circular dependency)
 window.getVrmLora = () => vrmMr;
 
-// ── Spawn positions — inside the studio floor (solid mesh confirmed) ─
-// Raw coords are in unscaled house units. They get multiplied by hScale
-// inside the house load callback so they always match the scaled house.
-// Studio origin: x=-2.7, z=-3.5 (desk spot). We place them either side
-// of the desk, facing each other across it.
-export let MISS_SPAWN_X = -2.2;   // slightly right of desk centre
+// ── Spawn positions ──────────────────────────────────────────────
+export let MISS_SPAWN_X = -2.2;
 export let MISS_SPAWN_Z = -3.2;
-export let LORA_SPAWN_X = -3.2;   // slightly left of desk centre
+export let LORA_SPAWN_X = -3.2;
 export let LORA_SPAWN_Z = -3.2;
 export const MISS_FACE_Y  =  Math.PI * 0.55;   // Miss faces left toward Lora
-export const LORA_FACE_Y  = -Math.PI * 0.55;   // Lora faces right toward Miss
+// FIX: was -Math.PI * 0.55 — now offset by Math.PI to match corrected base rotation
+export const LORA_FACE_Y  =  Math.PI * 0.45;   // Lora faces right toward Miss
 
 // ── Raycast floor helper ─────────────────────────────────────────
 function _rayFloor(spawnX, spawnZ) {
@@ -172,54 +174,49 @@ function _placeOneVRM(v, spawnX, spawnZ, faceY) {
   v.scene.rotation.y = faceY;
 }
 
-// ── Wardrobe: DISABLED — VRM body meshes used directly ────────────
-
-
-// ── Miss OG Tinz — keyed by NODE name (what Three.js obj.name returns in traverse) ──
+// ── Miss OG Tinz colour map ──────────────────────────────────────
 // node name  →  mesh name  (for reference)
 // Julie_Figure → Julie_Figuremesh   Brow → Browmesh   Teargum → Teargummesh
 // Ear_Jewel → Ear_Jewelmesh   Lashes → Lashesmesh   Teeth → Teethmesh
 // Hair_Block → Hair_Blockmesh   Top → Topmesh   Bottom → Bottommesh
 // Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Necklecemesh
 const MISS_COLOURS = {
-  Julie_Figure: { hex: 0x7B3F00, isSkin: true              },  // dark brown body
-  Brow:         { hex: 0x1a0a00, isSkin: false             },  // dark brows
-  Teargum:      { hex: 0x7B3F00, isSkin: true              },  // gums (skin tone)
-  Ear_Jewel:    { hex: 0xFFD700, isSkin: false, metallic: true },  // gold earrings
-  Lashes:       { hex: 0x050505, isSkin: false             },  // black lashes
-  Teeth:        { hex: 0xfffaf0, isSkin: false             },  // off-white teeth
-  Hair_Block:   { hex: 0x0d0d0d, isSkin: false             },  // black hair
-  Top:          { hex: 0xff69b4, isSkin: false             },  // pink top
-  Bottom:       { hex: 0xff1493, isSkin: false             },  // deep pink bottoms
-  Shoe_R:       { hex: 0x111111, isSkin: false             },  // black shoe R
-  Shoe_L:       { hex: 0x111111, isSkin: false             },  // black shoe L
-  Necklece:     { hex: 0xFFD700, isSkin: false, metallic: true },  // gold necklace
+  Julie_Figure: { hex: 0x7B3F00, isSkin: true              },
+  Brow:         { hex: 0x1a0a00, isSkin: false             },
+  Teargum:      { hex: 0x7B3F00, isSkin: true              },
+  Ear_Jewel:    { hex: 0xFFD700, isSkin: false, metallic: true },
+  Lashes:       { hex: 0x050505, isSkin: false             },
+  Teeth:        { hex: 0xfffaf0, isSkin: false             },
+  Hair_Block:   { hex: 0x0d0d0d, isSkin: false             },
+  Top:          { hex: 0xff69b4, isSkin: false             },
+  Bottom:       { hex: 0xff1493, isSkin: false             },
+  Shoe_R:       { hex: 0x111111, isSkin: false             },
+  Shoe_L:       { hex: 0x111111, isSkin: false             },
+  Necklece:     { hex: 0xFFD700, isSkin: false, metallic: true },
 };
 
-// ── Lora — keyed by NODE name (what Three.js obj.name returns in traverse) ──
+// ── Lora colour map ──────────────────────────────────────────────
 // node name  →  mesh name  (for reference)
 // Mr_OgTinz_Figure → Figure_mesh   Brow → Browmesh   Teargum → Teargummesh
 // Ear_Jewel → Ear_mesh   Lashes → Lashes_mesh   Teeth → Teethmesh
 // Hair_Block → Hair_mesh   Top → Shirt_mesh   Bottom → Trousers_mesh
 // Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Chain_mesh
 const LORA_COLOURS = {
-  Mr_OgTinz_Figure: { hex: 0xc68642, isSkin: true              },  // medium brown body
-  Brow:             { hex: 0x2a1500, isSkin: false             },  // dark brows
-  Teargum:          { hex: 0xc68642, isSkin: true              },  // gums (skin tone)
-  Ear_Jewel:        { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver earrings
-  Lashes:           { hex: 0x080808, isSkin: false             },  // black lashes
-  Teeth:            { hex: 0xfff9f0, isSkin: false             },  // off-white teeth
-  Hair_Block:       { hex: 0x3d1a00, isSkin: false             },  // dark auburn hair
-  Top:              { hex: 0x7c3aed, isSkin: false             },  // purple top
-  Bottom:           { hex: 0x1a1a1a, isSkin: false             },  // black bottoms
-  Shoe_R:           { hex: 0xf5f5f5, isSkin: false             },  // white shoe R
-  Shoe_L:           { hex: 0xf5f5f5, isSkin: false             },  // white shoe L
-  Necklece:         { hex: 0xC0C0C0, isSkin: false, metallic: true },  // silver chain
+  Mr_OgTinz_Figure: { hex: 0xc68642, isSkin: true              },
+  Brow:             { hex: 0x2a1500, isSkin: false             },
+  Teargum:          { hex: 0xc68642, isSkin: true              },
+  Ear_Jewel:        { hex: 0xC0C0C0, isSkin: false, metallic: true },
+  Lashes:           { hex: 0x080808, isSkin: false             },
+  Teeth:            { hex: 0xfff9f0, isSkin: false             },
+  Hair_Block:       { hex: 0x3d1a00, isSkin: false             },
+  Top:              { hex: 0x7c3aed, isSkin: false             },
+  Bottom:           { hex: 0x1a1a1a, isSkin: false             },
+  Shoe_R:           { hex: 0xf5f5f5, isSkin: false             },
+  Shoe_L:           { hex: 0xf5f5f5, isSkin: false             },
+  Necklece:         { hex: 0xC0C0C0, isSkin: false, metallic: true },
 };
 
 function applyVRMColours(vrmObj, colourMap, isLora = false) {
-  // VRMs export with ONE shared default material, 0 textures.
-  // Every mesh needs its own MeshStandardMaterial or colours bleed into each other.
   vrmObj.scene.traverse((obj) => {
     if (!obj.isMesh) return;
     obj.frustumCulled = false;
@@ -232,9 +229,7 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       const eyeCanvas = document.createElement('canvas');
       eyeCanvas.width = eyeCanvas.height = 128;
       const ctx  = eyeCanvas.getContext('2d');
-      // White sclera
       ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0, 0, 128, 128);
-      // Iris gradient
       const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 38);
       if (isLora) {
         grad.addColorStop(0, '#050a12'); grad.addColorStop(0.4, '#0e1f35');
@@ -244,12 +239,9 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
         grad.addColorStop(0.8, '#5c3010'); grad.addColorStop(1, '#2a1205');
       }
       ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(64, 64, 38, 0, Math.PI * 2); ctx.fill();
-      // Pupil
       ctx.fillStyle = '#020203'; ctx.beginPath(); ctx.arc(64, 64, 18, 0, Math.PI * 2); ctx.fill();
-      // Catchlights
       ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(74, 52, 8, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,0.4)';  ctx.beginPath(); ctx.arc(54, 72, 4, 0, Math.PI * 2); ctx.fill();
-      // Limbal ring
       ctx.strokeStyle = '#0d0500'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(64, 64, 38, 0, Math.PI * 2); ctx.stroke();
       const eyeTex = new THREE.CanvasTexture(eyeCanvas);
@@ -277,9 +269,6 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
       return;
     }
 
-    // Every other mesh — mapped ones get their colour, unmapped get neutral grey.
-    // Never skip/return-early: that leaves meshes sharing the one default material
-    // and the last colour written wins for all of them.
     const entry      = colourMap[name];
     const hex        = entry ? entry.hex              : 0x999999;
     const isSkin     = entry ? entry.isSkin === true  : false;
@@ -344,7 +333,6 @@ function _onBothLoaded() {
     _initDeadAir();
     initTwitchChat();
     import('./engine-bff.js').then(m => m.startCoupleEngine());
-    // ── Inline Lora walk system (no separate file needed) ────────────
     _initLoraWalk();
   }, 400);
 }
@@ -379,9 +367,6 @@ _gltfLoader.load('House.glb', (gltf) => {
   if (!window._houseScaled) {
     window._houseScaled = true;
 
-    // Scale spawn coords to match the house — this is the fix for the
-    // hScale mismatch. Spawn coords are defined in raw house units above
-    // and must be multiplied by hScale exactly once here.
     MISS_SPAWN_X *= hScale;
     MISS_SPAWN_Z *= hScale;
     LORA_SPAWN_X *= hScale;
@@ -411,7 +396,6 @@ _gltfLoader.load('House.glb', (gltf) => {
     }
   }
   if (vrm || vrmMr) {
-    // Use rAF so the scaled spawn coords are set before placement
     requestAnimationFrame(() => {
       if (vrm)   _finaliseVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
       if (vrmMr) _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
@@ -468,16 +452,30 @@ gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
 
 // ================================================================
 //  LORA INLINE WALK SYSTEM
-//  Mirrors Miss's room-walk logic independently for Lora.
-//  No separate file — lives here to avoid 404 on GitHub Pages.
 // ================================================================
 
+// FIX: All room coordinates corrected to match actual house furniture positions.
+//
+// House coordinate reference (unscaled, before hScale multiply):
+//   X axis: -6 left (kitchen) ←→ +6 right (bedroom)
+//   Z axis: -6 back (TV wall) ←→ +6 front (windows)
+//
+//   living-room:  sofa [-4.16,-4.42]  coffee table [-3.04,-3.68]  TV [-1.93,-4.46]
+//   kitchen:      stove/counter [-4.18, 0.03]  sink [-4.85,-0.93]
+//   dining:       tables [-2.29,1.58] [-2.13,3.26]  chairs cluster [-2.5,1.5]
+//   hallway:      door junction [0.6,-2.0] — between all rooms
+//   bedroom:      closets [2.76,-0.84] [4.36,2.39]  rug [3.21,0.86]
+//   bathroom:     right front zone [3.8, 1.5]
+//   studio:       spawn area near TV wall [-2.5,-3.5]
+
 const _LORA_ROOMS = [
-  { name: 'studio',      x: -2.2, z: -3.2 },
-  { name: 'livingRoom',  x:  1.2, z: -1.8 },
-  { name: 'kitchen',     x:  2.8, z: -3.5 },
-  { name: 'hallway',     x:  0.0, z:  0.5 },
-  { name: 'bedroom',     x: -3.0, z:  1.8 },
+  { name: 'studio',      x: -2.5, z: -3.5 },  // spawn area, TV wall — ✅ was correct
+  { name: 'livingRoom',  x: -3.0, z: -3.8 },  // sofa + coffee table — ✅ was close
+  { name: 'kitchen',     x: -4.0, z:  0.3 },  // FIX: was [2.8,-3.5] (bedroom area)
+  { name: 'dining',      x: -2.0, z:  2.5 },  // FIX: was missing — tables + chairs
+  { name: 'hallway',     x:  0.6, z: -1.8 },  // door junction — ✅ was close
+  { name: 'bedroom',     x:  3.5, z: -1.0 },  // FIX: was [-3.0,1.8] (dining area)
+  { name: 'bathroom',    x:  3.8, z:  1.5 },  // FIX: was missing — right front zone
 ];
 
 let _loraRoom    = 0;
@@ -499,8 +497,7 @@ function _loraPickNextRoom() {
 
 function _initLoraWalk() {
   if (!vrmMr) { setTimeout(_initLoraWalk, 500); return; }
-  // Scale room coords once (hScale already applied to spawn coords above,
-  // use the same ratio derived from LORA_SPAWN_X vs raw -3.2)
+  // Derive hScale from the already-scaled LORA_SPAWN_X vs raw -3.2
   const hScale = Math.abs(LORA_SPAWN_X / -3.2);
   if (!window._loraRoomsScaled) {
     window._loraRoomsScaled = true;
@@ -517,14 +514,13 @@ function _initLoraWalk() {
     requestAnimationFrame(_loraTick);
   }
   requestAnimationFrame(_loraTick);
-  console.log('[Lora Walk] inline system started ✓');
+  console.log('[Lora Walk] inline system started ✓  rooms:', _LORA_ROOMS.map(r => r.name).join(', '));
 }
 
 function _updateLoraWalk(dt) {
   if (!vrmMr) return;
 
   if (_loraWalking && _loraTarget) {
-    // Advance toward target
     const pos   = vrmMr.scene.position;
     const dx    = _loraTarget.x - pos.x;
     const dz    = _loraTarget.z - pos.z;
@@ -539,8 +535,8 @@ function _updateLoraWalk(dt) {
       _loraTarget   = null;
       _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
     } else {
-      // Face walk direction
-      vrmMr.scene.rotation.y = Math.atan2(dx, dz);
+      // FIX: was Math.atan2(dx,dz) — Lora's forward is +PI offset from raw atan2
+      vrmMr.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
       pos.x += (dx / dist) * step;
       pos.z += (dz / dist) * step;
     }
