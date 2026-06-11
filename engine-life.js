@@ -1491,6 +1491,24 @@ window.missOgTinz = {
   },
 };
 
+// ── Activity bridges for music/BFF engine ───────────────────────
+Object.defineProperty(window, '_missCurrentActivity', { get: () => ACTIVITY.current,    configurable: true });
+Object.defineProperty(window, '_loraCurrentActivity', { get: () => ACTIVITY_MR.current, configurable: true });
+window._onActivityChanged = onActivityChanged;  // camera angle picker
+window._setMissActivity = (actName, duration) => {
+  ACTIVITY.current  = actName;
+  ACTIVITY.timer    = 0;
+  ACTIVITY.phase    = 0;
+  if (duration) ACTIVITY.duration = duration;
+  onActivityChanged(actName);
+};
+window._setLoraActivity = (actName, duration) => {
+  ACTIVITY_MR.current  = actName;
+  ACTIVITY_MR.timer    = 0;
+  ACTIVITY_MR.phase    = 0;
+  if (duration) ACTIVITY_MR.duration = duration;
+};
+
 // ================================================================
 //  RENDER LOOP
 // ================================================================
