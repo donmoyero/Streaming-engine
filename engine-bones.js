@@ -863,6 +863,351 @@ export function activityUpdate(delta) {
       break;
     }
 
+    // ── CABINET OPEN ───────────────────────────────────────────
+    // Standing facing cabinet/wardrobe. Right hand reaches for handle,
+    // pauses, then both hands browse inside with head tilt to look in.
+    // Phase 0–0.6s: reach forward. 0.6–2.5s: hold/browse. 2.5–4s: step back.
+    // 4–6s: settle idle, then loop.
+    case 'cabinetOpen': {
+      const cycle = t % 6.0;
+      if (cycle < 0.6) {
+        // Reach forward
+        const p = cycle / 0.6;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + ep*0.52; boneRUpperArm.rotation.x = ep*0.45; boneRUpperArm.rotation.y = ep*0.1; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -(0.35 - ep*0.1); boneRLowerArm.rotation.x = ep*0.55; }
+        if (boneRHand)     { boneRHand.rotation.x = -ep*0.2; boneRHand.rotation.z = -(0.18 - ep*0.05); }
+        if (boneSpine)     { boneSpine.rotation.x = ep*0.06; }
+        if (boneHead)      { boneHead.rotation.x = ep*0.08; }
+        setRightFingerCurl(0.3);
+        setExpression('neutral');
+      } else if (cycle < 2.5) {
+        // Hold handle + browse — head tilts to look inside
+        const browse = cycle - 0.6;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 + Math.sin(browse*1.2)*0.03; boneRUpperArm.rotation.x = 0.45; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.25; boneRLowerArm.rotation.x = 0.55 + Math.sin(browse*0.8)*0.04; }
+        if (boneRHand)     { boneRHand.rotation.x = -0.2 + Math.sin(browse*2)*0.04; }
+        // Left arm hangs, slightly out — natural standing
+        if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.9 + Math.sin(browse*0.7)*0.03; boneLUpperArm.rotation.x = 0.06; }
+        if (boneLLowerArm) boneLLowerArm.rotation.z = 0.45;
+        if (boneLHand)     { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.06; }
+        if (boneHead)      { boneHead.rotation.x = 0.08 + Math.sin(browse*0.5)*0.05; boneHead.rotation.z = Math.sin(browse*0.4)*0.03; }
+        if (boneSpine)     boneSpine.rotation.x = 0.06 + Math.sin(browse*0.6)*0.01;
+        if (boneHips)      boneHips.rotation.z = Math.sin(browse*0.5)*0.03;
+        setRightFingerCurl(0.3);
+        setExpression(browse > 1.0 ? 'happy' : 'neutral');
+        if (browse > 1.0) setBS('I', Math.sin((browse-1.0)*1.5)*0.08);
+      } else if (cycle < 4.0) {
+        // Step back — arm retracts
+        const p = (cycle - 2.5) / 1.5;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 - ep*0.52; boneRUpperArm.rotation.x = 0.45 - ep*0.4; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.25 - ep*0.1; boneRLowerArm.rotation.x = 0.55 - ep*0.5; }
+        if (boneRHand)     { boneRHand.rotation.x = -0.2 + ep*0.2; boneRHand.rotation.z = -(0.13 + ep*0.05); }
+        if (boneHead)      { boneHead.rotation.x = 0.08 - ep*0.06; boneHead.rotation.z = 0; }
+        if (boneSpine)     boneSpine.rotation.x = 0.06 - ep*0.04;
+        setRightFingerRelax();
+        setExpression('neutral'); setBS('I', 0);
+      } else {
+        // Settled idle
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + Math.sin(t*0.6)*0.02; boneRUpperArm.rotation.x = 0.05; }
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.35;
+        if (boneHips)      boneHips.rotation.z = Math.sin(t*0.8)*0.04;
+        setRightFingerRelax(); setLeftFingerRelax();
+        setExpression('neutral');
+      }
+      break;
+    }
+
+    // ── WASHING UP ─────────────────────────────────────────────
+    // Both hands over sink, circular scrub motion. Occasional
+    // rinse lift (one hand rises, then lowers). End: shake dry.
+    // Spot: x:-4.849, z:-0.650, facingY: Math.PI*0.5 (facing +X toward sink)
+    case 'washingUp': {
+      const scrub = t * 4.0;
+      // Both arms extended down-forward at sink level
+      if (boneSpine)     { boneSpine.rotation.x = 0.10 + Math.sin(t*0.5)*0.01; boneSpine.rotation.z = Math.sin(t*0.4)*0.015; }
+      if (boneHead)      { boneHead.rotation.x = 0.14; boneHead.rotation.z = Math.sin(t*0.3)*0.02; }
+      if (boneHips)      boneHips.rotation.z = Math.sin(t*0.7)*0.03;
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.55; boneLUpperArm.rotation.x = 0.55; boneLUpperArm.rotation.y = -0.1; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.55; boneRUpperArm.rotation.x = 0.55; boneRUpperArm.rotation.y = 0.1; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.3; boneLLowerArm.rotation.x = 0.3 + Math.sin(scrub)*0.04; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3; boneRLowerArm.rotation.x = 0.3 + Math.cos(scrub)*0.04; }
+      // Circular wrist scrub — left and right offset by half cycle
+      if (boneLHand) {
+        boneLHand.rotation.z =  0.12 + Math.sin(scrub)*0.12;
+        boneLHand.rotation.y =  Math.cos(scrub)*0.10;
+        boneLHand.rotation.x = -0.05 + Math.sin(scrub*0.5)*0.04;
+      }
+      if (boneRHand) {
+        boneRHand.rotation.z = -0.12 + Math.sin(scrub + Math.PI)*0.12;
+        boneRHand.rotation.y =  Math.cos(scrub + Math.PI)*0.10;
+        boneRHand.rotation.x = -0.05 + Math.sin(scrub*0.5 + Math.PI)*0.04;
+      }
+      // Rinse phase — right hand lifts briefly every 7s
+      const rinseCycle = t % 7.0;
+      if (rinseCycle > 5.5 && rinseCycle < 6.8) {
+        const rp = Math.sin((rinseCycle - 5.5) / 1.3 * Math.PI);
+        if (boneRUpperArm) boneRUpperArm.rotation.x = 0.55 - rp*0.3;
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.3 + rp*0.25;
+        setExpression('neutral');
+      }
+      // Shake dry at the very end of each 7s loop
+      if (rinseCycle > 6.5) {
+        const shake = Math.sin(t * 18) * (1 - (rinseCycle - 6.5) / 0.5) * 0.08;
+        if (boneLHand) boneLHand.rotation.z =  0.12 + shake;
+        if (boneRHand) boneRHand.rotation.z = -0.12 - shake;
+        setExpression('happy'); setBS('I', 0.08);
+      } else {
+        setExpression('neutral'); setBS('I', 0);
+      }
+      setLeftFingerCurl(0.2); setRightFingerCurl(0.2);
+      break;
+    }
+
+    // ── WATCH TV ───────────────────────────────────────────────
+    // Seated on sofa (use yOffset: -0.52), head pitched up toward
+    // TV at Y=1.93. More expressive than tvReact — proper sit pose
+    // with couch lean, head tracking, periodic reactions.
+    // Spot: x:-4.159, z:-4.424, facingY:0 (toward TV wall)
+    case 'watchTV': {
+      const breathe  = Math.sin(t * 0.52) * 0.011;
+      const headNod  = Math.sin(t * 0.25) * 0.018;
+      const reactCycle = t % 14.0;
+
+      // Seated hips — full couch sit
+      if (boneHips) { boneHips.rotation.x = 0.55; boneHips.rotation.z = 0.04 + Math.sin(t*0.28)*0.015; }
+      if (boneSpine) { boneSpine.rotation.x = -0.04 + breathe; boneSpine.rotation.z = Math.sin(t*0.2)*0.01; }
+      if (boneChest) { boneChest.rotation.x = 0.03 + breathe*0.5; }
+
+      // Legs — thighs horizontal, calves down
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.x = 1.48; boneLUpperLeg.rotation.z = -0.08; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.x = 1.48; boneRUpperLeg.rotation.z =  0.10; }
+      if (boneLLowerLeg) boneLLowerLeg.rotation.x = -1.32;
+      if (boneRLowerLeg) boneRLowerLeg.rotation.x = -1.32;
+      if (boneLFoot) { boneLFoot.rotation.x = -0.18; boneLFoot.rotation.z = -0.04; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.18; boneRFoot.rotation.z =  0.05; }
+
+      // Arms resting on thighs
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.65; boneLUpperArm.rotation.x = 0.45; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.65; boneRUpperArm.rotation.x = 0.45; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.52; boneLLowerArm.rotation.x = 0.12; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.52; boneRLowerArm.rotation.x = 0.12; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.20; boneLHand.rotation.x = 0.06; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.20; boneRHand.rotation.x = 0.06; }
+
+      // Head pitched up toward TV screen (Y≈1.93, ~0.5m above eye level when seated)
+      // and slowly tracking left/right as if following on-screen action
+      if (boneHead) {
+        boneHead.rotation.x =  0.18 + headNod;
+        boneHead.rotation.y =  Math.sin(t * 0.18) * 0.12;
+        boneHead.rotation.z =  Math.sin(t * 0.35) * 0.02;
+      }
+      if (boneNeck) {
+        boneNeck.rotation.x =  0.08;
+        boneNeck.rotation.y =  Math.sin(t * 0.18) * 0.05;
+      }
+
+      // Reaction cycles: surprised → laugh → neutral → lean forward
+      if (reactCycle > 11.0 && reactCycle < 12.5) {
+        // Surprised moment — lean forward slightly
+        const rp = Math.sin((reactCycle - 11.0) / 1.5 * Math.PI);
+        setExpression('surprised');
+        setBS('O', rp * 0.4);
+        if (boneSpine) boneSpine.rotation.x = -0.04 + rp * 0.08;
+        if (boneHead)  boneHead.rotation.x  =  0.18 + rp * 0.06;
+      } else if (reactCycle > 7.0 && reactCycle < 8.5) {
+        // Laugh — head bobs
+        const lp = Math.sin((reactCycle - 7.0) / 1.5 * Math.PI);
+        setExpression('happy');
+        setBS('A', lp * 0.22);
+        if (boneHead) boneHead.rotation.x = 0.18 + Math.abs(Math.sin(t*5))*lp*0.05;
+      } else {
+        setExpression('neutral');
+        setBS('O', 0); setBS('A', 0);
+      }
+      setLeftFingerRelax(); setRightFingerRelax();
+      break;
+    }
+
+    // ── EAT AT TABLE ───────────────────────────────────────────
+    // Seated at dining chair (yOffset: -0.42). Right hand fork loops
+    // to mouth. Left hand rests on table edge. Bowl prop spawned by
+    // engine-life.js at this spot.
+    // Dining chair sit is slightly shallower than sofa (hips.x: 1.3)
+    case 'eatAtTable': {
+      const breathe   = Math.sin(t * 0.55) * 0.01;
+      const forkCycle = t % 5.0;
+
+      // Chair-seated hips — shallower than sofa, more upright
+      if (boneHips)  { boneHips.rotation.x = 1.30; boneHips.rotation.z = 0.03 + Math.sin(t*0.3)*0.01; }
+      if (boneSpine) { boneSpine.rotation.x = 0.04 + breathe; boneSpine.rotation.z = Math.sin(t*0.22)*0.01; }
+      if (boneChest) { boneChest.rotation.x = 0.03 + breathe*0.5; }
+
+      // Legs — same as sofaSit but tighter (chair is narrower)
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.x = 1.45; boneLUpperLeg.rotation.z = -0.06; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.x = 1.45; boneRUpperLeg.rotation.z =  0.08; }
+      if (boneLLowerLeg) boneLLowerLeg.rotation.x = -1.35;
+      if (boneRLowerLeg) boneRLowerLeg.rotation.x = -1.35;
+      if (boneLFoot) { boneLFoot.rotation.x = -0.15; boneLFoot.rotation.z = -0.03; }
+      if (boneRFoot) { boneRFoot.rotation.x = -0.15; boneRFoot.rotation.z =  0.04; }
+
+      // Left arm — resting on table edge, elbow bent
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.5; boneLUpperArm.rotation.x = 0.6; boneLUpperArm.rotation.y = -0.1; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.3; boneLLowerArm.rotation.x = 0.15; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.18; boneLHand.rotation.x = -0.05; }
+
+      // Right arm — fork to mouth cycle
+      // Phase 0–0.8s: lower (fork toward bowl)
+      // Phase 0.8–1.8s: lift to mouth
+      // Phase 1.8–2.8s: at mouth (chew, happy)
+      // Phase 2.8–3.5s: lower back to bowl
+      // Phase 3.5–5.0s: rest pause
+      if (forkCycle < 0.8) {
+        const p = forkCycle / 0.8;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.5; boneRUpperArm.rotation.x = 0.5 - p*0.1; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.45 - p*0.1;
+        if (boneRHand)     { boneRHand.rotation.x = -0.1; boneRHand.rotation.z = -0.12; }
+        setExpression('neutral');
+      } else if (forkCycle < 1.8) {
+        const p = (forkCycle - 0.8) / 1.0;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.5 + ep*0.05; boneRUpperArm.rotation.x = 0.4 + ep*0.3; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.35 + ep*0.2;
+        if (boneRHand)     { boneRHand.rotation.x = -0.1 + ep*(-0.1); boneRHand.rotation.z = -0.12; }
+        setExpression('neutral');
+      } else if (forkCycle < 2.8) {
+        // At mouth — open, chew, happy
+        const chew = (forkCycle - 1.8) / 1.0;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45; boneRUpperArm.rotation.x = 0.70; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.55;
+        if (boneRHand)     { boneRHand.rotation.x = -0.2 + Math.sin(chew*8)*0.03; }
+        if (boneHead)      boneHead.rotation.x = 0.06 + Math.sin(chew*4)*0.02;
+        setExpression('happy');
+        setBS('A', Math.abs(Math.sin(chew * 7)) * 0.28);
+        if (boneJaw) boneJaw.rotation.x = Math.abs(Math.sin(chew * 7)) * 0.10;
+      } else if (forkCycle < 3.5) {
+        const p = (forkCycle - 2.8) / 0.7;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.45 - p*0.05; boneRUpperArm.rotation.x = 0.70 - p*0.3; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.55 - p*0.2;
+        if (boneHead)      boneHead.rotation.x = 0.06;
+        setExpression('happy'); setBS('A', 0); if (boneJaw) boneJaw.rotation.x = 0;
+        setBS('I', (1-p)*0.12); // satisfied smile as fork lowers
+      } else {
+        // Rest pause — hands on table, slight head dip
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.5; boneRUpperArm.rotation.x = 0.42; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.38;
+        if (boneRHand)     { boneRHand.rotation.x = -0.08; boneRHand.rotation.z = -0.12; }
+        if (boneHead)      { boneHead.rotation.x = 0.05 + Math.sin(t*0.4)*0.02; boneHead.rotation.z = Math.sin(t*0.3)*0.02; }
+        setExpression('neutral'); setBS('I', 0); setBS('A', 0);
+      }
+      setRightFingerCurl(0.4); setLeftFingerRelax();
+      break;
+    }
+
+    // ── DRINK COFFEE ───────────────────────────────────────────
+    // Can be used standing or seated. Right hand lifts cup to mouth,
+    // tilts for sip, small mouth open, lowers, pause, repeat.
+    // Prop: cup-coffee.glb or cup-tea.glb spawned at hand position
+    // by engine-life.js before this activity fires.
+    case 'drinkCoffee': {
+      const sipCycle = t % 6.5;
+
+      // Left arm — resting naturally
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.85; boneLUpperArm.rotation.x = 0.06; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z = 0.45;
+      if (boneLHand)     { boneLHand.rotation.z = 0.2; boneLHand.rotation.x = 0.06; }
+
+      if (sipCycle < 0.7) {
+        // Lift cup from waist to lip height
+        const p = sipCycle / 0.7;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + ep*0.52; boneRUpperArm.rotation.x = ep*0.65; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = ep*0.4; }
+        if (boneRHand)     { boneRHand.rotation.x = -ep*0.15; boneRHand.rotation.z = -0.15; }
+        if (boneSpine)     boneSpine.rotation.x = ep * 0.03;
+        setExpression('neutral');
+      } else if (sipCycle < 1.6) {
+        // Cup at lip — tilt for sip
+        const sip = (sipCycle - 0.7) / 0.9;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48; boneRUpperArm.rotation.x = 0.65; }
+        if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35; boneRLowerArm.rotation.x = 0.4 + Math.sin(sip*Math.PI)*0.12; }
+        if (boneRHand)     { boneRHand.rotation.x = -0.15 - Math.sin(sip*Math.PI)*0.18; boneRHand.rotation.z = -0.15; }
+        if (boneHead)      boneHead.rotation.x = 0.06 + Math.sin(sip*Math.PI)*0.04;
+        setExpression('neutral');
+        setBS('A', Math.sin(sip * Math.PI) * 0.18);
+        if (boneJaw) boneJaw.rotation.x = Math.sin(sip * Math.PI) * 0.07;
+      } else if (sipCycle < 2.8) {
+        // Held at lip, satisfied
+        const hold = sipCycle - 1.6;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 + Math.sin(hold*1.5)*0.01; boneRUpperArm.rotation.x = 0.65; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.4;
+        if (boneRHand)     boneRHand.rotation.x = -0.15;
+        setExpression('happy');
+        setBS('I', Math.sin(hold*1.2)*0.06 + 0.04);
+        setBS('A', 0); if (boneJaw) boneJaw.rotation.x = 0;
+      } else if (sipCycle < 3.5) {
+        // Lower cup back down
+        const p = (sipCycle - 2.8) / 0.7;
+        const ep = 3*p*p - 2*p*p*p;
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.48 - ep*0.52; boneRUpperArm.rotation.x = 0.65 - ep*0.65; }
+        if (boneRLowerArm) boneRLowerArm.rotation.x = 0.4 - ep*0.4;
+        if (boneRHand)     boneRHand.rotation.x = -0.15 + ep*0.15;
+        if (boneSpine)     boneSpine.rotation.x = 0.03 - ep*0.03;
+        setExpression('happy'); setBS('I', (1-ep)*0.04);
+      } else {
+        // Rest — cup held low, gentle sway, small smile lingers
+        if (boneRUpperArm) { boneRUpperArm.rotation.z = -1.0 + Math.sin(t*0.55)*0.02; boneRUpperArm.rotation.x = 0.05; }
+        if (boneRLowerArm) boneRLowerArm.rotation.z = -0.35;
+        if (boneRHand)     { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.02; }
+        if (boneHips)      boneHips.rotation.z = Math.sin(t*0.7)*0.04;
+        if (boneHead)      { boneHead.rotation.x = Math.sin(t*0.3)*0.02; boneHead.rotation.z = Math.sin(t*0.4)*0.02; }
+        setExpression('neutral');
+      }
+      setRightFingerCurl(0.35); setLeftFingerRelax();
+      break;
+    }
+
+    // ── COOK DANCE ─────────────────────────────────────────────
+    // Kitchen-only. Hip shimmy while one hand stirs at counter height.
+    // Right arm stirs in circles (like `stirring` but looser),
+    // left arm swings freely. Hips groove to imaginary music.
+    // Spot: kitchen centre x:-2.8, z:1.2 (open floor, can spin)
+    case 'cookDance': {
+      const stir  = t * 2.8;
+      const groove = Math.sin(t * 5.5);
+      const bob    = Math.abs(Math.sin(t * 5.5)) * 0.05;
+
+      // Hip groove — bigger sway than normal dance
+      if (boneHips) { boneHips.rotation.z = groove*0.18; boneHips.rotation.y = groove*0.10; boneHips.rotation.x = bob*0.5; }
+      if (boneSpine) { boneSpine.rotation.z = -groove*0.10; boneSpine.rotation.x = bob*0.9; boneSpine.rotation.y = groove*0.04; }
+      if (boneChest) { boneChest.rotation.z = groove*0.07; boneChest.rotation.x = bob*0.5; }
+
+      // Right arm — stirs at chest height in lazy circles
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.60; boneRUpperArm.rotation.x = 0.50; boneRUpperArm.rotation.y = 0.08; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.35 + Math.sin(stir)*0.14; boneRLowerArm.rotation.x = 0.42 + Math.cos(stir)*0.10; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.12 + Math.sin(stir*0.8)*0.08; boneRHand.rotation.y = Math.cos(stir)*0.12; }
+
+      // Left arm — free swing with groove
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.7 + Math.sin(t*5.5+1.5)*0.25; boneLUpperArm.rotation.x = 0.18 + bob*0.4; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z = 0.5 + Math.sin(t*5.5+0.8)*0.18;
+      if (boneLHand)     { boneLHand.rotation.z = 0.22 + Math.sin(t*8)*0.16; boneLHand.rotation.x = 0.08; boneLHand.rotation.y = Math.sin(t*5)*0.08; }
+
+      // Legs — gentle weight shift
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = groove*0.07; boneLUpperLeg.rotation.x = bob*0.25; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = -groove*0.07; boneRUpperLeg.rotation.x = bob*0.25; }
+      if (boneLFoot)     boneLFoot.rotation.x = -0.04 + Math.max(0, groove)*0.10;
+      if (boneRFoot)     boneRFoot.rotation.x = -0.04 + Math.max(0, -groove)*0.10;
+
+      // Head bobs and nods to beat
+      if (boneHead) { boneHead.rotation.z = Math.sin(t*2.75)*0.06; boneHead.rotation.y = groove*0.06; boneHead.rotation.x = 0.04 + bob*0.3; }
+
+      setExpression('happy');
+      setBS('A', Math.max(0, Math.sin(t*5.5)) * 0.20);
+      setRightFingerCurl(0.45); setLeftFingerRelax();
+      break;
+    }
+
     // Default: idle hands
     default:
       break;
