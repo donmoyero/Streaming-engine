@@ -276,104 +276,104 @@ export function activityUpdate(delta) {
     case 'sofaSit': {
       const breathe  = Math.sin(t * 0.55) * 0.012;
       const microZ   = Math.sin(t * 0.38) * 0.018;
-      const headNod  = Math.sin(t * 0.28) * 0.022;
-      const headTurn = Math.sin(t * 0.19) * 0.07;
+      const headNod  = Math.sin(t * 0.28) * 0.018;
+      const headTurn = Math.sin(t * 0.19) * 0.06;
 
-      // Hips — rotated back into seat, slight right lean
+      // Hips — 90–110° hip angle per guide. rotation.x ≈ 1.65 (94°)
+      // Slight right lean, subtle sway
       if (boneHips) {
-        boneHips.rotation.x =  0.58;
-        boneHips.rotation.z =  0.055 + microZ;
-        boneHips.rotation.y =  Math.sin(t * 0.22) * 0.02;
+        boneHips.rotation.x =  1.65;
+        boneHips.rotation.z =  0.04 + microZ;
+        boneHips.rotation.y =  Math.sin(t * 0.22) * 0.015;
       }
 
-      // Spine — slight lean back, natural breathing
+      // Spine — 100–110° back angle = leaning back slightly past vertical
+      // rotation.x negative = lean back
       if (boneSpine) {
-        boneSpine.rotation.x = -0.06 + breathe;
-        boneSpine.rotation.z = -microZ * 0.5;
-        boneSpine.rotation.y =  Math.sin(t * 0.18) * 0.015;
+        boneSpine.rotation.x = -0.18 + breathe;
+        boneSpine.rotation.z = -microZ * 0.4;
+        boneSpine.rotation.y =  Math.sin(t * 0.18) * 0.012;
       }
 
-      // Chest — follows spine, slight breath rise
+      // Chest — follows spine lean, subtle breath rise
       if (boneChest) {
-        boneChest.rotation.x =  0.04 + breathe * 0.6;
-        boneChest.rotation.z = -microZ * 0.3;
+        boneChest.rotation.x = -0.08 + breathe * 0.6;
+        boneChest.rotation.z = -microZ * 0.25;
       }
 
-      // ── Legs — thighs out horizontally, calves drop ──────────
-      // Left leg: parallel to floor, slight outward splay
+      // ── Legs — hip angle 90°, knee angle 90–100° ─────────────
+      // Upper leg: thigh parallel to floor (rotation.x ≈ 1.57 = 90°)
       if (boneLUpperLeg) {
-        boneLUpperLeg.rotation.x =  1.48;
-        boneLUpperLeg.rotation.z = -0.08;
-        boneLUpperLeg.rotation.y =  0.06;
+        boneLUpperLeg.rotation.x =  1.55;
+        boneLUpperLeg.rotation.z = -0.10;
+        boneLUpperLeg.rotation.y =  0.04;
       }
-      // Right leg: parallel to floor, slight outward splay
       if (boneRUpperLeg) {
-        boneRUpperLeg.rotation.x =  1.48;
-        boneRUpperLeg.rotation.z =  0.10;
-        boneRUpperLeg.rotation.y = -0.06;
+        boneRUpperLeg.rotation.x =  1.55;
+        boneRUpperLeg.rotation.z =  0.12;
+        boneRUpperLeg.rotation.y = -0.04;
       }
-      // Calves hang naturally below seat
+      // Lower leg: knee at ~95° — calf drops naturally behind knee
       if (boneLLowerLeg) {
-        boneLLowerLeg.rotation.x = -1.32;
+        boneLLowerLeg.rotation.x = -1.58;
         boneLLowerLeg.rotation.z =  0.0;
       }
       if (boneRLowerLeg) {
-        boneRLowerLeg.rotation.x = -1.32;
+        boneRLowerLeg.rotation.x = -1.58;
         boneRLowerLeg.rotation.z =  0.0;
       }
-      // Feet rest flat on floor, slight toe-up
+      // Feet flat on floor — ankle dorsiflexion per guide
       if (boneLFoot) {
-        boneLFoot.rotation.x = -0.18;
+        boneLFoot.rotation.x = -0.12;
         boneLFoot.rotation.z = -0.04;
       }
       if (boneRFoot) {
-        boneRFoot.rotation.x = -0.18;
+        boneRFoot.rotation.x = -0.12;
         boneRFoot.rotation.z =  0.05;
       }
-      if (boneLToes) boneLToes.rotation.x =  0.06;
-      if (boneRToes) boneRToes.rotation.x =  0.06;
+      if (boneLToes) boneLToes.rotation.x =  0.04;
+      if (boneRToes) boneRToes.rotation.x =  0.04;
 
-      // ── Arms — resting relaxed on thighs / armrest ───────────
-      // Left arm: rests on left thigh, slightly inward
+      // ── Arms — resting on thighs, elbows 90–110° per guide ───
+      // Elbow angle 90–110° = lower arm roughly horizontal
       if (boneLUpperArm) {
-        boneLUpperArm.rotation.z =  0.68 + Math.sin(t * 0.6) * 0.02;
-        boneLUpperArm.rotation.x =  0.45;
-        boneLUpperArm.rotation.y = -0.08;
+        boneLUpperArm.rotation.z =  0.72 + Math.sin(t * 0.6) * 0.015;
+        boneLUpperArm.rotation.x =  0.38;
+        boneLUpperArm.rotation.y = -0.06;
       }
       if (boneLLowerArm) {
-        boneLLowerArm.rotation.z =  0.55;
-        boneLLowerArm.rotation.x =  0.12;
+        boneLLowerArm.rotation.z =  0.48;
+        boneLLowerArm.rotation.x =  0.10;
       }
       if (boneLHand) {
-        boneLHand.rotation.z     =  0.22 + Math.sin(t * 1.4) * 0.04;
-        boneLHand.rotation.x     =  0.06 + Math.sin(t * 2.0) * 0.03;
-        boneLHand.rotation.y     =  Math.sin(t * 1.1) * 0.04;
+        boneLHand.rotation.z     =  0.18 + Math.sin(t * 1.4) * 0.03;
+        boneLHand.rotation.x     =  0.05 + Math.sin(t * 2.0) * 0.025;
+        boneLHand.rotation.y     =  Math.sin(t * 1.1) * 0.03;
       }
-
-      // Right arm: rests on right thigh, slightly crossed
       if (boneRUpperArm) {
-        boneRUpperArm.rotation.z = -0.68 - Math.sin(t * 0.6 + 1.0) * 0.02;
-        boneRUpperArm.rotation.x =  0.45;
-        boneRUpperArm.rotation.y =  0.08;
+        boneRUpperArm.rotation.z = -0.72 - Math.sin(t * 0.6 + 1.0) * 0.015;
+        boneRUpperArm.rotation.x =  0.38;
+        boneRUpperArm.rotation.y =  0.06;
       }
       if (boneRLowerArm) {
-        boneRLowerArm.rotation.z = -0.55;
-        boneRLowerArm.rotation.x =  0.12;
+        boneRLowerArm.rotation.z = -0.48;
+        boneRLowerArm.rotation.x =  0.10;
       }
       if (boneRHand) {
-        boneRHand.rotation.z     = -0.22 - Math.sin(t * 1.4 + 1.0) * 0.04;
-        boneRHand.rotation.x     =  0.06 + Math.sin(t * 2.0 + 1.0) * 0.03;
-        boneRHand.rotation.y     =  Math.sin(t * 1.1 + 0.8) * 0.04;
+        boneRHand.rotation.z     = -0.18 - Math.sin(t * 1.4 + 1.0) * 0.03;
+        boneRHand.rotation.x     =  0.05 + Math.sin(t * 2.0 + 1.0) * 0.025;
+        boneRHand.rotation.y     =  Math.sin(t * 1.1 + 0.8) * 0.03;
       }
 
-      // ── Head — relaxed, occasional glance + slow nod ─────────
+      // ── Head — straight, slight natural movement ──────────────
+      // Head neutral per guide — not pitched forward
       if (boneHead) {
-        boneHead.rotation.x =  0.06 + headNod;
-        boneHead.rotation.z =  Math.sin(t * 0.42) * 0.025;
+        boneHead.rotation.x =  0.04 + headNod;
+        boneHead.rotation.z =  Math.sin(t * 0.42) * 0.022;
         boneHead.rotation.y =  headTurn;
       }
       if (boneNeck) {
-        boneNeck.rotation.x =  0.03 + headNod * 0.4;
+        boneNeck.rotation.x =  0.02 + headNod * 0.4;
         boneNeck.rotation.y =  headTurn * 0.4;
       }
 
@@ -395,21 +395,66 @@ export function activityUpdate(delta) {
     // ── PHONE SCROLL ───────────────────────────────────────────
     case 'phoneScroll': {
       const scrollCycle = t % 8.0;
-      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.55; boneRUpperArm.rotation.x = 0.65; }
-      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.3; boneRLowerArm.rotation.x = 0.25; }
-      if (boneRHand)     { boneRHand.rotation.z = -0.12; boneRHand.rotation.x = -0.15 + Math.sin(t*2)*0.04; }
-      if (boneRHand)     boneRHand.rotation.y = Math.sin(t * 1.2) * 0.04;
-      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.6; boneLUpperArm.rotation.x = 0.4; }
-      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.4; boneLLowerArm.rotation.x = 0.2; }
-      if (boneHead)      { boneHead.rotation.x = 0.22 + Math.sin(t*0.4)*0.03; }
-      if (boneSpine)     boneSpine.rotation.x = 0.06;
+      const thumbScroll = Math.sin(t * 2.2) * 0.04;
+
+      // Right arm holds phone — elbow close to body, forearm up
+      // Phone at eye level: upper arm down close to side, forearm raised
+      if (boneRUpperArm) {
+        boneRUpperArm.rotation.z = -0.28;   // close to body, not splayed out
+        boneRUpperArm.rotation.x =  0.45;   // forward lift
+        boneRUpperArm.rotation.y =  0.08;
+      }
+      if (boneRLowerArm) {
+        boneRLowerArm.rotation.z = -0.18;
+        boneRLowerArm.rotation.x =  0.55;   // forearm raised toward face
+        boneRLowerArm.rotation.y = -0.05;
+      }
+      if (boneRHand) {
+        boneRHand.rotation.z = -0.10;
+        boneRHand.rotation.x = -0.20 + thumbScroll;  // thumb scrolling micro-motion
+        boneRHand.rotation.y =  0.05;
+      }
+
+      // Left arm — supports elbow or rests on lap
+      if (boneLUpperArm) {
+        boneLUpperArm.rotation.z =  0.55;
+        boneLUpperArm.rotation.x =  0.30;
+        boneLUpperArm.rotation.y = -0.05;
+      }
+      if (boneLLowerArm) {
+        boneLLowerArm.rotation.z =  0.35;
+        boneLLowerArm.rotation.x =  0.15;
+      }
+      if (boneLHand) {
+        boneLHand.rotation.z =  0.12;
+        boneLHand.rotation.x =  0.05;
+      }
+
+      // Head — neck angle 15–30° down looking at screen per guide
+      if (boneHead) {
+        boneHead.rotation.x =  0.30 + Math.sin(t * 0.4) * 0.025;  // looking down at phone
+        boneHead.rotation.z =  Math.sin(t * 0.35) * 0.018;
+        boneHead.rotation.y =  Math.sin(t * 0.2) * 0.03;
+      }
+      if (boneNeck) {
+        boneNeck.rotation.x =  0.15;  // supports the 15-30deg neck angle
+      }
+
+      // Slight forward lean in spine — natural when looking at phone
+      if (boneSpine) {
+        boneSpine.rotation.x =  0.08;
+        boneSpine.rotation.z =  Math.sin(t * 0.3) * 0.01;
+      }
+
+      // Expression — occasional smile/react when scrolling
       if (scrollCycle > 6.5) {
         setExpression('happy');
-        setBS('I', Math.sin((scrollCycle-6.5)/1.5*Math.PI)*0.15);
+        setBS('I', Math.sin((scrollCycle - 6.5) / 1.5 * Math.PI) * 0.15);
       } else {
         setExpression('neutral');
+        setBS('I', 0);
       }
-      setRightFingerCurl(0.35);
+      setRightFingerCurl(0.30);
       setLeftFingerRelax();
       break;
     }
@@ -477,42 +522,6 @@ export function activityUpdate(delta) {
       if (boneHead)  { boneHead.rotation.z = Math.sin(t*3.25)*0.06; boneHead.rotation.y = shimmy*0.05; }
       setExpression('happy');
       setBS('A', Math.max(0, Math.sin(t*6.5))*0.22);
-      break;
-    }
-
-    // ── LISTEN DANCE — bigger arms, feel-the-beat head nod ─────
-    case 'listenDance': {
-      const beat   = Math.sin(t * 6.8);           // slightly different BPM feel to dance
-      const bob    = Math.abs(Math.sin(t * 6.8)) * 0.07;
-      const upArm  = Math.sin(t * 3.4);           // arm phase
-      const phase2 = Math.sin(t * 6.8 + Math.PI); // counter-phase
-
-      if (boneHips)  { boneHips.rotation.z  = beat*0.20; boneHips.rotation.y = beat*0.10; boneHips.rotation.x = bob*0.5; }
-      if (boneSpine) { boneSpine.rotation.z = -beat*0.11; boneSpine.rotation.x = bob*0.9; boneSpine.rotation.y = beat*0.04; }
-      if (boneChest) { boneChest.rotation.z = beat*0.07; boneChest.rotation.x = bob*0.6; }
-
-      // Arms raise higher than plain dance — feel the music
-      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.80 + upArm*0.32; boneLUpperArm.rotation.x = 0.22 + bob*0.5; }
-      if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.80 + Math.sin(t*3.4+0.8)*0.32); boneRUpperArm.rotation.x = 0.22 + bob*0.5; }
-      if (boneLLowerArm) boneLLowerArm.rotation.z =  0.55 + Math.sin(t*6.8+0.9)*0.22;
-      if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.55 + Math.sin(t*6.8-0.9)*0.22);
-      if (boneLHand) { boneLHand.rotation.z = 0.28 + Math.sin(t*9.5)*0.20; boneLHand.rotation.y = Math.sin(t*5.5)*0.10; }
-      if (boneRHand) { boneRHand.rotation.z = -(0.28 + Math.sin(t*9.5+1)*0.20); boneRHand.rotation.y = Math.sin(t*5.5+1)*0.10; }
-
-      // Legs — weight shift + subtle knee
-      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = beat*0.09; boneLUpperLeg.rotation.x = bob*0.3; }
-      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = -beat*0.09; boneRUpperLeg.rotation.x = bob*0.3; }
-      if (boneLLowerLeg) boneLLowerLeg.rotation.x = Math.max(0, phase2)*0.10;
-      if (boneRLowerLeg) boneRLowerLeg.rotation.x = Math.max(0, beat)*0.10;
-      if (boneLFoot)     boneLFoot.rotation.x = -0.04 + Math.max(0, beat)*0.13;
-      if (boneRFoot)     boneRFoot.rotation.x = -0.04 + Math.max(0, -beat)*0.13;
-
-      // Head — nods on beat, small side sway
-      if (boneHead) { boneHead.rotation.x = 0.04 + bob*0.35; boneHead.rotation.z = Math.sin(t*3.4)*0.07; boneHead.rotation.y = beat*0.06; }
-      if (boneNeck) { boneNeck.rotation.x = 0.02 + bob*0.18; }
-
-      setExpression('happy');
-      setBS('A', Math.max(0, Math.sin(t*6.8))*0.25);
       break;
     }
 
@@ -1773,34 +1782,42 @@ export function activityUpdateMr(delta) {
 
     // ── SOFA SIT ───────────────────────────────────────────────
     case 'sofaSit': {
-      const phase = t % 14;
+      const phase   = t % 14;
       const breathe = Math.sin(t * 0.55) * 0.012;
-      const headWave = Math.sin(t * 0.28) * 0.022;
+      const headWave = Math.sin(t * 0.28) * 0.018;
+      const microZ  = Math.sin(t * 0.38) * 0.016;
 
-      if (boneHipsMr)      { boneHipsMr.rotation.x = 1.32; boneHipsMr.rotation.z = Math.sin(t*0.35)*0.04; boneHipsMr.rotation.y = Math.sin(t*0.22)*0.03; }
-      if (boneSpineMr)     { boneSpineMr.rotation.x = -0.22 + breathe; boneSpineMr.rotation.z = Math.sin(t*0.38)*0.025; }
-      if (boneChestMr)     { boneChestMr.rotation.x = -0.12 + breathe*0.6; }
-      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.05 + headWave; boneHeadMr.rotation.y = Math.sin(t*0.18)*0.10; boneHeadMr.rotation.z = Math.sin(t*0.28)*0.04; }
-      if (boneNeckMr)      { boneNeckMr.rotation.y = Math.sin(t*0.18)*0.04; }
+      // Hips — 90–110° hip angle (rotation.x ≈ 1.65 = 94°)
+      if (boneHipsMr)  { boneHipsMr.rotation.x = 1.65; boneHipsMr.rotation.z = 0.04 + microZ; boneHipsMr.rotation.y = Math.sin(t*0.22)*0.015; }
+      // Spine — 100–110° back angle, leaning slightly back
+      if (boneSpineMr) { boneSpineMr.rotation.x = -0.18 + breathe; boneSpineMr.rotation.z = -microZ * 0.4; boneSpineMr.rotation.y = Math.sin(t*0.18)*0.010; }
+      if (boneChestMr) { boneChestMr.rotation.x = -0.08 + breathe * 0.6; boneChestMr.rotation.z = -microZ * 0.25; }
 
-      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x = -1.52; boneLUpperLegMr.rotation.z = -0.14; }
-      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x = -1.52; boneRUpperLegMr.rotation.z =  0.10; }
-      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = 1.45;
-      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = 1.45;
-      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.18; boneLFootMr.rotation.z = -0.06; }
-      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.18; boneRFootMr.rotation.z =  0.06; }
+      // Head — neutral, slight natural sway
+      if (boneHeadMr)  { boneHeadMr.rotation.x = 0.04 + headWave; boneHeadMr.rotation.y = Math.sin(t*0.18)*0.08; boneHeadMr.rotation.z = Math.sin(t*0.28)*0.03; }
+      if (boneNeckMr)  { boneNeckMr.rotation.y = Math.sin(t*0.18)*0.03; boneNeckMr.rotation.x = 0.02 + headWave * 0.4; }
 
-      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.65 + Math.sin(t*0.5)*0.04; boneLUpperArmMr.rotation.x =  0.18; }
-      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.65 - Math.sin(t*0.5+1)*0.04; boneRUpperArmMr.rotation.x =  0.18; }
-      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.55 + Math.sin(t*0.7)*0.04; boneLLowerArmMr.rotation.x =  0.15; }
-      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.55 - Math.sin(t*0.7+1)*0.04; boneRLowerArmMr.rotation.x =  0.15; }
-      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.18; boneLHandMr.rotation.x =  0.10; }
-      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.18; boneRHandMr.rotation.x =  0.10; }
+      // Legs — thighs parallel to floor (1.55), knee 95° (lower leg -1.58)
+      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x =  1.55; boneLUpperLegMr.rotation.z = -0.12; boneLUpperLegMr.rotation.y =  0.04; }
+      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x =  1.55; boneRUpperLegMr.rotation.z =  0.10; boneRUpperLegMr.rotation.y = -0.04; }
+      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = -1.58;
+      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = -1.58;
+      // Feet flat, minimal toe-up
+      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.12; boneLFootMr.rotation.z = -0.05; }
+      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.12; boneRFootMr.rotation.z =  0.05; }
 
-      // Phase: head glance left (4s), look forward (4s), glance right (4s)
+      // Arms — resting on thighs, elbow 90–110° per guide
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.70 + Math.sin(t*0.5)*0.012; boneLUpperArmMr.rotation.x =  0.36; boneLUpperArmMr.rotation.y = -0.05; }
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.70 - Math.sin(t*0.5+1)*0.012; boneRUpperArmMr.rotation.x =  0.36; boneRUpperArmMr.rotation.y =  0.05; }
+      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.48 + Math.sin(t*0.7)*0.03; boneLLowerArmMr.rotation.x =  0.10; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.48 - Math.sin(t*0.7+1)*0.03; boneRLowerArmMr.rotation.x =  0.10; }
+      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.16; boneLHandMr.rotation.x =  0.06; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.16; boneRHandMr.rotation.x =  0.06; }
+
+      // Phase: look around naturally
       if (phase < 4)       setExpressionMr('neutral');
-      else if (phase < 8)  { if (boneHeadMr) boneHeadMr.rotation.y += 0.18; }
-      else if (phase < 12) { if (boneHeadMr) boneHeadMr.rotation.y -= 0.18; }
+      else if (phase < 8)  { if (boneHeadMr) boneHeadMr.rotation.y += 0.15; }
+      else if (phase < 12) { if (boneHeadMr) boneHeadMr.rotation.y -= 0.15; }
       else                 setExpressionMr('happy');
 
       if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
@@ -1955,39 +1972,6 @@ export function activityUpdateMr(delta) {
       if (boneRFootMr)     boneRFootMr.rotation.x = -0.04 + Math.max(0, -groove)*0.10;
 
       if (boneHeadMr) { boneHeadMr.rotation.z = Math.sin(t*2.75)*0.06; boneHeadMr.rotation.y = groove*0.06; boneHeadMr.rotation.x = 0.04 + bob*0.3; }
-
-      setExpressionMr('happy');
-      if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
-      if (setRightFingerRelaxMr) setRightFingerRelaxMr();
-      break;
-    }
-
-    // ── LISTEN DANCE — Lora version, slightly offset phase ─────
-    case 'listenDance': {
-      const beat   = Math.sin(t * 7.0 + 0.4);   // slightly offset from Miss so they don't mirror
-      const bob    = Math.abs(Math.sin(t * 7.0)) * 0.07;
-      const upArm  = Math.sin(t * 3.5 + 0.4);
-
-      if (boneHipsMr)  { boneHipsMr.rotation.z  = beat*0.20; boneHipsMr.rotation.y = beat*0.10; boneHipsMr.rotation.x = bob*0.5; }
-      if (boneSpineMr) { boneSpineMr.rotation.z = -beat*0.11; boneSpineMr.rotation.x = bob*0.9; boneSpineMr.rotation.y = beat*0.04; }
-      if (boneChestMr) { boneChestMr.rotation.z = beat*0.07; boneChestMr.rotation.x = bob*0.6; }
-
-      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.80 + upArm*0.32; boneLUpperArmMr.rotation.x = 0.22 + bob*0.5; }
-      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -(0.80 + Math.sin(t*3.5+1.2)*0.32); boneRUpperArmMr.rotation.x = 0.22 + bob*0.5; }
-      if (boneLLowerArmMr) boneLLowerArmMr.rotation.z =  0.55 + Math.sin(t*7.0+0.9)*0.22;
-      if (boneRLowerArmMr) boneRLowerArmMr.rotation.z = -(0.55 + Math.sin(t*7.0-0.9)*0.22);
-      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.28 + Math.sin(t*9.8)*0.20; boneLHandMr.rotation.y = Math.sin(t*5.8)*0.10; }
-      if (boneRHandMr)     { boneRHandMr.rotation.z = -(0.28 + Math.sin(t*9.8+1)*0.20); boneRHandMr.rotation.y = Math.sin(t*5.8+1)*0.10; }
-
-      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.z = beat*0.09; boneLUpperLegMr.rotation.x = bob*0.3; }
-      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.z = -beat*0.09; boneRUpperLegMr.rotation.x = bob*0.3; }
-      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = Math.max(0, -beat)*0.10;
-      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = Math.max(0, beat)*0.10;
-      if (boneLFootMr)     boneLFootMr.rotation.x = -0.04 + Math.max(0, beat)*0.13;
-      if (boneRFootMr)     boneRFootMr.rotation.x = -0.04 + Math.max(0, -beat)*0.13;
-
-      if (boneHeadMr) { boneHeadMr.rotation.x = 0.04 + bob*0.35; boneHeadMr.rotation.z = Math.sin(t*3.5)*0.07; boneHeadMr.rotation.y = beat*0.06; }
-      if (boneNeckMr) { boneNeckMr.rotation.x = 0.02 + bob*0.18; }
 
       setExpressionMr('happy');
       if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
@@ -2625,3 +2609,86 @@ export function doBlinkMr() {
   setBSMr('blink', 1);
   setTimeout(() => setBSMr('blink', 0), 120);
 }
+
+// ================================================================
+//  LORA WALK ANIMATION
+//  Called each frame from engine-scene._updateLoraWalk()
+//  while _loraWalking is true.
+//  Mirrors the 8-phase gait applied to Miss in engine-life.js.
+// ================================================================
+let _loraWalkPhase = 0;
+
+export function loraWalkUpdate(delta) {
+  _loraWalkPhase += delta * 2.2 * Math.PI * 2;
+  const p = _loraWalkPhase;
+
+  // ── Legs ──────────────────────────────────────────────────────
+  const leftLegFwd  =  Math.sin(p);
+  const rightLegFwd = -Math.sin(p);
+  const leftKnee    = Math.max(0, -Math.sin(p + 0.4)) * 0.58;
+  const rightKnee   = Math.max(0,  Math.sin(p + 0.4)) * 0.58;
+  const leftFoot    =  Math.sin(p) * 0.22;
+  const rightFoot   = -Math.sin(p) * 0.22;
+  const leftHeel    = Math.max(0,  Math.sin(p)) * 0.18;
+  const rightHeel   = Math.max(0, -Math.sin(p)) * 0.18;
+
+  if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x =  leftLegFwd * 0.44;  boneLUpperLegMr.rotation.z = -0.04; }
+  if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x =  rightLegFwd * 0.44; boneRUpperLegMr.rotation.z =  0.04; }
+  if (boneLLowerLegMr) boneLLowerLegMr.rotation.x =  leftKnee  + 0.03;
+  if (boneRLowerLegMr) boneRLowerLegMr.rotation.x =  rightKnee + 0.03;
+  if (boneLFootMr)     { boneLFootMr.rotation.x = -0.04 + leftFoot  + leftHeel  * 0.4; boneLFootMr.rotation.z = -0.03; }
+  if (boneRFootMr)     { boneRFootMr.rotation.x = -0.04 + rightFoot + rightHeel * 0.4; boneRFootMr.rotation.z =  0.04; }
+  if (boneLToesMr)     boneLToesMr.rotation.x =  0.07 + leftHeel  * 0.25;
+  if (boneRToesMr)     boneRToesMr.rotation.x =  0.07 + rightHeel * 0.25;
+
+  // ── Hips — lateral sway + tilt + twist ────────────────────────
+  const hipSway  = Math.sin(p) * 0.12;
+  const hipTilt  = Math.cos(p) * 0.055;
+  const hipTwist = Math.sin(p) * 0.06;
+
+  if (boneHipsMr) {
+    boneHipsMr.rotation.z = hipSway;
+    boneHipsMr.rotation.x = hipTilt;
+    boneHipsMr.rotation.y = hipTwist;
+  }
+
+  // ── Spine + chest — counter-rotate ────────────────────────────
+  if (boneSpineMr) {
+    boneSpineMr.rotation.z = -hipSway * 0.55;
+    boneSpineMr.rotation.x =  0.02 + Math.abs(Math.cos(p)) * 0.012;
+    boneSpineMr.rotation.y = -hipTwist * 0.6;
+  }
+  if (boneChestMr) {
+    boneChestMr.rotation.z = -hipSway * 0.28;
+    boneChestMr.rotation.y = -hipTwist * 0.8;
+  }
+
+  // ── Head — forward, slight natural bob ────────────────────────
+  if (boneHeadMr) {
+    boneHeadMr.rotation.x =  0.03 + Math.abs(Math.sin(p)) * 0.015;
+    boneHeadMr.rotation.z =  Math.sin(p) * 0.015;
+    boneHeadMr.rotation.y =  Math.sin(p) * 0.03;
+  }
+
+  // ── Arms — oppose legs, natural elbow flex ────────────────────
+  const elbowFlex = 0.38 + Math.abs(Math.sin(p)) * 0.08;
+
+  if (boneLUpperArmMr) {
+    boneLUpperArmMr.rotation.x =  rightLegFwd * 0.30;
+    boneLUpperArmMr.rotation.z =  0.78;
+    boneLUpperArmMr.rotation.y =  0.03;
+  }
+  if (boneRUpperArmMr) {
+    boneRUpperArmMr.rotation.x =  leftLegFwd * 0.30;
+    boneRUpperArmMr.rotation.z = -0.78;
+    boneRUpperArmMr.rotation.y = -0.03;
+  }
+  if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  elbowFlex; boneLLowerArmMr.rotation.x =  0.02; }
+  if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -elbowFlex; boneRLowerArmMr.rotation.x =  0.02; }
+  if (boneLHandMr) { boneLHandMr.rotation.z =  0.12; boneLHandMr.rotation.x = 0.04; }
+  if (boneRHandMr) { boneRHandMr.rotation.z = -0.12; boneRHandMr.rotation.x = 0.04; }
+  if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
+  if (setRightFingerRelaxMr) setRightFingerRelaxMr();
+}
+
+export function resetLoraWalkPhase() { _loraWalkPhase = 0; }
