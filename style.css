@@ -8,9 +8,6 @@
   --glow: rgba(255,184,48,0.15);
   --text: #f0ece0;
   --muted: rgba(240,236,224,0.4);
-  --lora: #c084fc;
-  --lora-glow: rgba(192,132,252,0.20);
-  --lora-border: rgba(192,132,252,0.27);
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -154,35 +151,6 @@ body {
 }
 #chat-bubble.thought::after { border: none; content: ''; }
 
-/* ── Lora chat bubble — left side, purple glass ── */
-#lora-chat-bubble {
-  position:        fixed;
-  bottom:          120px;
-  left:            24px;
-  background:      rgba(20, 10, 40, 0.90);
-  border:          1px solid var(--lora-border);
-  border-radius:   16px;
-  padding:         12px 18px;
-  max-width:       340px;
-  font-family:     'DM Sans', sans-serif;
-  color:           #fff;
-  font-size:       15px;
-  backdrop-filter: blur(8px);
-  display:         none;
-  z-index:         20;
-  box-shadow:      0 0 18px var(--lora-glow);
-}
-#lora-chat-bubble .speaker {
-  font-family:   'Syne', sans-serif;
-  font-size:     11px;
-  font-weight:   700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color:         var(--lora);
-  margin-bottom: 5px;
-}
-
-
 
 /* ── Live badge — top right, single instance ── */
 #live-badge {
@@ -325,10 +293,10 @@ body {
   outline: none;
 }
 .ctrl-chat-row input::placeholder { color: var(--muted); }
-.ctrl-chat-row input:focus { border-color: rgba(192,132,252,0.50); }
-.ctrl-chat-row input:focus-visible { outline: 2px solid var(--lora); outline-offset: 2px; }
+.ctrl-chat-row input:focus { border-color: rgba(255,184,48,0.5); }
+.ctrl-chat-row input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .ctrl-chat-row button {
-  background: var(--lora);
+  background: var(--gold);
   color: #0a0a0f;
   border: none;
   border-radius: 8px;
