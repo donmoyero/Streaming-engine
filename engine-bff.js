@@ -9,6 +9,7 @@ import { setExpression, runLipSync, doBlink }     from './engine-bones.js';
 import { setExpressionMr, runLipSyncMr, doBlinkMr } from './engine-bones.js';
 import { speak, showBubble }                        from './engine-life.js';
 import { getVrm, getVrmMr, camera }                from './engine-scene.js';
+import { setMusicVolume }                           from './engine-music.js';
 import * as THREE from 'three';
 
 // ════════════════════════════════════════════════════════════════
@@ -456,6 +457,9 @@ function _startMusicSession() {
 
   // Notify camera
   if (window._onActivityChanged) window._onActivityChanged('listenDance');
+
+  // Raise background music volume during dance session
+  setMusicVolume(0.22);
 }
 
 function _stopMusicSession() {
@@ -464,6 +468,8 @@ function _stopMusicSession() {
   _currentTrack = null;
   console.log('[Music] Session ended');
   // Chars return to idle naturally via their own life timers
+  // Drop back to ambient volume
+  setMusicVolume(0.08);
 }
 
 function _musicLoop() {
