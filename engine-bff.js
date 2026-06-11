@@ -12,21 +12,75 @@ import { getVrm, getVrmMr, camera }                from './engine-scene.js';
 import * as THREE from 'three';
 
 // ════════════════════════════════════════════════════════════════
-//  EMOJI PALETTE — vast & varied
-// ════════════════════════════════════════════════════════════════
-const EMOJI_BFF     = ['👯','💅','🫶','👭','💕','🥰','😍','🤝','🫂','💗','💖','💞','✨','🌟','💫','🎀','🎉','🎊','🥂','🍾'];
-const EMOJI_LAUGH   = ['😂','🤣','💀','😭','😹','🤭','😆','😅','🫢','😁','😄','🤪','😜','😝','🙈','🫠','💧','🥲','😮‍💨','🤡'];
-const EMOJI_HYPE    = ['🔥','💯','⚡','🚀','🌈','🎶','🎵','🎤','👑','💎','🏆','🌊','💥','🎸','🥁','🎹','🎺','🎻','🪗','🪘'];
-const EMOJI_REACT   = ['👀','😲','🫠','😳','😮','🤯','😱','🫣','😵','🤔','🤨','🧐','🫤','😐','🤝','🫡','🙄','😬','😶','🤫'];
-const EMOJI_SLAY    = ['💅','👸','🔱','💪','🦾','🕶️','✌️','🤙','🫰','👉','🫵','🙌','👏','🤌','💁','😏','😉','🥴','😎','🤩'];
-const EMOJI_VIBE    = ['💜','💙','💚','🧡','❤️','🩷','🩵','🩶','🤍','🖤','🤎','🫧','🌸','🌺','🌻','🌹','🌷','💐','🍀','🌿'];
-const EMOJI_FOOD    = ['🍕','🍔','🌮','🍜','🧋','🍦','🍰','🎂','🍩','🍪','🍫','🍬','🍭','🫐','🍓','🍇','🍉','🍑','🥭','🍒'];
-const EMOJI_PLAY    = ['🎮','🃏','🎲','♟️','🎯','🎱','🎳','🎰','🧩','🪀','🎠','🎡','🎢','🎪','🏀','⚽','🏈','🎾','🏐','🥊'];
-const EMOJI_DRAMA   = ['😤','😠','🤬','😡','💢','👊','🗣️','📣','📢','💬','🗯️','💭','🧨','🪄','🎭','🎬','📸','🎥','🎞️','🎦'];
-const EMOJI_NATURE  = ['🦋','🐝','🦄','🐉','🦊','🐺','🦁','🦋','🌸','☀️','🌙','⭐','🌈','❄️','🌊','🔥','🌪️','⛈️','🌤️','🌿'];
-const ALL_EMOJI = [...EMOJI_BFF,...EMOJI_LAUGH,...EMOJI_HYPE,...EMOJI_REACT,...EMOJI_SLAY,...EMOJI_VIBE,...EMOJI_FOOD,...EMOJI_PLAY,...EMOJI_DRAMA,...EMOJI_NATURE];
 
-function rndEmoji(pool = ALL_EMOJI, count = 1) {
+// ════════════════════════════════════════════════════════════════
+//  EMOJI PALETTE — contextual pools, not random noise
+// ════════════════════════════════════════════════════════════════
+const EMOJI_LAUGH   = ['😂','🤣','💀','😭','😹','🤭','😆','😅','🫢','🙈'];
+const EMOJI_HYPE    = ['🔥','💯','⚡','🚀','🎉','🎊','👑','💎','🏆','💥'];
+const EMOJI_SLAY    = ['💅','👸','💪','🕶️','✌️','🤙','🌟','✨','😏','🤩'];
+const EMOJI_REACT   = ['👀','😲','🫠','😳','🤯','😱','🫣','😮','🤔','😬'];
+const EMOJI_VIBE    = ['💜','💙','💚','🧡','❤️','🩷','🌸','🌺','💐','🍀'];
+const EMOJI_BFF     = ['👯','💕','🥰','🫶','👭','🤝','🫂','💗','💖','💞'];
+const EMOJI_MUSIC   = ['🎵','🎶','🎤','🎸','🥁','🎹','🎺','🎻','🪗','🪘'];
+const EMOJI_DANCE   = ['💃','🕺','🪩','🎶','🔥','✨','💃','🎵','👏','🙌'];
+const EMOJI_FOOD    = ['🍕','🍔','🌮','🍜','🧋','🍦','🍰','🎂','🍩','🍪'];
+const EMOJI_COOK    = ['🍳','🥘','🍲','🧑‍🍳','👩‍🍳','🫕','🥄','🍴','🔥','😋'];
+const EMOJI_CHILL   = ['😌','☕','📖','🛋️','🌙','💤','😴','🧘','🕯️','🌿'];
+const EMOJI_THINK   = ['🤔','💭','🧐','🫤','😶','🤨','💡','🧠','✍️','📝'];
+
+// Activity → fitting emoji pool
+const ACTIVITY_EMOJI = {
+  dance:       EMOJI_DANCE,
+  listenDance: EMOJI_DANCE,
+  cookDance:   [...EMOJI_DANCE, ...EMOJI_COOK],
+  stirring:    EMOJI_COOK,
+  chopping:    EMOJI_COOK,
+  tasting:     EMOJI_FOOD,
+  eatAtTable:  EMOJI_FOOD,
+  drinkCoffee: EMOJI_CHILL,
+  sofaSit:     EMOJI_CHILL,
+  bedLie:      EMOJI_CHILL,
+  bedLiePhone: EMOJI_CHILL,
+  readBook:    EMOJI_CHILL,
+  phoneScroll: EMOJI_REACT,
+  tvReact:     EMOJI_REACT,
+  watchTV:     EMOJI_REACT,
+  typing:      EMOJI_THINK,
+  monitor:     EMOJI_THINK,
+  mirrorPose:  EMOJI_SLAY,
+  hairflick:   EMOJI_SLAY,
+  hiponhip:    EMOJI_SLAY,
+  stretch:     ['🧘','💪','✨','😤','🙆','🌿','😮‍💨'],
+  fireGaze:    ['🔥','🕯️','😌','✨','🌙','💭'],
+  windowLook:  ['🌤️','☁️','😌','🌿','👀','✨'],
+  noseCover:   ['😤','💅','🙅','😶','🤐'],
+  idle:        EMOJI_BFF,
+};
+
+// Mood → fitting emoji pool
+const MOOD_EMOJI = {
+  laugh: EMOJI_LAUGH,
+  hype:  EMOJI_HYPE,
+  slay:  EMOJI_SLAY,
+  react: EMOJI_REACT,
+  happy: EMOJI_BFF,
+  music: EMOJI_MUSIC,
+};
+
+// Pick emoji based on what's happening, not pure random
+function _emojiForContext(who, mood) {
+  const act = who === 'miss'
+    ? (window._missCurrentActivity || 'idle')
+    : (window._loraCurrentActivity || 'idle');
+  const actPool  = ACTIVITY_EMOJI[act];
+  const moodPool = MOOD_EMOJI[mood] || EMOJI_BFF;
+  const pool     = (actPool && Math.random() < 0.6) ? actPool : moodPool;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function rndEmoji(pool, count = 1) {
+  if (!pool || !pool.length) pool = EMOJI_BFF;
   const arr = [];
   for (let i = 0; i < count; i++) arr.push(pool[Math.floor(Math.random() * pool.length)]);
   return arr.join('');
@@ -240,19 +294,20 @@ async function _turn(who, text, mood = 'happy') {
   _busy = true;
   _lastSpeaker = who;
 
-  const emojiPool = mood==='laugh' ? EMOJI_LAUGH : mood==='hype' ? EMOJI_HYPE : mood==='slay' ? EMOJI_SLAY : EMOJI_BFF;
-  const emojiCount = Math.floor(Math.random() * 3) + 2;
+  // Use context-aware emoji — pulled from activity + mood, not a flat pool
+  const emojiCount = Math.floor(Math.random() * 2) + 1;  // 1-2 max, not 2-4
+  const emojiStr   = _emojiForContext(who, mood);
 
   if (who === 'lora') {
     showLoraBubble(text);
     setExpressionMr(mood==='laugh'?'happy':mood==='hype'?'excited':'happy');
-    floatEmoji('lora', rndEmoji(emojiPool, emojiCount), emojiCount);
+    floatEmoji('lora', emojiStr, emojiCount);
     await runLipSyncMr(text);
     setExpressionMr('neutral');
   } else {
     showBubble(text, 'Miss OG Tinz');
     setExpression(mood==='laugh'?'happy':mood==='hype'?'excited':'happy');
-    floatEmoji('miss', rndEmoji(emojiPool, emojiCount), emojiCount);
+    floatEmoji('miss', emojiStr, emojiCount);
     await speak(text, mood);
     setExpression('neutral');
   }
@@ -302,10 +357,10 @@ async function _exchange() {
   if (!reply) return;
   await _turn(responder, reply, _mood(reply));
 
-  // Occasional emoji reaction from the asker after reply
-  if (Math.random() < 0.5) {
+  // Occasional reaction emoji — contextual, not random
+  if (Math.random() < 0.4) {
     await _delay(1100);
-    floatEmoji(asker, null, Math.floor(Math.random()*4)+2);
+    floatEmoji(asker, _emojiForContext(asker, _mood(reply)), 1);
   }
 }
 
@@ -347,7 +402,7 @@ export function handleTwitchMessage(username, message, isNew = false) {
 function _delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 export function startCoupleEngine() {
-  console.log('[BFF Engine] Miss OG Tinz & Lora are LIVE 💕');
+  console.log('[BFF Engine] Miss OG Tinz is LIVE ✨');
 
   // First exchange after 18s — gives backend (Render free tier) time to wake
   setTimeout(() => _exchange(), 18000);
@@ -359,13 +414,107 @@ export function startCoupleEngine() {
   }
   next();
 
-  // Random emoji bursts from both, independently
+  // Contextual emoji moments — only fires when it makes sense
   setInterval(() => {
-    if (!_busy && Math.random() < 0.28) floatEmoji('miss', null, Math.ceil(Math.random()*2));
-    if (!_busy && Math.random() < 0.28) floatEmoji('lora', null, Math.ceil(Math.random()*2));
-  }, 9000);
+    if (_busy) return;
+    // Only fire occasionally (not every interval) and only when doing something visual
+    if (Math.random() < 0.18) {
+      const act = window._missCurrentActivity || 'idle';
+      // Skip mid-sentence activities — don't interrupt speak/think moments
+      if (!['typing','monitor','readBook'].includes(act)) {
+        floatEmoji('miss', _emojiForContext('miss', 'happy'), 1);
+      }
+    }
+    if (Math.random() < 0.14) {
+      const act = window._loraCurrentActivity || 'idle';
+      if (!['typing','monitor','readBook'].includes(act)) {
+        floatEmoji('lora', _emojiForContext('lora', 'happy'), 1);
+      }
+    }
+  }, 12000);
 
   // Independent blinks
   setInterval(() => { try { doBlink(); }   catch(e){} }, 3000 + Math.random()*2000);
   setInterval(() => { try { doBlinkMr(); } catch(e){} }, 2700 + Math.random()*2500);
+
+  // Start music loop
+  _musicLoop();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MUSIC + LISTENDANCE SYSTEM
+//  Twitch-safe tracks only — royalty-free / CC0 / NCS licensed
+//  Sources: NoCopyrightSounds (NCS), Kevin MacLeod (CC BY),
+//           Bensound (royalty-free), Lofi Girl (stream-safe)
+// ════════════════════════════════════════════════════════════════
+export let musicPlaying = false;
+
+// Twitch-safe track list — all CC0 or explicitly stream-safe
+const SAFE_TRACKS = [
+  { title: 'Elektronomia — Sky High',        artist: 'NCS',          bpm: 128 },
+  { title: 'Tobu — Candyland',               artist: 'NCS',          bpm: 125 },
+  { title: 'Alan Walker — Fade',             artist: 'NCS',          bpm: 126 },
+  { title: 'Cartoon — On & On',              artist: 'NCS',          bpm: 100 },
+  { title: 'Jim Yosef — Link',               artist: 'NCS',          bpm: 130 },
+  { title: 'Ship Wrek & Zookeepers — Ark',   artist: 'NCS',          bpm: 128 },
+  { title: 'Neffex — Destiny',               artist: 'NCS/Neffex',   bpm: 140 },
+  { title: 'Ghostrifter — Reverie',          artist: 'NCS',          bpm: 90  },
+  { title: 'Syn Cole — Feel Good',           artist: 'NCS',          bpm: 128 },
+  { title: 'Gytronic — Hyper',               artist: 'NCS',          bpm: 132 },
+  { title: 'Approaching Nirvana — Sugar High',artist: 'NCS',         bpm: 120 },
+  { title: 'Kevin MacLeod — Funkorama',      artist: 'CC BY 3.0',    bpm: 110 },
+  { title: 'Kevin MacLeod — Chill Wave',     artist: 'CC BY 3.0',    bpm: 90  },
+  { title: 'Bensound — Funky Suspense',      artist: 'Bensound',     bpm: 120 },
+  { title: 'Bensound — Jazzy Frenchy',       artist: 'Bensound',     bpm: 115 },
+];
+
+let _currentTrack = null;
+
+// Called from outside to display current track (e.g. on topic box)
+export function getCurrentTrack() { return _currentTrack; }
+
+function _startMusicSession() {
+  if (musicPlaying) return;
+  musicPlaying = true;
+
+  _currentTrack = SAFE_TRACKS[Math.floor(Math.random() * SAFE_TRACKS.length)];
+  console.log(`[Music] Now playing: ${_currentTrack.title} — ${_currentTrack.artist}`);
+
+  // Fire music emoji from both chars
+  floatEmoji('miss', rndEmoji(EMOJI_MUSIC, 2), 2);
+  setTimeout(() => floatEmoji('lora', rndEmoji(EMOJI_MUSIC, 2), 2), 800);
+
+  // Set listenDance on both via the shared ACTIVITY objects
+  if (window._setMissActivity)  window._setMissActivity('listenDance', 18 + Math.random() * 20);
+  if (window._setLoraActivity)  window._setLoraActivity('listenDance', 18 + Math.random() * 20);
+
+  // Notify camera
+  if (window._onActivityChanged) window._onActivityChanged('listenDance');
+}
+
+function _stopMusicSession() {
+  if (!musicPlaying) return;
+  musicPlaying = false;
+  _currentTrack = null;
+  console.log('[Music] Session ended');
+  // Chars return to idle naturally via their own life timers
+}
+
+function _musicLoop() {
+  // Music plays ~25% of the time, in sessions of 30-60s, with 60-120s gaps
+  function schedule() {
+    const gapMs = (60 + Math.random() * 60) * 1000;
+    setTimeout(() => {
+      _startMusicSession();
+      const sessionMs = (30 + Math.random() * 30) * 1000;
+      setTimeout(() => { _stopMusicSession(); schedule(); }, sessionMs);
+    }, gapMs);
+  }
+  schedule();
+}
+
+// ── Allow chat commands: !music on / !music off ──────────────────
+export function handleMusicCommand(cmd) {
+  if (cmd === 'on')  _startMusicSession();
+  if (cmd === 'off') _stopMusicSession();
 }
