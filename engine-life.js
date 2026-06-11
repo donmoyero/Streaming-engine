@@ -927,17 +927,25 @@ function maybeShowThought(delta) {
 }
 
 // ── Audio unlock ─────────────────────────────────────────────────
+// AudioContext must be created INSIDE a user gesture (click/key/touch).
+// We store one shared instance and only resume it inside speak().
+// Never create AudioContext on page load — that's what causes the warning.
 let _audioUnlocked = false;
+let _sharedAudioCtx = null;
+
 function _unlockAudio() {
   if (_audioUnlocked) return;
   _audioUnlocked = true;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const buf = ctx.createBuffer(1,1,22050);
-    const src = ctx.createBufferSource();
-    src.buffer = buf; src.connect(ctx.destination); src.start(0); ctx.resume();
+    _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Play a silent buffer to fully unlock the context
+    const buf = _sharedAudioCtx.createBuffer(1, 1, 22050);
+    const src = _sharedAudioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(_sharedAudioCtx.destination);
+    src.start(0);
+    _sharedAudioCtx.resume();
   } catch(e) {}
-  // Also wake speech synthesis
   try { window.speechSynthesis.cancel(); } catch(e) {}
 }
 document.addEventListener('click',      _unlockAudio, { once: true });
@@ -970,9 +978,10 @@ function _pickVoice() {
 export let _isSpeaking = false;
 
 export async function speak(text, mood = 'neutral') {
-  // Wake speech synthesis — essential when running as OBS/Streamlabs browser source
-  // where no user interaction ever fires to unlock audio normally.
-  if (!_audioUnlocked) _unlockAudio();
+  // Resume shared AudioContext if it exists (created by gesture) — never create here
+  if (_sharedAudioCtx && _sharedAudioCtx.state === 'suspended') {
+    _sharedAudioCtx.resume().catch(() => {});
+  }
   window.speechSynthesis.cancel();
 
   _isSpeaking = true;
@@ -1489,24 +1498,6 @@ window.missOgTinz = {
     vrm.scene.position.x = x; vrm.scene.position.z = z;
     console.log(`[Teleport] → (${x}, ${z})`);
   },
-};
-
-// ── Activity bridges for music/BFF engine ───────────────────────
-Object.defineProperty(window, '_missCurrentActivity', { get: () => ACTIVITY.current,    configurable: true });
-Object.defineProperty(window, '_loraCurrentActivity', { get: () => ACTIVITY_MR.current, configurable: true });
-window._onActivityChanged = onActivityChanged;  // camera angle picker
-window._setMissActivity = (actName, duration) => {
-  ACTIVITY.current  = actName;
-  ACTIVITY.timer    = 0;
-  ACTIVITY.phase    = 0;
-  if (duration) ACTIVITY.duration = duration;
-  onActivityChanged(actName);
-};
-window._setLoraActivity = (actName, duration) => {
-  ACTIVITY_MR.current  = actName;
-  ACTIVITY_MR.timer    = 0;
-  ACTIVITY_MR.phase    = 0;
-  if (duration) ACTIVITY_MR.duration = duration;
 };
 
 // ================================================================
