@@ -64,31 +64,39 @@ const ANGLE_PRESETS = {
 };
 
 // ── Activity → angle pool — safe presets only ────────────────────
+// FRONT appears more often across pools = camera naturally returns to face
 const ACTIVITY_ANGLES = {
-  idle:        ['FRONT', 'FRONT', 'QUARTER_L', 'QUARTER_R', 'WIDE'],
-  dance:       ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT_LOW'],
-  stretch:     ['SIDE_L', 'SIDE_R', 'WIDE', 'FRONT'],
-  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'CLOSE'],
-  hiponhip:    ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'QUARTER_R'],
-  sofaSit:     ['FRONT', 'FRONT', 'SIDE_L', 'SIDE_R', 'QUARTER_L'],
-  phoneScroll: ['SIDE_R', 'QUARTER_R', 'FRONT'],
-  tvReact:     ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'WIDE'],
-  readBook:    ['SIDE_L', 'SIDE_R', 'FRONT'],
-  typing:      ['SIDE_L', 'SIDE_R', 'QUARTER_L'],
-  monitor:     ['SIDE_R', 'SIDE_L', 'QUARTER_R'],
-  stirring:    ['SIDE_L', 'QUARTER_L', 'FRONT'],
-  chopping:    ['SIDE_R', 'SIDE_L'],
-  tasting:     ['FRONT', 'CLOSE', 'QUARTER_R'],
-  mirrorPose:  ['SIDE_L', 'SIDE_R', 'FRONT'],
-  noseCover:   ['CLOSE', 'FRONT', 'QUARTER_R'],
+  idle:        ['FRONT', 'FRONT', 'FRONT', 'QUARTER_L', 'QUARTER_R', 'WIDE'],
+  dance:       ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT', 'FRONT_LOW'],
+  listenDance: ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT', 'FRONT_LOW'],
+  stretch:     ['SIDE_L', 'SIDE_R', 'WIDE', 'FRONT', 'FRONT'],
+  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'CLOSE', 'FRONT'],
+  hiponhip:    ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'QUARTER_R', 'FRONT'],
+  sofaSit:     ['FRONT', 'FRONT', 'FRONT', 'SIDE_L', 'SIDE_R', 'QUARTER_L'],
+  phoneScroll: ['SIDE_R', 'QUARTER_R', 'FRONT', 'FRONT'],
+  tvReact:     ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'WIDE', 'FRONT'],
+  watchTV:     ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'WIDE', 'FRONT'],
+  readBook:    ['SIDE_L', 'SIDE_R', 'FRONT', 'FRONT'],
+  typing:      ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'FRONT'],
+  monitor:     ['SIDE_R', 'SIDE_L', 'QUARTER_R', 'FRONT'],
+  stirring:    ['SIDE_L', 'QUARTER_L', 'FRONT', 'FRONT'],
+  chopping:    ['SIDE_R', 'SIDE_L', 'FRONT'],
+  tasting:     ['FRONT', 'FRONT', 'CLOSE', 'QUARTER_R'],
+  mirrorPose:  ['SIDE_L', 'SIDE_R', 'FRONT', 'FRONT'],
+  noseCover:   ['CLOSE', 'FRONT', 'FRONT', 'QUARTER_R'],
   windowLook:  ['SIDE_L', 'SIDE_R', 'WIDE'],
-  fireGaze:    ['SIDE_L', 'SIDE_R', 'FRONT_LOW'],
-  washingUp:   ['SIDE_L', 'QUARTER_L'],
-  cabinetOpen: ['SIDE_R', 'QUARTER_R'],
+  fireGaze:    ['SIDE_L', 'SIDE_R', 'FRONT_LOW', 'FRONT'],
+  washingUp:   ['SIDE_L', 'QUARTER_L', 'FRONT'],
+  cabinetOpen: ['SIDE_R', 'QUARTER_R', 'FRONT'],
+  eatAtTable:  ['FRONT', 'FRONT', 'SIDE_L', 'SIDE_R'],
+  drinkCoffee: ['FRONT', 'CLOSE', 'QUARTER_R'],
+  cookDance:   ['SIDE_L', 'WIDE', 'FRONT', 'FRONT'],
+  bedLie:      ['SIDE_L', 'SIDE_R', 'FRONT'],
+  bedLiePhone: ['SIDE_R', 'FRONT'],
 };
 
-const ANGLE_DWELL_MIN_MS = 6000;
-const ANGLE_DWELL_MAX_MS = 14000;
+const ANGLE_DWELL_MIN_MS = 4000;
+const ANGLE_DWELL_MAX_MS = 9000;
 
 let _currentAnglePreset = 'FRONT';
 let _angleDwellTimer    = 0;
