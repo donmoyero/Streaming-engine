@@ -145,44 +145,10 @@ export function floatEmoji(who = 'miss', emojiStr, count) {
 const _missBubble    = document.getElementById('chat-bubble');
 const _missBubbleTxt = document.getElementById('bubble-text');
 
-// Lora bubble — reuse the element already in index.html (#lora-chat-bubble)
-// Creating a second one with the same ID breaks getElementById lookups everywhere.
-const _loraBubble = (() => {
-  const existing = document.getElementById('lora-chat-bubble');
-  if (existing) return existing;
-  // Fallback: create only if index.html somehow doesn't have it
-  const el = document.createElement('div');
-  el.id = 'lora-chat-bubble';
-  el.innerHTML = `<div class="speaker" style="color:#a78bfa;font-weight:700;font-size:12px;letter-spacing:1px;margin-bottom:4px;">LORA</div><div id="lora-bubble-text" style="font-size:15px;line-height:1.5;"></div>`;
-  el.style.cssText = `
-    position:fixed;bottom:120px;left:24px;
-    background:rgba(20,10,40,0.90);
-    border:1px solid #a78bfa55;border-radius:16px;
-    padding:12px 18px;max-width:340px;
-    font-family:'Segoe UI',sans-serif;color:#fff;
-    backdrop-filter:blur(10px);display:none;z-index:200;
-    box-shadow:0 0 22px #7c3aed44;
-  `;
-  document.body.appendChild(el);
-  return el;
-})();
-const _loraBubbleTxt = _loraBubble.querySelector('#lora-bubble-text') || document.getElementById('lora-bubble-text');
+// Lora is a silent visual character — no bubble, no nameplate
 
-// Lora nameplate
-(() => {
-  const el = document.createElement('div');
-  el.id = 'lora-nameplate';
-  el.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;box-shadow:0 0 6px #a78bfa;"></div><div style="font-weight:700;letter-spacing:1px;">LORA</div><div style="opacity:0.7;font-size:11px;">AI Co-Host</div>`;
-  el.style.cssText = `position:fixed;bottom:72px;left:24px;display:flex;align-items:center;gap:8px;font-family:'Segoe UI',sans-serif;color:#fff;font-size:13px;text-shadow:0 0 8px #a78bfa;z-index:200;`;
-  document.body.appendChild(el);
-})();
+function showLoraBubble(_text) { /* no-op — Lora does not speak */ }
 
-function showLoraBubble(text) {
-  _loraBubble.style.display = 'block';
-  _loraBubbleTxt.textContent = text;
-  clearTimeout(_loraBubble._t);
-  _loraBubble._t = setTimeout(() => { _loraBubble.style.display = 'none'; }, 9000);
-}
 
 // ════════════════════════════════════════════════════════════════
 //  AI — routes through your backend (avoids CORS)
