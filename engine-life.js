@@ -19,6 +19,7 @@ import { getVrm, scene, camera, renderer, ambient,
 import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
+  ACTIVITY_MR, activityUpdateMr,
   setExpression, setBS, doBlink,
   runLipSync, stopLipSync, lipSyncActive, _isSpeaking as _isSpeakingBones,
   doGesture, gestureActive, updateGesture,
@@ -31,13 +32,6 @@ import {
   boneLFoot, boneRFoot, boneLToes, boneRToes,
   boneLUpperArm, boneRUpperArm, boneLLowerArm, boneRLowerArm,
   boneLHand, boneRHand, boneJaw, teethNode,
-  // Lora (Mr) bones — for her idle sway in the render loop
-  boneHeadMr, boneNeckMr, boneSpineMr, boneChestMr, boneHipsMr,
-  boneLUpperArmMr, boneRUpperArmMr, boneLLowerArmMr, boneRLowerArmMr,
-  boneLHandMr, boneRHandMr,
-  boneLUpperLegMr, boneRUpperLegMr, boneLLowerLegMr, boneRLowerLegMr,
-  boneLFootMr, boneRFootMr,
-  setLeftFingerRelaxMr, setRightFingerRelaxMr,
 } from './engine-bones.js';
 
 // ── Dead air ─────────────────────────────────────────────────────
@@ -446,19 +440,20 @@ function pickNextSpotFamiliar() {
 export function getFamiliarActivityPool(roomName) {
   const base = {
     studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover'],
-    kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting'],
-    'living-room': ['idle','hairflick','hiponhip','stretch','phoneScroll','tvReact','dance','readBook','fireGaze','windowLook'],
+    kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting','drinkCoffee'],
+    'living-room': ['idle','hairflick','hiponhip','stretch','phoneScroll','tvReact','watchTV','dance','readBook','fireGaze','windowLook','drinkCoffee'],
     bedroom:       ['idle','hairflick','noseCover','phoneScroll','stretch','mirrorPose','bedLie','bedLiePhone'],
     bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
-    dining:        ['idle','tasting','phoneScroll','readBook','hairflick','hiponhip','windowLook'],
+    dining:        ['idle','eatAtTable','eatAtTable','tasting','phoneScroll','readBook','hairflick','hiponhip','windowLook'],
     hallway:       ['idle','hairflick','stretch'],
   };
   const advanced = {
     studio:        ['dance','typing','monitor'],
-    kitchen:       ['stirring','chopping','tasting'],
-    'living-room': ['tvReact','sofaSit','phoneScroll','dance','readBook'],
+    kitchen:       ['stirring','chopping','tasting','cookDance','drinkCoffee'],
+    'living-room': ['tvReact','watchTV','sofaSit','phoneScroll','dance','readBook'],
     bedroom:       ['sofaSit','phoneScroll','bedLie','bedLiePhone'],
     bathroom:      ['mirrorPose'],
+    dining:        ['eatAtTable','eatAtTable','tasting'],
   };
   const fam  = _familiarity[roomName]?.room || 0;
   const pool = [...(base[roomName] || base.studio)];
@@ -607,7 +602,7 @@ function goToSpot(spot) {
     // ── Drop Y for seated/lying spots, restore for standing ───
     const vrm = _vrm();
     if (vrm) {
-      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','tasting','bedLie','bedLiePhone']);
+      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
       const yOff = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
       vrm.scene.position.y = (vrm._restPosY || 0) + yOff;
     }
@@ -656,6 +651,106 @@ function lifeUpdate() {
   _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
   const spot = pickNextSpotFamiliar();
   if (spot) goToSpot(spot);
+}
+
+// ================================================================
+//  LORA LIFE SCHEDULER
+//  Independent of Miss — picks HOUSE spots, walks Lora there via
+//  engine-scene's _updateLoraWalk system, then sets ACTIVITY_MR.
+// ================================================================
+
+// Activity pools mirroring Miss's but Lora-flavoured
+const _loraActivityPool = {
+  studio:        ['idle','dance','stretch','hairflick','hiponhip','typing','monitor','noseCover','drinkCoffee'],
+  kitchen:       ['idle','hairflick','hiponhip','noseCover','stirring','chopping','tasting','drinkCoffee','cookDance','washingUp'],
+  'living-room': ['idle','hairflick','hiponhip','stretch','phoneScroll','tvReact','watchTV','dance','readBook','fireGaze','windowLook'],
+  bedroom:       ['idle','hairflick','noseCover','phoneScroll','stretch','mirrorPose','bedLie','bedLiePhone','cabinetOpen'],
+  bathroom:      ['idle','hairflick','noseCover','mirrorPose','stretch'],
+  dining:        ['idle','eatAtTable','eatAtTable','tasting','phoneScroll','readBook','hairflick','hiponhip'],
+  hallway:       ['idle','hairflick','stretch','hiponhip'],
+};
+
+// Seated activities for Lora — yOffset applied on arrival
+const _LORA_SEATED = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
+
+let _loraLifeTimer    = 0;
+let _loraLifeDwell    = 12 + Math.random() * 20;
+let _loraCurrentRoom  = 'studio';
+let _loraCurrentSpot  = null;
+let _loraWalkingToSpot = false;
+
+// Pick a random HOUSE spot for Lora, avoiding her current spot
+function _loraPickSpot() {
+  const allSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) => {
+    if (!roomDef?.spots) return [];
+    return roomDef.spots.map(s => ({ ...s, room: roomKey }));
+  });
+  const candidates = allSpots.filter(s => s !== _loraCurrentSpot);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// Send Lora to a spot — sets ACTIVITY_MR on arrival
+function _loraGoToSpot(spot) {
+  if (!spot) return;
+  _loraCurrentSpot   = spot;
+  _loraCurrentRoom   = spot.room;
+  _loraWalkingToSpot = true;
+
+  // Tell engine-scene's walk system where to go
+  // It exposes _loraTarget and _loraWalking via window for cross-module comms
+  if (window._loraSetTarget) {
+    window._loraSetTarget(spot.x, spot.z, () => {
+      // On arrival
+      _loraWalkingToSpot = false;
+
+      // Pick activity from spot's list or room pool
+      const pool = spot.activities?.length
+        ? spot.activities
+        : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
+      const next = pool[Math.floor(Math.random() * pool.length)];
+
+      ACTIVITY_MR.current  = next;
+      ACTIVITY_MR.timer    = 0;
+      ACTIVITY_MR.phase    = 0;
+      ACTIVITY_MR.duration = 10 + Math.random() * 20;
+
+      // Apply yOffset for seated/lying activities
+      const lora = window.getVrmLora ? window.getVrmLora() : null;
+      if (lora) {
+        const yOff = (_LORA_SEATED.has(next) && spot.yOffset) ? spot.yOffset : 0;
+        lora.scene.position.y = (lora._restPosY || 0) + yOff;
+      }
+
+      // Face the spot's designated direction
+      if (spot.facingY !== undefined && window._loraSetFacing) {
+        window._loraSetFacing(spot.facingY);
+      }
+    });
+  } else {
+    // Fallback: no callback bridge — just set activity immediately
+    _loraWalkingToSpot = false;
+    const pool = spot.activities?.length
+      ? spot.activities
+      : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
+    const next = pool[Math.floor(Math.random() * pool.length)];
+    ACTIVITY_MR.current  = next;
+    ACTIVITY_MR.timer    = 0;
+    ACTIVITY_MR.phase    = 0;
+    ACTIVITY_MR.duration = 10 + Math.random() * 20;
+  }
+
+  _loraLifeTimer = 0;
+  _loraLifeDwell = 10 + Math.random() * 22;
+}
+
+function _loraLifeUpdate() {
+  if (_loraWalkingToSpot) return;
+  _loraLifeTimer += 1/60;
+  if (_loraLifeTimer < _loraLifeDwell) return;
+  _loraLifeTimer = 0;
+  _loraLifeDwell = 10 + Math.random() * 22;
+  const spot = _loraPickSpot();
+  if (spot) _loraGoToSpot(spot);
 }
 
 // ── Room light pulse ─────────────────────────────────────────────
@@ -1422,6 +1517,7 @@ function render() {
     // ── Walk / life scheduler ──────────────────────────────────
     updateWalk(delta);
     lifeUpdate();
+    _loraLifeUpdate();
 
     // ── Facing — smoothly rotate toward _targetFacing ─────────
     const cur  = vrm.scene.rotation.y;
@@ -1508,46 +1604,14 @@ function render() {
     }
   }
 
-  // ── Lora idle sway — mirrors Miss's logic using Mr bones ──────
-  // Without this, Lora stays in T-pose (arms out at 90°) because
-  // nothing drives her bones per frame. This block runs every frame
-  // regardless of activity — it only sets arms/spine/head so it
-  // doesn't clash with any activity system running on Miss.
+  // ── Lora activity + VRM update ────────────────────────────────
+  // activityUpdateMr() drives all Lora bone animations — idle sway,
+  // seated poses, cooking, dancing, etc. It reads ACTIVITY_MR.current
+  // which is set by _loraLifeUpdate / _loraGoToSpot above.
   {
-    const lora = getVrmLora ? getVrmLora() : null;
+    const lora = window.getVrmLora ? window.getVrmLora() : null;
     if (lora) {
-      // Use a slightly offset phase so Lora doesn't move in sync with Miss
-      const lt = idleTime + 1.3;
-      const loraHipSway      = Math.sin(lt * 0.95) * 0.07;
-      const loraHipBob       = Math.abs(Math.sin(lt * 0.95)) * 0.028;
-      const loraBreathe      = Math.sin(lt * 0.68) * 0.013;
-      const loraChestOpp     = Math.sin(lt * 0.95 + 0.6) * 0.035;
-      const loraShoulderRoll = Math.sin(lt * 0.48) * 0.020;
-
-      if (boneHipsMr)  { boneHipsMr.rotation.z = loraHipSway; boneHipsMr.rotation.x = loraHipBob * 0.5; boneHipsMr.rotation.y = Math.sin(lt * 0.5) * 0.05; }
-      if (boneSpineMr) { boneSpineMr.rotation.z = -loraHipSway * 0.6; boneSpineMr.rotation.x = loraBreathe; boneSpineMr.rotation.y = Math.sin(lt * 0.5) * 0.022; }
-      if (boneChestMr) { boneChestMr.rotation.z = loraChestOpp; boneChestMr.rotation.x = loraBreathe * 0.85; boneChestMr.rotation.y = loraShoulderRoll; }
-      if (boneHeadMr)  { boneHeadMr.rotation.z = Math.sin(lt * 0.42) * 0.04; boneHeadMr.rotation.x = Math.sin(lt * 0.65) * 0.03 + 0.02; boneHeadMr.rotation.y = Math.sin(lt * 0.30) * 0.07; }
-      if (boneNeckMr)  { boneNeckMr.rotation.z = Math.sin(lt * 0.42) * 0.018; boneNeckMr.rotation.y = Math.sin(lt * 0.30) * 0.035; }
-
-      // Arms — bring down from T-pose and add gentle sway
-      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.9 + Math.sin(lt*0.82)*0.06 + loraChestOpp*0.4; boneLUpperArmMr.rotation.x =  0.07 + Math.sin(lt*0.52)*0.035; boneLUpperArmMr.rotation.y =  0.04 + loraShoulderRoll*0.5; }
-      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.50 + Math.sin(lt*0.95)*0.04; boneLLowerArmMr.rotation.x = -0.04; }
-      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.9 - Math.sin(lt*0.82+0.5)*0.06 - loraChestOpp*0.4; boneRUpperArmMr.rotation.x =  0.07 + Math.sin(lt*0.52+0.5)*0.035; boneRUpperArmMr.rotation.y = -0.04 - loraShoulderRoll*0.5; }
-      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.50 - Math.sin(lt*0.95+0.5)*0.04; boneRLowerArmMr.rotation.x = -0.04; }
-      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.24 + Math.sin(lt*2.0)*0.07; boneLHandMr.rotation.x =  0.10 + Math.sin(lt*2.4)*0.04; }
-      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.24 - Math.sin(lt*2.0+1.0)*0.07; boneRHandMr.rotation.x =  0.10 + Math.sin(lt*2.4+1.0)*0.04; }
-      if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
-      if (setRightFingerRelaxMr) setRightFingerRelaxMr();
-
-      // Legs — natural standing weight
-      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.z = -0.04; boneLUpperLegMr.rotation.x = 0; }
-      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.z =  0.06; boneRUpperLegMr.rotation.x = 0; }
-      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = 0.04;
-      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = 0.04;
-      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.05; boneLFootMr.rotation.z = -0.03; }
-      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.05; boneRFootMr.rotation.z =  0.04; }
-
+      activityUpdateMr(delta);
       lora.update(delta);
     }
   }
