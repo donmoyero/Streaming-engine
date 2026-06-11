@@ -17,6 +17,7 @@ import { getVrm, scene, camera, renderer, ambient,
        } from './engine-scene.js';
 
 import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
+import { startMusic, setMusicVolume } from './engine-music.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   ACTIVITY_MR, activityUpdateMr,
@@ -640,6 +641,7 @@ function goToSpot(spot) {
   if (!spot || !vrm) return;
   _currentSpot = spot;
   setCamMode('WALK');
+  _setMissTV(false);   // leaving current spot — TV off until she arrives somewhere new
 
   const targetRoom = spot.room;
   const doorPath   = findRoomPath(_currentRoom, targetRoom);
@@ -654,6 +656,9 @@ function goToSpot(spot) {
     ACTIVITY.current  = next;
     ACTIVITY.timer    = 0; ACTIVITY.phase = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+
+    // ── TV on/off based on activity ───────────────────────────────
+    _setMissTV(TV_ACTIVITIES.has(next));
 
     // ── Drop Y for seated/lying spots, restore for standing ───
     const vrm = _vrm();
@@ -726,8 +731,27 @@ const _loraActivityPool = {
   hallway:       ['idle','hairflick','stretch','hiponhip'],
 };
 
-// Seated activities for Lora — yOffset applied on arrival
-const _LORA_SEATED = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
+// ── TV watcher tracking ──────────────────────────────────────────
+// Both avatars can independently turn the TV on by sitting to watch.
+// Music volume rises when anyone is watching, drops when both leave.
+const TV_ACTIVITIES = new Set(['watchTV', 'tvReact']);
+let _missWatchingTV = false;
+let _loraWatchingTV = false;
+
+function _updateTVVolume() {
+  const anyone = _missWatchingTV || _loraWatchingTV;
+  // Smooth ramp: loud when watching, quiet ambient when nobody is
+  setMusicVolume(anyone ? 0.26 : 0.08);
+}
+
+function _setMissTV(on) {
+  _missWatchingTV = on;
+  _updateTVVolume();
+}
+function _setLoraTV(on) {
+  _loraWatchingTV = on;
+  _updateTVVolume();
+}
 
 let _loraLifeTimer    = 0;
 let _loraLifeDwell    = 12 + Math.random() * 20;
@@ -751,6 +775,7 @@ function _loraGoToSpot(spot) {
   _loraCurrentSpot   = spot;
   _loraCurrentRoom   = spot.room;
   _loraWalkingToSpot = true;
+  _setLoraTV(false);   // leaving — TV off until she arrives
 
   // Tell engine-scene's walk system where to go
   // It exposes _loraTarget and _loraWalking via window for cross-module comms
@@ -769,6 +794,9 @@ function _loraGoToSpot(spot) {
       ACTIVITY_MR.timer    = 0;
       ACTIVITY_MR.phase    = 0;
       ACTIVITY_MR.duration = 10 + Math.random() * 20;
+
+      // ── TV on/off for Lora ─────────────────────────────────────
+      _setLoraTV(TV_ACTIVITIES.has(next));
 
       // Apply yOffset for seated/lying activities
       const lora = window.getVrmLora ? window.getVrmLora() : null;
@@ -999,6 +1027,8 @@ function _unlockAudio() {
     _sharedAudioCtx.resume();
   } catch(e) {}
   try { window.speechSynthesis.cancel(); } catch(e) {}
+  // Start background music now that audio is unlocked
+  startMusic();
 }
 document.addEventListener('click',      _unlockAudio, { once: true });
 document.addEventListener('keydown',    _unlockAudio, { once: true });
