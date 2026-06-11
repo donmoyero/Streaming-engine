@@ -32,6 +32,9 @@ import {
   boneLFoot, boneRFoot, boneLToes, boneRToes,
   boneLUpperArm, boneRUpperArm, boneLLowerArm, boneRLowerArm,
   boneLHand, boneRHand, boneJaw, teethNode,
+  // ── Lora-specific ────────────────────────────────────────────────
+  doBlinkMr, setBSMr, teethNodeMr,
+  loraWalkUpdate, resetLoraWalkPhase,
 } from './engine-bones.js';
 
 // ── Dead air ─────────────────────────────────────────────────────
@@ -1574,6 +1577,10 @@ const clock    = new THREE.Clock();
 let idleTime   = 0;
 let blinkTimer = 0;
 let nextBlink  = 3;
+// ── Lora parallel timers ─────────────────────────────────────────
+let loraIdleTime  = 0;
+let loraBlinkTimer = 0;
+let loraNextBlink  = 2.2 + Math.random() * 3; // offset from Miss so they don't blink in sync
 
 function render() {
   const delta = clock.getDelta();
@@ -1687,7 +1694,59 @@ function render() {
   {
     const lora = window.getVrmLora ? window.getVrmLora() : null;
     if (lora) {
+      loraIdleTime   += delta;
+      loraBlinkTimer += delta;
+
       activityUpdateMr(delta);
+
+      // ── Lora walk bones — driven here, position driven by engine-scene ──
+      // Use both the local flag and engine-scene's window bridge
+      if (window._loraWalking || _loraWalkingToSpot) {
+        loraWalkUpdate(delta);
+      } else {
+        resetLoraWalkPhase();
+      }
+
+      // ── Lora blink ──────────────────────────────────────────────
+      if (loraBlinkTimer > loraNextBlink) {
+        loraBlinkTimer = 0;
+        loraNextBlink  = 2.5 + Math.random() * 3.5;
+        doBlinkMr();
+      }
+
+      // ── Lora eye look-at ────────────────────────────────────────
+      if (lora.lookAt) {
+        const loraSpeaking = window._loraIsSpeaking || false;
+        if (loraSpeaking) {
+          lora.lookAt.yaw   = Math.sin(loraIdleTime * 0.28) * 7 + Math.sin(loraIdleTime * 0.8) * 3;
+          lora.lookAt.pitch = Math.sin(loraIdleTime * 0.18) * 4 - 2;
+        } else {
+          const loraCycle = loraIdleTime % 14.0;
+          if      (loraCycle < 3.5)  { lora.lookAt.yaw = -15 + Math.sin(loraIdleTime*0.35)*3;  lora.lookAt.pitch = -2 + Math.sin(loraIdleTime*0.28)*2; }
+          else if (loraCycle < 6.0)  { lora.lookAt.yaw =  Math.sin(loraIdleTime*0.28)*5;        lora.lookAt.pitch = -10 + Math.sin(loraIdleTime*0.35)*2; }
+          else if (loraCycle < 9.0)  { lora.lookAt.yaw =  12 + Math.sin(loraIdleTime*0.45)*4;   lora.lookAt.pitch = -1 + Math.sin(loraIdleTime*0.28)*2; }
+          else if (loraCycle < 11.0) { lora.lookAt.yaw =  Math.sin(loraIdleTime*0.18)*4;        lora.lookAt.pitch =  Math.sin(loraIdleTime*0.13)*2 - 1; }
+          else                        { lora.lookAt.yaw =  Math.sin(loraIdleTime*0.55)*10;       lora.lookAt.pitch =  3 + Math.sin(loraIdleTime*0.38)*3; }
+        }
+      }
+
+      // ── Lora idle mouth micro-expressions (only when not lip-syncing) ──
+      if (!window._loraIsSpeaking && ACTIVITY_MR.current === 'idle') {
+        const loraMouthCycle = loraIdleTime % 7.2;
+        if (loraMouthCycle > 6.0) {
+          const p = (loraMouthCycle - 6.0) / 1.2;
+          const pout = Math.sin(p * Math.PI) * 0.16;
+          setBSMr('O', pout); setBSMr('U', pout * 0.5);
+          if (teethNodeMr) teethNodeMr.position.y = -pout * 0.004;
+        } else if (loraMouthCycle > 4.0 && loraMouthCycle < 4.7) {
+          setBSMr('I', Math.sin((loraMouthCycle - 4.0) / 0.7 * Math.PI) * 0.10);
+          if (teethNodeMr) teethNodeMr.position.y = 0;
+        } else {
+          setBSMr('O', 0); setBSMr('U', 0); setBSMr('I', 0);
+          if (teethNodeMr) teethNodeMr.position.y = 0;
+        }
+      }
+
       lora.update(delta);
     }
   }
