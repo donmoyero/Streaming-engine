@@ -1,70 +1,59 @@
 // ================================================================
 //  engine-camera.js
-//  Dual-avatar portrait camera — Miss OG Tinz + Lora.
+//  TV-director camera — alternates focus between Miss OG Tinz and
+//  Lora every 8–15 s. Always locks to the speaker when talking.
+//  Never orbits the midpoint (that puts the camera inside walls).
 //
-//  FIXES in this version:
-//  ─ Camera orbits the MIDPOINT between both avatars, not Miss alone.
-//    This prevents wall shots when presets swing behind/side.
-//  ─ Angle presets that reliably hit walls (BACK, BACK_HIGH,
-//    OVER_SHOULDER, WIDE_SIDE) removed from activity pools or
-//    replaced with safe alternatives.
-//  ─ HOUSE_BOUNDS clamp tightened by an extra 0.4 m inside the
-//    existing margin so the camera never clips a wall.
-//  ─ All original modes (IDLE/SPEAK/THINK/WALK) preserved exactly.
-//  ─ SIMS MODE preserved.
+//  KEY CHANGE: orbit ONE avatar at a time, not the midpoint.
+//  resolveWallCollision() from engine-scene keeps it out of walls.
 // ================================================================
 
 import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
 import { walk } from './engine-life.js';
 
-// ── Wall-clamp margin — extra buffer to keep away from walls ────
-const CAM_WALL_MARGIN = 1.2;   // was 0.5 — tighter = no more wall shots
+// ── Wall-clamp margin ────────────────────────────────────────────
+const CAM_WALL_MARGIN = 1.0;
 
 // ── Interaction mode ─────────────────────────────────────────────
 let camMode = 'IDLE';
 export const CAM_LERP = 0.04;
 
 export const STREAMER_CAM = {
-  IDLE:  { dist: 2.20, height: 1.60, lookHeight: 1.15, sideShift: 0.0  },
-  SPEAK: { dist: 1.30, height: 1.65, lookHeight: 1.42, sideShift: 0.0  },
-  THINK: { dist: 1.70, height: 1.58, lookHeight: 1.30, sideShift: 0.22 },
-  WALK:  { dist: 2.60, height: 1.65, lookHeight: 1.20, sideShift: 0.0  },
-};
-// Note: dist values increased slightly from single-avatar version
-// so both characters fit comfortably in frame.
-
-// ── Sims-style isometric camera ──────────────────────────────────
-const SIMS_CAM = {
-  heightAbove:  4.5,
-  distBack:     5.0,
-  distSide:     2.5,
-  lookAtHeight: 0.8,
+  IDLE:  { dist: 2.00, height: 1.60, lookHeight: 1.15, sideShift: 0.0 },
+  SPEAK: { dist: 1.25, height: 1.65, lookHeight: 1.42, sideShift: 0.0 },
+  THINK: { dist: 1.60, height: 1.58, lookHeight: 1.30, sideShift: 0.22 },
+  WALK:  { dist: 2.40, height: 1.65, lookHeight: 1.20, sideShift: 0.0 },
 };
 
+// ── Sims mode ────────────────────────────────────────────────────
+const SIMS_CAM = { heightAbove: 4.5, distBack: 5.0, distSide: 2.5, lookAtHeight: 0.8 };
 let _simsMode = false;
 export function setSimsMode(on) { _simsMode = on; }
 export function getSimsMode()   { return _simsMode; }
 
-// ── Angle presets — BACK/BACK_HIGH/OVER_SHOULDER removed from
-//    activity pools; they reliably point into walls in a dual-
-//    avatar setup where the house is behind them. ──────────────────
+// ── TV-director focus state ───────────────────────────────────────
+// 'miss' | 'lora'  — which avatar the camera orbits right now
+let _focusTarget  = 'miss';
+let _focusTimer   = 0;
+const FOCUS_MIN   = 8;    // seconds on one avatar before possible switch
+const FOCUS_MAX   = 15;
+let _focusDwell   = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+
+// Force-lock: when Miss is speaking we never cut to Lora
+let _speakLock    = false;
+
+// ── Angle presets ─────────────────────────────────────────────────
 const ANGLE_PRESETS = {
-  FRONT:     { angleOffset:  0,              distMult: 1.0,  heightMult: 1.0,  lookOffset:  0.0  },
-  FRONT_LOW: { angleOffset:  0,              distMult: 1.1,  heightMult: 0.82, lookOffset: -0.08 },
-  CLOSE:     { angleOffset:  0,              distMult: 0.70, heightMult: 1.06, lookOffset:  0.06 },
-  SIDE_L:    { angleOffset: -Math.PI / 2,    distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
-  SIDE_R:    { angleOffset:  Math.PI / 2,    distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
-  SIDE_L_LOW:{ angleOffset: -Math.PI / 2,    distMult: 1.1,  heightMult: 0.85, lookOffset: -0.05 },
-  SIDE_R_LOW:{ angleOffset:  Math.PI / 2,    distMult: 1.1,  heightMult: 0.85, lookOffset: -0.05 },
-  WIDE:      { angleOffset:  0,              distMult: 2.0,  heightMult: 1.20, lookOffset: -0.08 },
-  QUARTER_L: { angleOffset: -Math.PI / 4,    distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
-  QUARTER_R: { angleOffset:  Math.PI / 4,    distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
-  // BACK / BACK_HIGH / OVER_SHOULDER / WIDE_SIDE intentionally omitted —
-  // they face into the house wall with the current spawn layout.
+  FRONT:      { angleOffset:  0,           distMult: 1.0,  heightMult: 1.0,  lookOffset:  0.0  },
+  FRONT_LOW:  { angleOffset:  0,           distMult: 1.1,  heightMult: 0.82, lookOffset: -0.08 },
+  CLOSE:      { angleOffset:  0,           distMult: 0.70, heightMult: 1.06, lookOffset:  0.06 },
+  SIDE_L:     { angleOffset: -Math.PI / 2, distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
+  SIDE_R:     { angleOffset:  Math.PI / 2, distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
+  WIDE:       { angleOffset:  0,           distMult: 1.80, heightMult: 1.20, lookOffset: -0.08 },
+  QUARTER_L:  { angleOffset: -Math.PI / 4, distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
+  QUARTER_R:  { angleOffset:  Math.PI / 4, distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
 };
 
-// ── Activity → angle pool — safe presets only ────────────────────
-// FRONT appears more often across pools = camera naturally returns to face
 const ACTIVITY_ANGLES = {
   idle:        ['FRONT', 'FRONT', 'FRONT', 'QUARTER_L', 'QUARTER_R', 'WIDE'],
   dance:       ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT', 'FRONT_LOW'],
@@ -111,7 +100,9 @@ export function setCamFacingY(y) { _camFacingY = y; }
 // ── Public API ───────────────────────────────────────────────────
 export function setCamMode(mode) {
   if (!['IDLE','SPEAK','THINK','WALK'].includes(mode)) return;
-  camMode = mode;
+  camMode     = mode;
+  _speakLock  = (mode === 'SPEAK');
+  if (_speakLock) _focusTarget = 'miss';   // always cut to Miss when she speaks
 }
 
 export function onActivityChanged(activityName) {
@@ -125,31 +116,26 @@ export function setCamAngle(presetName) {
   if (ANGLE_PRESETS[presetName]) _currentAnglePreset = presetName;
 }
 
-// ── Snap camera to midpoint of both avatars on first load ────────
+// ── Snap on first load — orbit Miss ─────────────────────────────
 export function _snapCameraToVRM() {
-  const vrm  = getVrm();
+  const vrm = getVrm();
   if (!vrm) return;
-  const lora = getVrmLora ? getVrmLora() : null;
-
-  const mx = lora ? (vrm.scene.position.x + lora.scene.position.x) / 2 : vrm.scene.position.x;
-  const my = vrm.scene.position.y;
-  const mz = lora ? (vrm.scene.position.z + lora.scene.position.z) / 2 : vrm.scene.position.z;
-
   const p  = STREAMER_CAM.IDLE;
   const fy = vrm.scene.rotation.y;
   _camFacingY = fy;
-
-  const cx = mx - Math.sin(fy) * p.dist + Math.cos(fy) * p.sideShift;
+  const mx = vrm.scene.position.x;
+  const my = vrm.scene.position.y;
+  const mz = vrm.scene.position.z;
+  const cx = mx + Math.sin(fy) * p.dist;
   const cy = my + p.height;
-  const cz = mz - Math.cos(fy) * p.dist - Math.sin(fy) * p.sideShift;
-
+  const cz = mz + Math.cos(fy) * p.dist;
   camCurrent.x = cx; camCurrent.y = cy; camCurrent.z = cz;
   camCurrent.lookX = mx; camCurrent.lookY = my + p.lookHeight; camCurrent.lookZ = mz;
   camera.position.set(cx, cy, cz);
   camera.lookAt(mx, my + p.lookHeight, mz);
 }
 
-// ── Internal: pick angle from activity pool ──────────────────────
+// ── Internal: pick angle ─────────────────────────────────────────
 function _pickAngleForActivity(activityName) {
   const pool = ACTIVITY_ANGLES[activityName] || ACTIVITY_ANGLES.idle;
   let pick = pool[Math.floor(Math.random() * pool.length)];
@@ -159,19 +145,40 @@ function _pickAngleForActivity(activityName) {
   _currentAnglePreset = pick;
 }
 
-// ── Main update — called every frame ────────────────────────────
+// ── TV-director switch ────────────────────────────────────────────
+function _maybeSwitch(delta, lora) {
+  if (_speakLock || !lora) return;    // can't switch when Miss is speaking or Lora not loaded
+  _focusTimer += delta;
+  if (_focusTimer >= _focusDwell) {
+    _focusTimer  = 0;
+    _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+    _focusTarget = _focusTarget === 'miss' ? 'lora' : 'miss';
+    _pickAngleForActivity(_currentActivity);   // fresh angle on cut
+    console.log(`[Cam] cut to ${_focusTarget}`);
+  }
+}
+
+// ── Main update ──────────────────────────────────────────────────
 export function updateCamera(delta) {
   const vrm  = getVrm();
   if (!vrm) return;
-  const lora = getVrmLora ? getVrmLora() : null;
+  const lora = (typeof getVrmLora === 'function') ? getVrmLora() : null;
 
-  // ── Midpoint — orbit around the centre of both avatars ────────
-  const mx = lora ? (vrm.scene.position.x + lora.scene.position.x) / 2 : vrm.scene.position.x;
-  const my = vrm.scene.position.y;
-  const mz = lora ? (vrm.scene.position.z + lora.scene.position.z) / 2 : vrm.scene.position.z;
+  // ── TV-director switch ────────────────────────────────────────
+  _maybeSwitch(delta, lora);
+
+  // ── Pick the avatar we're focused on right now ────────────────
+  const focusVrm = (_focusTarget === 'lora' && lora) ? lora : vrm;
+  const fx = focusVrm.scene.position.x;
+  const fy_ = focusVrm.scene.position.y;   // height
+  const fz = focusVrm.scene.position.z;
 
   // ── SIMS MODE ─────────────────────────────────────────────────
   if (_simsMode) {
+    // Sims orbits midpoint — fine because camera is high and angled down
+    const mx = lora ? (vrm.scene.position.x + lora.scene.position.x) / 2 : vrm.scene.position.x;
+    const my = vrm.scene.position.y;
+    const mz = lora ? (vrm.scene.position.z + lora.scene.position.z) / 2 : vrm.scene.position.z;
     const tx = mx + SIMS_CAM.distSide;
     const ty = my + SIMS_CAM.heightAbove;
     const tz = mz + SIMS_CAM.distBack;
@@ -187,8 +194,8 @@ export function updateCamera(delta) {
     return;
   }
 
-  // ── Smooth facing angle (use Miss's facing as the reference) ──
-  const rawFacing = vrm.scene.rotation.y;
+  // ── Smooth facing — track the focused avatar ──────────────────
+  const rawFacing = focusVrm.scene.rotation.y;
   let df = rawFacing - _camFacingY;
   while (df >  Math.PI) df -= Math.PI * 2;
   while (df < -Math.PI) df += Math.PI * 2;
@@ -206,7 +213,7 @@ export function updateCamera(delta) {
     }
   }
 
-  // ── Resolve interaction preset & angle ────────────────────────
+  // ── Resolve preset & angle ────────────────────────────────────
   let interactionPreset;
   let effectiveAngle;
 
@@ -224,34 +231,31 @@ export function updateCamera(delta) {
     effectiveAngle    = ANGLE_PRESETS[_currentAnglePreset] || ANGLE_PRESETS.FRONT;
   }
 
-  // ── Compute target position around the midpoint ───────────────
+  // ── Compute target — orbit the FOCUSED avatar only ────────────
   const orbitAngle = _camFacingY + effectiveAngle.angleOffset;
-  const dist       = interactionPreset.dist      * effectiveAngle.distMult;
-  const height     = interactionPreset.height     * effectiveAngle.heightMult;
+  const dist       = interactionPreset.dist * effectiveAngle.distMult;
+  const height     = interactionPreset.height * effectiveAngle.heightMult;
   const lookHeight = interactionPreset.lookHeight + effectiveAngle.lookOffset;
 
-  const tx = mx + Math.sin(orbitAngle) * dist;
-  const ty = my + height;
-  const tz = mz + Math.cos(orbitAngle) * dist;
+  let tx = fx + Math.sin(orbitAngle) * dist;
+  const ty = fy_ + height;
+  let tz = fz + Math.cos(orbitAngle) * dist;
 
-  // ── Wall clamp — outer bounds + interior wall push-out ───────────
-  const camRadius = CAM_WALL_MARGIN;
-  const clamped   = resolveWallCollision(tx, tz, camRadius);
-  const clampedX  = clamped.x;
-  const clampedZ  = clamped.z;
+  // ── Wall push-out ─────────────────────────────────────────────
+  const safe = resolveWallCollision(tx, tz, CAM_WALL_MARGIN);
+  tx = safe.x;
+  tz = safe.z;
 
-  // ── Lerp ─────────────────────────────────────────────────────
-  const L = camMode === 'SPEAK' ? 0.09
-          : walk.active          ? 0.03
-          : 0.018;
+  // ── Lerp ──────────────────────────────────────────────────────
+  const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : 0.018;
+  const lf = Math.min(1, L * 60 * delta);
 
-  const lerpFactor = Math.min(1, L * 60 * delta);
-  camCurrent.x     += (clampedX        - camCurrent.x)    * lerpFactor;
-  camCurrent.y     += (ty              - camCurrent.y)     * lerpFactor;
-  camCurrent.z     += (clampedZ        - camCurrent.z)     * lerpFactor;
-  camCurrent.lookX += (mx              - camCurrent.lookX) * Math.min(1, lerpFactor * 1.5);
-  camCurrent.lookY += (my + lookHeight - camCurrent.lookY) * Math.min(1, lerpFactor * 1.5);
-  camCurrent.lookZ += (mz              - camCurrent.lookZ) * Math.min(1, lerpFactor * 1.5);
+  camCurrent.x     += (tx         - camCurrent.x)    * lf;
+  camCurrent.y     += (ty         - camCurrent.y)     * lf;
+  camCurrent.z     += (tz         - camCurrent.z)     * lf;
+  camCurrent.lookX += (fx         - camCurrent.lookX) * Math.min(1, lf * 1.5);
+  camCurrent.lookY += (fy_ + lookHeight - camCurrent.lookY) * Math.min(1, lf * 1.5);
+  camCurrent.lookZ += (fz         - camCurrent.lookZ) * Math.min(1, lf * 1.5);
 
   camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
   camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
