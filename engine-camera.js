@@ -14,7 +14,7 @@
 //  ─ SIMS MODE preserved.
 // ================================================================
 
-import { camera, getVrm, getVrmLora, HOUSE_BOUNDS } from './engine-scene.js';
+import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
 import { walk } from './engine-life.js';
 
 // ── Wall-clamp margin — extra buffer to keep away from walls ────
@@ -234,15 +234,11 @@ export function updateCamera(delta) {
   const ty = my + height;
   const tz = mz + Math.cos(orbitAngle) * dist;
 
-  // ── Wall clamp ────────────────────────────────────────────────
-  const clampedX = Math.max(
-    HOUSE_BOUNDS.minX + CAM_WALL_MARGIN,
-    Math.min(HOUSE_BOUNDS.maxX - CAM_WALL_MARGIN, tx)
-  );
-  const clampedZ = Math.max(
-    HOUSE_BOUNDS.minZ + CAM_WALL_MARGIN,
-    Math.min(HOUSE_BOUNDS.maxZ - CAM_WALL_MARGIN, tz)
-  );
+  // ── Wall clamp — outer bounds + interior wall push-out ───────────
+  const camRadius = CAM_WALL_MARGIN;
+  const clamped   = resolveWallCollision(tx, tz, camRadius);
+  const clampedX  = clamped.x;
+  const clampedZ  = clamped.z;
 
   // ── Lerp ─────────────────────────────────────────────────────
   const L = camMode === 'SPEAK' ? 0.09
