@@ -334,44 +334,97 @@ export function updateWalk(delta) {
   vrm.scene.position.x = vrmPos.x;
   vrm.scene.position.z = vrmPos.z;
 
-  // ── Walk animation ───────────────────────────────────────────
-  const STEP_FREQ = 2.4;
+  // ── Walk animation — 8-phase cycle per guide ────────────────
+  // Phase: heel strike → weight acceptance → midstance → terminal stance → push off → repeat
+  const STEP_FREQ = 2.2;  // slightly slower = more natural human gait
   _walkPhase += delta * STEP_FREQ * Math.PI * 2;
   const p = _walkPhase;
 
-  const legSwing  = Math.sin(p) * 0.42;
-  const kneeBend  = Math.max(0, -Math.sin(p)) * 0.55;
-  const kneeSwing = Math.max(0,  Math.sin(p)) * 0.35;
-  const footLift  = Math.max(0,  Math.sin(p)) * 0.18;
+  // ── Legs — full gait cycle ───────────────────────────────────
+  // Left and right legs are 180° out of phase
+  const leftLegFwd  =  Math.sin(p);          // positive = leg forward (heel strike)
+  const rightLegFwd = -Math.sin(p);          // opposite phase
 
-  if (boneLUpperLeg) boneLUpperLeg.rotation.x =  legSwing;
-  if (boneRUpperLeg) boneRUpperLeg.rotation.x = -legSwing;
-  if (boneLLowerLeg) boneLLowerLeg.rotation.x =  kneeBend  + 0.04;
-  if (boneRLowerLeg) boneRLowerLeg.rotation.x =  kneeSwing + 0.04;
-  if (boneLFoot)     { boneLFoot.rotation.x = -0.05 + footLift * 0.5; boneLFoot.rotation.z = -0.03; }
-  if (boneRFoot)     { boneRFoot.rotation.x = -0.05;                  boneRFoot.rotation.z =  0.04; }
-  if (boneLToes)     boneLToes.rotation.x =  0.08 + footLift * 0.3;
-  if (boneRToes)     boneRToes.rotation.x =  0.08;
+  // Knee bend: peaks during swing phase (foot off ground)
+  // Guide: knee bends 0–150° — use ~0.55 rad (31°) for natural walk
+  const leftKnee  = Math.max(0, -Math.sin(p + 0.4)) * 0.58;   // bend during swing
+  const rightKnee = Math.max(0,  Math.sin(p + 0.4)) * 0.58;
 
-  const hipSway = Math.sin(p) * 0.1;
-  const hipTilt = Math.cos(p) * 0.04;
-  if (boneHips) { boneHips.rotation.z = hipSway; boneHips.rotation.x = hipTilt; boneHips.rotation.y = Math.sin(p) * 0.05; }
-  if (boneSpine) { boneSpine.rotation.z = -hipSway * 0.6; boneSpine.rotation.x = 0.02 + Math.abs(Math.cos(p)) * 0.015; boneSpine.rotation.y = -Math.sin(p) * 0.04; }
-  if (boneChest) { boneChest.rotation.z = -hipSway * 0.3; boneChest.rotation.y = -Math.sin(p) * 0.06; }
-  if (boneHead)  { boneHead.rotation.x = 0.04 + Math.abs(Math.sin(p)) * 0.02; boneHead.rotation.z = Math.sin(p) * 0.018; boneHead.rotation.y = Math.sin(p) * 0.04; }
+  // Foot: heel strike at front, toe-off at back
+  const leftFootAngle  =  Math.sin(p) * 0.22;    // heel strikes: foot angled down
+  const rightFootAngle = -Math.sin(p) * 0.22;
 
-  const armSwing  = -Math.sin(p) * 0.28;
-  const elbowBend =  0.35 + Math.abs(Math.sin(p)) * 0.1;
-  if (boneLUpperArm) { boneLUpperArm.rotation.x =  armSwing; boneLUpperArm.rotation.z =  0.8; boneLUpperArm.rotation.y =  0.04; }
-  if (boneRUpperArm) { boneRUpperArm.rotation.x = -armSwing; boneRUpperArm.rotation.z = -0.8; boneRUpperArm.rotation.y = -0.04; }
-  if (boneLLowerArm) { boneLLowerArm.rotation.x = 0; boneLLowerArm.rotation.z =  elbowBend; }
-  if (boneRLowerArm) { boneRLowerArm.rotation.x = 0; boneRLowerArm.rotation.z = -elbowBend; }
-  if (boneLHand) { boneLHand.rotation.z =  0.15; boneLHand.rotation.x = 0.05; }
-  if (boneRHand) { boneRHand.rotation.z = -0.15; boneRHand.rotation.x = 0.05; }
+  // Ankle dorsiflexion on heel strike — toe pulls up
+  const leftHeelStrike  = Math.max(0,  Math.sin(p)) * 0.18;
+  const rightHeelStrike = Math.max(0, -Math.sin(p)) * 0.18;
+
+  if (boneLUpperLeg) { boneLUpperLeg.rotation.x =  leftLegFwd * 0.44; boneLUpperLeg.rotation.z = -0.04; }
+  if (boneRUpperLeg) { boneRUpperLeg.rotation.x =  rightLegFwd * 0.44; boneRUpperLeg.rotation.z =  0.04; }
+  if (boneLLowerLeg) boneLLowerLeg.rotation.x =  leftKnee + 0.03;
+  if (boneRLowerLeg) boneRLowerLeg.rotation.x =  rightKnee + 0.03;
+  if (boneLFoot)     { boneLFoot.rotation.x = -0.04 + leftFootAngle + leftHeelStrike * 0.4; boneLFoot.rotation.z = -0.03; }
+  if (boneRFoot)     { boneRFoot.rotation.x = -0.04 + rightFootAngle + rightHeelStrike * 0.4; boneRFoot.rotation.z =  0.04; }
+  if (boneLToes)     boneLToes.rotation.x =  0.07 + leftHeelStrike * 0.25;
+  if (boneRToes)     boneRToes.rotation.x =  0.07 + rightHeelStrike * 0.25;
+
+  // ── Hips — guide: sway left/right, slight tilt, minimal twist ─
+  // Hip sway: shifts laterally with weight transfer
+  const hipSway  = Math.sin(p) * 0.12;        // lateral sway
+  const hipTilt  = Math.cos(p) * 0.055;       // tilt toward stance leg
+  const hipTwist = Math.sin(p) * 0.06;        // forward rotation of stance hip
+
+  if (boneHips) {
+    boneHips.rotation.z = hipSway;
+    boneHips.rotation.x = hipTilt;
+    boneHips.rotation.y = hipTwist;
+  }
+
+  // ── Spine + chest — counter-rotate to hips for balance ────────
+  // Guide: shoulders relaxed, back straight during walk
+  if (boneSpine) {
+    boneSpine.rotation.z = -hipSway * 0.55;
+    boneSpine.rotation.x =  0.02 + Math.abs(Math.cos(p)) * 0.012;
+    boneSpine.rotation.y = -hipTwist * 0.6;
+  }
+  if (boneChest) {
+    boneChest.rotation.z = -hipSway * 0.28;
+    boneChest.rotation.y = -hipTwist * 0.8;  // shoulders swing opposite to hips
+  }
+
+  // ── Head — slight bob, looks forward, relaxed ─────────────────
+  // Guide: head straight, eyes level, slight natural movement
+  if (boneHead) {
+    boneHead.rotation.x =  0.03 + Math.abs(Math.sin(p)) * 0.015;
+    boneHead.rotation.z =  Math.sin(p) * 0.015;
+    boneHead.rotation.y =  Math.sin(p) * 0.03;
+  }
+
+  // ── Arms — oppose legs, elbows bent naturally ──────────────────
+  // Guide: arms swing forward/back opposing leg, elbows 90–150° flex
+  // Left arm swings forward when right leg swings forward (and vice versa)
+  const armSwing = 0.30;
+  const elbowFlex = 0.38 + Math.abs(Math.sin(p)) * 0.08;
+
+  if (boneLUpperArm) {
+    boneLUpperArm.rotation.x =  rightLegFwd * armSwing;  // opposes right leg
+    boneLUpperArm.rotation.z =  0.78;
+    boneLUpperArm.rotation.y =  0.03;
+  }
+  if (boneRUpperArm) {
+    boneRUpperArm.rotation.x =  leftLegFwd * armSwing;   // opposes left leg
+    boneRUpperArm.rotation.z = -0.78;
+    boneRUpperArm.rotation.y = -0.03;
+  }
+  if (boneLLowerArm) { boneLLowerArm.rotation.z =  elbowFlex; boneLLowerArm.rotation.x =  0.02; }
+  if (boneRLowerArm) { boneRLowerArm.rotation.z = -elbowFlex; boneRLowerArm.rotation.x =  0.02; }
+  if (boneLHand) { boneLHand.rotation.z =  0.12; boneLHand.rotation.x = 0.04; }
+  if (boneRHand) { boneRHand.rotation.z = -0.12; boneRHand.rotation.x = 0.04; }
   setLeftFingerRelax();
   setRightFingerRelax();
 
-  const bobY = Math.abs(Math.sin(p)) * 0.018;
+  // ── Vertical bob — step from heel to toe produces natural up/down
+  // Guide: step from heel to toe, weight shifts up on midstance
+  const bobY = Math.abs(Math.sin(p)) * 0.016;
   vrm.scene.position.y = (vrm._restPosY || 0) + bobY;
 }
 
@@ -927,9 +980,6 @@ function maybeShowThought(delta) {
 }
 
 // ── Audio unlock ─────────────────────────────────────────────────
-// AudioContext must be created INSIDE a user gesture (click/key/touch).
-// We store one shared instance and only resume it inside speak().
-// Never create AudioContext on page load — that's what causes the warning.
 let _audioUnlocked = false;
 let _sharedAudioCtx = null;
 
@@ -938,7 +988,6 @@ function _unlockAudio() {
   _audioUnlocked = true;
   try {
     _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Play a silent buffer to fully unlock the context
     const buf = _sharedAudioCtx.createBuffer(1, 1, 22050);
     const src = _sharedAudioCtx.createBufferSource();
     src.buffer = buf;
@@ -978,7 +1027,7 @@ function _pickVoice() {
 export let _isSpeaking = false;
 
 export async function speak(text, mood = 'neutral') {
-  // Resume shared AudioContext if it exists (created by gesture) — never create here
+  // Resume shared AudioContext if it exists — never create here
   if (_sharedAudioCtx && _sharedAudioCtx.state === 'suspended') {
     _sharedAudioCtx.resume().catch(() => {});
   }
@@ -1498,6 +1547,24 @@ window.missOgTinz = {
     vrm.scene.position.x = x; vrm.scene.position.z = z;
     console.log(`[Teleport] → (${x}, ${z})`);
   },
+};
+
+// ── Activity bridges for music/BFF engine ───────────────────────
+Object.defineProperty(window, '_missCurrentActivity', { get: () => ACTIVITY.current,    configurable: true });
+Object.defineProperty(window, '_loraCurrentActivity', { get: () => ACTIVITY_MR.current, configurable: true });
+window._onActivityChanged = onActivityChanged;
+window._setMissActivity = (actName, duration) => {
+  ACTIVITY.current  = actName;
+  ACTIVITY.timer    = 0;
+  ACTIVITY.phase    = 0;
+  if (duration) ACTIVITY.duration = duration;
+  onActivityChanged(actName);
+};
+window._setLoraActivity = (actName, duration) => {
+  ACTIVITY_MR.current  = actName;
+  ACTIVITY_MR.timer    = 0;
+  ACTIVITY_MR.phase    = 0;
+  if (duration) ACTIVITY_MR.duration = duration;
 };
 
 // ================================================================
