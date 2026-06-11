@@ -515,6 +515,29 @@ function _initLoraWalk() {
   }
   requestAnimationFrame(_loraTick);
   console.log('[Lora Walk] inline system started ✓  rooms:', _LORA_ROOMS.map(r => r.name).join(', '));
+
+  // ── Cross-module bridge for engine-life's Lora scheduler ──────
+  // engine-life._loraGoToSpot() calls window._loraSetTarget(x, z, onArrival)
+  // to hand off movement to this walk system, then gets a callback on arrival.
+  let _loraArrivalCb = null;
+
+  window._loraSetTarget = (x, z, onArrival) => {
+    _loraTarget   = { x, z };
+    _loraWalking  = true;
+    _loraArrivalCb = onArrival || null;
+  };
+
+  window._loraSetFacing = (facingY) => {
+    if (vrmMr) vrmMr.scene.rotation.y = facingY;
+  };
+
+  // Patch _updateLoraWalk to fire arrival callback
+  const _origUpdate = _updateLoraWalk;
+  Object.defineProperty(window, '_loraArrivalCbRef', {
+    get: () => _loraArrivalCb,
+    set: (v) => { _loraArrivalCb = v; },
+    configurable: true,
+  });
 }
 
 function _updateLoraWalk(dt) {
@@ -534,6 +557,9 @@ function _updateLoraWalk(dt) {
       _loraWalking  = false;
       _loraTarget   = null;
       _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
+      // Fire engine-life arrival callback if one was set
+      const cb = window._loraArrivalCbRef;
+      if (cb) { window._loraArrivalCbRef = null; cb(); }
     } else {
       // FIX: was Math.atan2(dx,dz) — Lora's forward is +PI offset from raw atan2
       vrmMr.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
