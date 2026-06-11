@@ -1827,30 +1827,42 @@ export function activityUpdateMr(delta) {
 
     // ── PHONE SCROLL ───────────────────────────────────────────
     case 'phoneScroll': {
-      const scroll = Math.sin(t * 1.8) * 0.06;
-      const breathe = Math.sin(t * 0.55) * 0.010;
+      const thumbScroll = Math.sin(t * 2.2) * 0.04;
+      const breathe     = Math.sin(t * 0.55) * 0.010;
 
-      if (boneHipsMr)      { boneHipsMr.rotation.z = Math.sin(t*0.4)*0.04; }
-      if (boneSpineMr)     { boneSpineMr.rotation.x = 0.12 + breathe; }
-      if (boneChestMr)     { boneChestMr.rotation.x = 0.08 + breathe*0.5; }
-      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.22 + Math.sin(t*0.3)*0.04; boneHeadMr.rotation.y = Math.sin(t*0.22)*0.06; }
+      // Hips — stay in seated position (same as sofaSit)
+      if (boneHipsMr)  { boneHipsMr.rotation.x = 1.65; boneHipsMr.rotation.z = 0.03 + Math.sin(t*0.3)*0.01; }
+      // Spine — slight forward lean when looking at phone
+      if (boneSpineMr) { boneSpineMr.rotation.x = 0.08 + breathe; boneSpineMr.rotation.z = Math.sin(t*0.3)*0.01; }
+      if (boneChestMr) { boneChestMr.rotation.x = 0.05 + breathe*0.5; }
 
-      // Right arm holds phone up
-      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.48; boneRUpperArmMr.rotation.x = 0.85; }
-      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.25; boneRLowerArmMr.rotation.x = 0.35; }
-      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.10; boneRHandMr.rotation.x = 0.12; }
+      // Head — neck angle 15–30° down per guide (rotation.x = 0.30)
+      if (boneHeadMr)  { boneHeadMr.rotation.x = 0.30 + Math.sin(t*0.4)*0.025; boneHeadMr.rotation.y = Math.sin(t*0.2)*0.03; boneHeadMr.rotation.z = Math.sin(t*0.35)*0.018; }
+      if (boneNeckMr)  { boneNeckMr.rotation.x = 0.15; }
 
-      // Left arm rests
-      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z = 0.80; boneLUpperArmMr.rotation.x = 0.10; }
-      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z = 0.45; boneLLowerArmMr.rotation.x = 0.08; }
+      // Legs — same seated position as sofaSit
+      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x =  1.55; boneLUpperLegMr.rotation.z = -0.12; boneLUpperLegMr.rotation.y =  0.04; }
+      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x =  1.55; boneRUpperLegMr.rotation.z =  0.10; boneRUpperLegMr.rotation.y = -0.04; }
+      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = -1.58;
+      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = -1.58;
+      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.12; boneLFootMr.rotation.z = -0.05; }
+      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.12; boneRFootMr.rotation.z =  0.05; }
 
-      // Thumb scroll twitch on right hand
-      if (boneRHandMr) boneRHandMr.rotation.y = scroll;
+      // Right arm — elbow close to body (z = -0.28), forearm raised to eye level per guide
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.28; boneRUpperArmMr.rotation.x =  0.45; boneRUpperArmMr.rotation.y =  0.08; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.18; boneRLowerArmMr.rotation.x =  0.55; boneRLowerArmMr.rotation.y = -0.05; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.10; boneRHandMr.rotation.x = -0.20 + thumbScroll; boneRHandMr.rotation.y = 0.05; }
+
+      // Left arm — supports or rests on thigh
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.55; boneLUpperArmMr.rotation.x =  0.30; boneLUpperArmMr.rotation.y = -0.05; }
+      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.35; boneLLowerArmMr.rotation.x =  0.15; }
+      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.12; boneLHandMr.rotation.x =  0.05; }
 
       const smileCycle = t % 8;
-      if (smileCycle > 6) setExpressionMr('happy');
-      else setExpressionMr('neutral');
+      if (smileCycle > 6.5) { setExpressionMr('happy'); setBSMr('I', Math.sin((smileCycle-6.5)/1.5*Math.PI)*0.15); }
+      else { setExpressionMr('neutral'); setBSMr('I', 0); }
 
+      if (setRightFingerRelaxMr) setRightFingerRelaxMr();
       if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
       break;
     }
@@ -1885,19 +1897,20 @@ export function activityUpdateMr(delta) {
       const breathe = Math.sin(t * 0.52) * 0.011;
       const headDrift = Math.sin(t * 0.18) * 0.06;
 
-      // Seated pose — hips rotated into sofa
-      if (boneHipsMr)      { boneHipsMr.rotation.x = 1.30; boneHipsMr.rotation.z = Math.sin(t*0.3)*0.03; }
+      // Seated pose — hips 90–110° per guide (1.65 = 94°)
+      if (boneHipsMr)      { boneHipsMr.rotation.x = 1.65; boneHipsMr.rotation.z = Math.sin(t*0.3)*0.03; }
       if (boneSpineMr)     { boneSpineMr.rotation.x = -0.18 + breathe; }
       if (boneChestMr)     { boneChestMr.rotation.x = -0.10 + breathe*0.5; }
-      // Head pitched up toward screen
-      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.08 + headDrift; boneHeadMr.rotation.y = Math.sin(t*0.14)*0.07; }
+      // Head level, looking toward screen
+      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.06 + headDrift; boneHeadMr.rotation.y = Math.sin(t*0.14)*0.07; }
 
-      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x = -1.52; boneLUpperLegMr.rotation.z = -0.12; }
-      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x = -1.52; boneRUpperLegMr.rotation.z =  0.10; }
-      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = 1.44;
-      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = 1.44;
-      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.16; }
-      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.16; }
+      // Legs — thighs parallel to floor (+1.55), knee 95° (-1.58)
+      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.x =  1.55; boneLUpperLegMr.rotation.z = -0.12; }
+      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.x =  1.55; boneRUpperLegMr.rotation.z =  0.10; }
+      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = -1.58;
+      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = -1.58;
+      if (boneLFootMr)     { boneLFootMr.rotation.x = -0.12; boneLFootMr.rotation.z = -0.05; }
+      if (boneRFootMr)     { boneRFootMr.rotation.x = -0.12; boneRFootMr.rotation.z =  0.05; }
 
       // Arms resting on thighs
       if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.62; boneLUpperArmMr.rotation.x = 0.15; }
