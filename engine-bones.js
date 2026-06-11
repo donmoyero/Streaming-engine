@@ -480,6 +480,42 @@ export function activityUpdate(delta) {
       break;
     }
 
+    // ── LISTEN DANCE — bigger arms, feel-the-beat head nod ─────
+    case 'listenDance': {
+      const beat   = Math.sin(t * 6.8);           // slightly different BPM feel to dance
+      const bob    = Math.abs(Math.sin(t * 6.8)) * 0.07;
+      const upArm  = Math.sin(t * 3.4);           // arm phase
+      const phase2 = Math.sin(t * 6.8 + Math.PI); // counter-phase
+
+      if (boneHips)  { boneHips.rotation.z  = beat*0.20; boneHips.rotation.y = beat*0.10; boneHips.rotation.x = bob*0.5; }
+      if (boneSpine) { boneSpine.rotation.z = -beat*0.11; boneSpine.rotation.x = bob*0.9; boneSpine.rotation.y = beat*0.04; }
+      if (boneChest) { boneChest.rotation.z = beat*0.07; boneChest.rotation.x = bob*0.6; }
+
+      // Arms raise higher than plain dance — feel the music
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.80 + upArm*0.32; boneLUpperArm.rotation.x = 0.22 + bob*0.5; }
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -(0.80 + Math.sin(t*3.4+0.8)*0.32); boneRUpperArm.rotation.x = 0.22 + bob*0.5; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z =  0.55 + Math.sin(t*6.8+0.9)*0.22;
+      if (boneRLowerArm) boneRLowerArm.rotation.z = -(0.55 + Math.sin(t*6.8-0.9)*0.22);
+      if (boneLHand) { boneLHand.rotation.z = 0.28 + Math.sin(t*9.5)*0.20; boneLHand.rotation.y = Math.sin(t*5.5)*0.10; }
+      if (boneRHand) { boneRHand.rotation.z = -(0.28 + Math.sin(t*9.5+1)*0.20); boneRHand.rotation.y = Math.sin(t*5.5+1)*0.10; }
+
+      // Legs — weight shift + subtle knee
+      if (boneLUpperLeg) { boneLUpperLeg.rotation.z = beat*0.09; boneLUpperLeg.rotation.x = bob*0.3; }
+      if (boneRUpperLeg) { boneRUpperLeg.rotation.z = -beat*0.09; boneRUpperLeg.rotation.x = bob*0.3; }
+      if (boneLLowerLeg) boneLLowerLeg.rotation.x = Math.max(0, phase2)*0.10;
+      if (boneRLowerLeg) boneRLowerLeg.rotation.x = Math.max(0, beat)*0.10;
+      if (boneLFoot)     boneLFoot.rotation.x = -0.04 + Math.max(0, beat)*0.13;
+      if (boneRFoot)     boneRFoot.rotation.x = -0.04 + Math.max(0, -beat)*0.13;
+
+      // Head — nods on beat, small side sway
+      if (boneHead) { boneHead.rotation.x = 0.04 + bob*0.35; boneHead.rotation.z = Math.sin(t*3.4)*0.07; boneHead.rotation.y = beat*0.06; }
+      if (boneNeck) { boneNeck.rotation.x = 0.02 + bob*0.18; }
+
+      setExpression('happy');
+      setBS('A', Math.max(0, Math.sin(t*6.8))*0.25);
+      break;
+    }
+
     // ── STRETCH ────────────────────────────────────────────────
     case 'stretch': {
       const cycle = t % 6.0;
@@ -1919,6 +1955,39 @@ export function activityUpdateMr(delta) {
       if (boneRFootMr)     boneRFootMr.rotation.x = -0.04 + Math.max(0, -groove)*0.10;
 
       if (boneHeadMr) { boneHeadMr.rotation.z = Math.sin(t*2.75)*0.06; boneHeadMr.rotation.y = groove*0.06; boneHeadMr.rotation.x = 0.04 + bob*0.3; }
+
+      setExpressionMr('happy');
+      if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
+      if (setRightFingerRelaxMr) setRightFingerRelaxMr();
+      break;
+    }
+
+    // ── LISTEN DANCE — Lora version, slightly offset phase ─────
+    case 'listenDance': {
+      const beat   = Math.sin(t * 7.0 + 0.4);   // slightly offset from Miss so they don't mirror
+      const bob    = Math.abs(Math.sin(t * 7.0)) * 0.07;
+      const upArm  = Math.sin(t * 3.5 + 0.4);
+
+      if (boneHipsMr)  { boneHipsMr.rotation.z  = beat*0.20; boneHipsMr.rotation.y = beat*0.10; boneHipsMr.rotation.x = bob*0.5; }
+      if (boneSpineMr) { boneSpineMr.rotation.z = -beat*0.11; boneSpineMr.rotation.x = bob*0.9; boneSpineMr.rotation.y = beat*0.04; }
+      if (boneChestMr) { boneChestMr.rotation.z = beat*0.07; boneChestMr.rotation.x = bob*0.6; }
+
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.80 + upArm*0.32; boneLUpperArmMr.rotation.x = 0.22 + bob*0.5; }
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -(0.80 + Math.sin(t*3.5+1.2)*0.32); boneRUpperArmMr.rotation.x = 0.22 + bob*0.5; }
+      if (boneLLowerArmMr) boneLLowerArmMr.rotation.z =  0.55 + Math.sin(t*7.0+0.9)*0.22;
+      if (boneRLowerArmMr) boneRLowerArmMr.rotation.z = -(0.55 + Math.sin(t*7.0-0.9)*0.22);
+      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.28 + Math.sin(t*9.8)*0.20; boneLHandMr.rotation.y = Math.sin(t*5.8)*0.10; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -(0.28 + Math.sin(t*9.8+1)*0.20); boneRHandMr.rotation.y = Math.sin(t*5.8+1)*0.10; }
+
+      if (boneLUpperLegMr) { boneLUpperLegMr.rotation.z = beat*0.09; boneLUpperLegMr.rotation.x = bob*0.3; }
+      if (boneRUpperLegMr) { boneRUpperLegMr.rotation.z = -beat*0.09; boneRUpperLegMr.rotation.x = bob*0.3; }
+      if (boneLLowerLegMr) boneLLowerLegMr.rotation.x = Math.max(0, -beat)*0.10;
+      if (boneRLowerLegMr) boneRLowerLegMr.rotation.x = Math.max(0, beat)*0.10;
+      if (boneLFootMr)     boneLFootMr.rotation.x = -0.04 + Math.max(0, beat)*0.13;
+      if (boneRFootMr)     boneRFootMr.rotation.x = -0.04 + Math.max(0, -beat)*0.13;
+
+      if (boneHeadMr) { boneHeadMr.rotation.x = 0.04 + bob*0.35; boneHeadMr.rotation.z = Math.sin(t*3.5)*0.07; boneHeadMr.rotation.y = beat*0.06; }
+      if (boneNeckMr) { boneNeckMr.rotation.x = 0.02 + bob*0.18; }
 
       setExpressionMr('happy');
       if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
