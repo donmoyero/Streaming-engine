@@ -85,71 +85,60 @@ body {
 /* ── Miss OG Tinz chat bubble ── */
 #chat-bubble {
   position:         fixed;
-  transform:        translate(-50%, -100%);
+  bottom:           48px;
+  left:             50%;
+  transform:        translateX(-50%);
   pointer-events:   none;
   z-index:          20;
-  max-width:        300px;
-  min-width:        100px;
+  max-width:        680px;
+  min-width:        120px;
   width:            max-content;
-  background:       #ffffff;
-  border:           3px solid #111111;
-  border-radius:    999px;
-  padding:          10px 20px;
+  background:       rgba(0,0,0,0.72);
+  border:           none;
+  border-radius:    12px;
+  padding:          14px 28px;
   font-family:      'DM Sans', sans-serif;
-  font-size:        14px;
+  font-size:        18px;
   font-weight:      500;
-  color:            #111111;
-  line-height:      1.4;
-  text-align:       left;
+  color:            #ffffff;
+  line-height:      1.5;
+  text-align:       center;
   white-space:      normal;
-  filter:           drop-shadow(0 3px 8px rgba(0,0,0,0.28));
+  backdrop-filter:  blur(6px);
+  filter:           drop-shadow(0 4px 16px rgba(0,0,0,0.5));
   opacity:          0;
-  transition:       opacity 0.25s ease;
+  transition:       opacity 0.3s ease;
 }
 #chat-bubble.visible { opacity: 1; }
-#chat-bubble .speaker { display: none; }
+#chat-bubble .speaker {
+  display:        block;
+  font-family:    'Syne', sans-serif;
+  font-size:      11px;
+  font-weight:    700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color:          var(--gold);
+  margin-bottom:  5px;
+}
 
+/* No tail arrow needed for subtitle style */
 #chat-bubble::before,
-#chat-bubble::after {
-  content:  '';
-  position: absolute;
-  left:     26px;
-}
-#chat-bubble::before {
-  border:           10px solid transparent;
-  border-top-color: #111111;
-  bottom:           -23px;
-}
-#chat-bubble::after {
-  border:           8px solid transparent;
-  border-top-color: #ffffff;
-  bottom:           -17px;
-  left:             28px;
-}
+#chat-bubble::after { content: none; }
 
 #chat-bubble.speech { border-style: solid; font-style: normal; }
 
 #chat-bubble.thought {
   border-style:  dashed;
-  border-width:  2.5px;
-  border-color:  #333333;
-  border-radius: 50%;
-  padding:       12px 22px;
+  border-width:  2px;
+  border-color:  rgba(255,255,255,0.3);
+  border-radius: 12px;
+  padding:       14px 28px;
   font-style:    italic;
   font-weight:   400;
-  color:         #333333;
+  color:         rgba(255,255,255,0.85);
 }
-#chat-bubble.thought::before {
-  border:         none;
-  content:        '···';
-  font-size:      20px;
-  color:          #333333;
-  letter-spacing: 3px;
-  bottom:         -28px;
-  left:           20px;
-  line-height:    1;
-}
-#chat-bubble.thought::after { border: none; content: ''; }
+#chat-bubble.thought::before { content: none; }
+#chat-bubble.thought::after  { content: none; }
 
 
 /* ── Live badge — top right, single instance ── */
