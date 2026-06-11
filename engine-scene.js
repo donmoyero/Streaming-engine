@@ -111,6 +111,106 @@ export let _houseFloorY = 0;
 export const HOUSE_BOUNDS  = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
 export const AVATAR_RADIUS = 0.25;
 
+// ── Interior wall segments (unscaled — multiplied by hScale on load) ─
+// Each entry: axis-aligned box { x0,z0 (min corner), x1,z1 (max corner) }
+// Derived from the GLB wall mesh map — walls that avatars must NOT cross.
+// Doors create gaps so the avatar walks THROUGH them, not through solid wall.
+export const INTERIOR_WALLS = [
+  // Vertical wall left side — living-room / studio separator (gap at z≈-2..−1 for door)
+  { x0: -1.65, z0: -7.0,  x1: -1.35, z1: -2.1  },   // south segment
+  { x0: -1.65, z0: -0.8,  x1: -1.35, z1:  2.0  },   // north segment (gap for door.001)
+  { x0: -1.65, z0:  2.4,  x1: -1.35, z1:  7.0  },   // top segment
+  // Vertical wall right side — hallway / bedroom separator
+  { x0:  1.65, z0: -7.0,  x1:  1.95, z1: -4.0  },   // south of door.006
+  { x0:  1.65, z0: -3.6,  x1:  1.95, z1: -1.9  },   // between door.006 & .007
+  { x0:  1.65, z0: -1.5,  x1:  1.95, z1:  0.55 },   // between door.007 & .005
+  { x0:  1.65, z0:  1.0,  x1:  1.95, z1:  7.0  },   // north of door.005
+  // Horizontal wall — kitchen / living-room divider (gap for door.002)
+  { x0: -6.0,  z0: -1.65, x1: -1.5,  z1: -1.35 },   // west of gap
+  // Horizontal wall — dining / hallway (gap for door.003)
+  { x0: -1.2,  z0:  1.85, x1:  1.65, z1:  2.15 },
+];
+
+// ── Avatar wall-collision helper ─────────────────────────────────
+// Call after computing a new (x, z) position. Returns the position
+// pushed out of any interior wall it overlaps, then clamped to HOUSE_BOUNDS.
+export function resolveWallCollision(x, z, radius = AVATAR_RADIUS) {
+  let rx = x, rz = z;
+  for (const w of INTERIOR_WALLS) {
+    const nearX = Math.max(w.x0, Math.min(w.x1, rx));
+    const nearZ = Math.max(w.z0, Math.min(w.z1, rz));
+    const dx    = rx - nearX;
+    const dz    = rz - nearZ;
+    const dist  = Math.sqrt(dx * dx + dz * dz);
+    if (dist < radius && dist > 0.0001) {
+      // Push out of wall along shortest axis
+      const push = (radius - dist) / dist;
+      rx += dx * push;
+      rz += dz * push;
+    } else if (dist === 0) {
+      // Dead centre inside wall — push in Z
+      rz = rz < (w.z0 + w.z1) / 2 ? w.z0 - radius : w.z1 + radius;
+    }
+  }
+  const m = radius + 0.15;
+  rx = Math.max(HOUSE_BOUNDS.minX + m, Math.min(HOUSE_BOUNDS.maxX - m, rx));
+  rz = Math.max(HOUSE_BOUNDS.minZ + m, Math.min(HOUSE_BOUNDS.maxZ - m, rz));
+  return { x: rx, z: rz };
+}
+
+// Scale interior walls after hScale is known (called once inside House.glb loader)
+function _scaleInteriorWalls(s) {
+  for (const w of INTERIOR_WALLS) {
+    w.x0 *= s; w.z0 *= s; w.x1 *= s; w.z1 *= s;
+  }
+}
+
+// Also expose on window so engine-life.js can call it without re-importing
+window.resolveWallCollision = resolveWallCollision;
+
+// ── Door nodes — collected after GLB loads ────────────────────────
+// Keyed by mesh name → { node: THREE.Object3D, open: bool, hingeAxis: 'x'|'z' }
+export const DOOR_NODES = {};
+const DOOR_OPEN_ANGLE  = Math.PI / 2;   // 90° open
+
+export function toggleDoor(name) {
+  const d = DOOR_NODES[name];
+  if (!d) return;
+  d.open = !d.open;
+  const target = d.open ? DOOR_OPEN_ANGLE : 0;
+  _animateDoor(d, target);
+}
+
+export function openDoor(name)  { const d = DOOR_NODES[name]; if (d && !d.open)  { d.open = true;  _animateDoor(d, DOOR_OPEN_ANGLE); } }
+export function closeDoor(name) { const d = DOOR_NODES[name]; if (d && d.open)   { d.open = false; _animateDoor(d, 0); } }
+
+function _animateDoor(d, targetAngle) {
+  const start = d.node.rotation.y;
+  const diff  = targetAngle - start;
+  const STEPS = 30;
+  let step = 0;
+  function _step() {
+    step++;
+    const t = step / STEPS;
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    d.node.rotation.y = start + diff * ease;
+    if (step < STEPS) requestAnimationFrame(_step);
+  }
+  requestAnimationFrame(_step);
+}
+
+// Collect door nodes from the loaded GLB scene
+function _collectDoors(houseScene) {
+  houseScene.traverse(n => {
+    if (!n.isMesh && !n.isObject3D) return;
+    if (/^dvere(\.\d+)?$/i.test(n.name)) {
+      DOOR_NODES[n.name] = { node: n, open: false };
+      console.log(`[Door] found ${n.name} at`, n.position);
+    }
+  });
+  console.log(`[Door] ${Object.keys(DOOR_NODES).length} doors indexed`);
+}
+
 // ── Miss OG Tinz VRM ref ─────────────────────────────────────────
 export let vrm            = null;
 export let VRM_BASE_ROT_Y = Math.PI;
@@ -363,9 +463,11 @@ _gltfLoader.load('House.glb', (gltf) => {
       roofMesh = n;
     }
   });
+  _collectDoors(house);
   _houseLoaded = true;
   if (!window._houseScaled) {
     window._houseScaled = true;
+    _scaleInteriorWalls(hScale);
 
     MISS_SPAWN_X *= hScale;
     MISS_SPAWN_Z *= hScale;
@@ -544,6 +646,7 @@ function _updateLoraWalk(dt) {
   if (!vrmMr) return;
 
   if (_loraWalking && _loraTarget) {
+    window._loraWalking = true;
     const pos   = vrmMr.scene.position;
     const dx    = _loraTarget.x - pos.x;
     const dz    = _loraTarget.z - pos.z;
@@ -554,17 +657,21 @@ function _updateLoraWalk(dt) {
       // Arrived
       pos.x         = _loraTarget.x;
       pos.z         = _loraTarget.z;
-      _loraWalking  = false;
-      _loraTarget   = null;
-      _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
+    _loraWalking  = false;
+    _loraTarget   = null;
+    _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
+    window._loraWalking = false;
       // Fire engine-life arrival callback if one was set
       const cb = window._loraArrivalCbRef;
       if (cb) { window._loraArrivalCbRef = null; cb(); }
     } else {
       // FIX: was Math.atan2(dx,dz) — Lora's forward is +PI offset from raw atan2
       vrmMr.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
-      pos.x += (dx / dist) * step;
-      pos.z += (dz / dist) * step;
+      const newX = pos.x + (dx / dist) * step;
+      const newZ = pos.z + (dz / dist) * step;
+      const safe = resolveWallCollision(newX, newZ, AVATAR_RADIUS);
+      pos.x = safe.x;
+      pos.z = safe.z;
     }
     return;
   }
