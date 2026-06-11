@@ -1706,12 +1706,39 @@ export function setRestPoseMr() {
   setRightFingerRelaxMr();
 }
 
+// ── Lora face mesh — same fallback pattern as Miss ───────────────
+let faceMeshMr = null;
+function _findFaceMeshMr() {
+  if (faceMeshMr) return faceMeshMr;
+  const v = _vrmMr();
+  if (!v) return null;
+  v.scene.traverse(obj => {
+    if (obj.isMesh && obj.morphTargetDictionary && 'vrc.v_aa' in obj.morphTargetDictionary)
+      faceMeshMr = obj;
+  });
+  return faceMeshMr;
+}
+const _morphCacheMr = {};
+function _getMorphIndexMr(mesh, targetName) {
+  if (!mesh.morphTargetDictionary) return -1;
+  const key = mesh.uuid;
+  if (!_morphCacheMr[key]) _morphCacheMr[key] = mesh.morphTargetDictionary;
+  return _morphCacheMr[key][targetName] ?? -1;
+}
+
 // ── Lora blendshape setter ───────────────────────────────────────
 export function setBSMr(name, value) {
   const v = _vrmMr();
   if (!v) return;
   const val = Math.max(0, Math.min(1, value));
   try { v.expressionManager?.setValue(name, val); } catch(e) {}
+  // morphTarget fallback — works even if expressionManager is absent
+  const morphName = BS_MAP[name] || name.toLowerCase();
+  const mesh = _findFaceMeshMr();
+  if (mesh) {
+    const idx = _getMorphIndexMr(mesh, morphName);
+    if (idx !== -1 && mesh.morphTargetInfluences) mesh.morphTargetInfluences[idx] = val;
+  }
 }
 
 export function setExpressionMr(mood) {
