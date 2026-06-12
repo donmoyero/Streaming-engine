@@ -1222,6 +1222,16 @@ function _connectTwitchIRC(attempt = 1) {
       const isNew = !_seenViewers.has(username.toLowerCase());
       if (isNew) _seenViewers.add(username.toLowerCase());
       const prefixed = isNew ? `[NEW VIEWER] ${username}: ${message}` : message;
+
+      // ── !cook command — hand off to kitchen-behaviour.js ─────
+      if (message.trim().toLowerCase().startsWith('!cook')) {
+        if (window._handleCookCommand) {
+          window._handleCookCommand(message.trim());
+        }
+        deadAir?.reset();
+        return;
+      }
+
       queueTwitchMessage(username, prefixed);
       deadAir?.reset();
     }
@@ -1598,6 +1608,25 @@ window._setLoraActivity = (actName, duration) => {
   ACTIVITY_MR.timer    = 0;
   ACTIVITY_MR.phase    = 0;
   if (duration) ACTIVITY_MR.duration = duration;
+};
+
+// ── Kitchen system bridges ───────────────────────────────────────
+// speakMr: lets kitchen-behaviour.js fire Lora dialogue via window.speakMr()
+// Mirrors the speak() pattern — showBubble only (Lora has no TTS voice yet).
+window.speakMr = (text) => {
+  if (!text) return;
+  showBubble(text, 'Lora');
+};
+
+// Dead-air pause/resume — called by KitchenBehaviour.start() / stop()
+// so the proactive timer doesn't fire mid-recipe.
+window._pauseDeadAir  = () => deadAir.stop();
+window._resumeDeadAir = () => { if (_deadAirActive) deadAir.start(); };
+
+// _sendTwitchMessage — lets kitchen-behaviour.js post status lines
+// back into the Twitch chat queue as StreamEvent messages.
+window._sendTwitchMessage = (msg) => {
+  queueTwitchMessage('StreamEvent', msg);
 };
 
 // ================================================================
