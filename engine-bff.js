@@ -146,9 +146,11 @@ export function floatEmoji(who = 'miss', emojiStr, count) {
 const _missBubble    = document.getElementById('chat-bubble');
 const _missBubbleTxt = document.getElementById('bubble-text');
 
-// Lora is a silent visual character — no bubble, no nameplate
-
-function showLoraBubble(_text) { /* no-op — Lora does not speak */ }
+// Lora bubble — routes through window.speakMr (set by engine-life.js)
+// which calls showBubble(text, 'Lora'). Falls back silently if not ready.
+function showLoraBubble(text) {
+  if (window.speakMr) window.speakMr(text);
+}
 
 
 // ════════════════════════════════════════════════════════════════
@@ -220,6 +222,12 @@ const STARTERS = [
   "If you could only keep 3 apps on your phone, which ones survive?",
   "Describe your perfect Saturday in one sentence.",
   "What's a skill you have that most people don't know about?",
+  // ── Kitchen starters — fire when either char is cooking ──────
+  "Okay be honest — whose cooking is actually better, mine or yours? Chat, weigh in 👀🍳",
+  "What's the one dish you cannot mess up no matter what? Mine is rice. I will not elaborate.",
+  "If we had to cook for a dinner party of 10 right now with what's in this kitchen — what are we making?",
+  "Be real — do you actually taste as you cook or are you just winging it every time?",
+  "What's a dish your mum makes that you've never been able to replicate properly?",
 ];
 
 // ════════════════════════════════════════════════════════════════
@@ -257,6 +265,13 @@ function _mood(text) {
 let _busy        = false;
 let _lastSpeaker = null;
 
+// Returns true if we should skip a BFF exchange right now.
+// Kitchen sessions set window._kitchenRunning so the BFF engine
+// stands down gracefully rather than talking over a recipe.
+function _shouldSkip() {
+  return _busy || window._kitchenRunning === true;
+}
+
 async function _turn(who, text, mood = 'happy') {
   _busy = true;
   _lastSpeaker = who;
@@ -286,7 +301,7 @@ async function _turn(who, text, mood = 'happy') {
 //  FULL EXCHANGE
 // ════════════════════════════════════════════════════════════════
 async function _exchange() {
-  if (_busy) return;
+  if (_shouldSkip()) return;
 
   // Who goes first — avoid repeating same speaker
   let asker;
@@ -335,7 +350,7 @@ async function _exchange() {
 //  TWITCH — new viewers + @mentions only
 // ════════════════════════════════════════════════════════════════
 export function handleTwitchMessage(username, message, isNew = false) {
-  if (_busy) return;
+  if (_shouldSkip()) return;
 
   if (isNew) {
     const who = Math.random() < 0.5 ? 'miss' : 'lora';
@@ -384,6 +399,14 @@ export function startCoupleEngine() {
   // Contextual emoji moments — only fires when it makes sense
   setInterval(() => {
     if (_busy) return;
+
+    // During kitchen sessions, fire cooking emoji from both chars
+    if (window._kitchenRunning) {
+      if (Math.random() < 0.3) floatEmoji('miss', _emojiForContext('miss', 'happy'), 1);
+      if (Math.random() < 0.25) floatEmoji('lora', _emojiForContext('lora', 'happy'), 1);
+      return;
+    }
+
     // Only fire occasionally (not every interval) and only when doing something visual
     if (Math.random() < 0.18) {
       const act = window._missCurrentActivity || 'idle';
