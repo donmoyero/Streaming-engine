@@ -24,7 +24,7 @@
 
 import { RECIPES, selectRecipe }     from './kitchen_recipes.js';
 import { KITCHEN_ACTIONS }           from './kitchen_actions.js';
-import { setMusicVolume }            from './engine-music.js';
+import { setMusicVolume }            from '../engine-music.js';
 
 // ── Dialogue lines for each hook ────────────────────────────────
 //  These are passed to engine-bff.js speak() / showBubble()
