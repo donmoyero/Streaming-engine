@@ -1253,6 +1253,62 @@ export function activityUpdate(delta) {
       break;
     }
 
+    // ── COOK CHOP — kitchen-behaviour.js maps slice/dice/chop/mince here ──
+    // Dominant (right) hand drives a controlled downward chop cycle.
+    // Non-dominant (left) hand holds ingredient in claw grip at board.
+    case 'cookChop': {
+      const chopCycle = t % 0.85;
+      const down      = chopCycle < 0.35 ? Math.sin(chopCycle / 0.35 * Math.PI) : 0;
+      const leanFwd   = 0.08 + down * 0.04;
+
+      if (boneSpine)     { boneSpine.rotation.x = leanFwd; boneSpine.rotation.z = Math.sin(t*0.6)*0.01; }
+      if (boneHead)      { boneHead.rotation.x = 0.16 + down*0.06; boneHead.rotation.z = 0; }
+      if (boneHips)      boneHips.rotation.z = Math.sin(t*0.9)*0.025;
+
+      // Right arm — chop stroke
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.58; boneRUpperArm.rotation.x = 0.48 - down*0.45; boneRUpperArm.rotation.y = 0.06; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.32; boneRLowerArm.rotation.x = 0.45 + down*0.55; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.10; boneRHand.rotation.x = -0.05 + down*0.08; }
+      setRightFingerCurl(0.62);   // grip handle
+
+      // Left arm — claw hold, fingers curled inward protectively
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.62; boneLUpperArm.rotation.x = 0.52; boneLUpperArm.rotation.y = -0.08; }
+      if (boneLLowerArm) { boneLLowerArm.rotation.z = 0.30; boneLLowerArm.rotation.x = 0.18; }
+      if (boneLHand)     { boneLHand.rotation.z = 0.14; boneLHand.rotation.x = 0.12; }
+      setLeftFingerCurl(0.55);    // claw grip — fingers tucked safe
+
+      setExpression('neutral');
+      break;
+    }
+
+    // ── COOK STIR — kitchen-behaviour.js maps add_to_pan/fry/stir/simmer here ──
+    // Right arm stirs in slow circles at waist-counter height.
+    // Left arm rests at side or steadies the pot.
+    case 'cookStir': {
+      const stir  = t * 2.6;
+      const lean  = 0.06 + Math.abs(Math.sin(t*0.4)) * 0.02;
+
+      if (boneSpine) { boneSpine.rotation.x = lean; boneSpine.rotation.z = Math.sin(stir*0.3)*0.015; }
+      if (boneHead)  { boneHead.rotation.x = 0.13; boneHead.rotation.z = Math.sin(t*0.35)*0.02; }
+      if (boneHips)  { boneHips.rotation.z = Math.sin(t*0.7)*0.035; boneHips.rotation.x = 0.02; }
+
+      // Right arm — circular stir stroke
+      if (boneRUpperArm) { boneRUpperArm.rotation.z = -0.62; boneRUpperArm.rotation.x = 0.46; boneRUpperArm.rotation.y = 0.10; }
+      if (boneRLowerArm) { boneRLowerArm.rotation.z = -0.38 + Math.sin(stir)*0.13; boneRLowerArm.rotation.x = 0.40 + Math.cos(stir)*0.09; }
+      if (boneRHand)     { boneRHand.rotation.z = -0.14 + Math.sin(stir*0.75)*0.07; boneRHand.rotation.y = Math.cos(stir)*0.11; }
+      setRightFingerCurl(0.48);   // grip spoon/spatula
+
+      // Left arm — rests steadying the pot handle
+      if (boneLUpperArm) { boneLUpperArm.rotation.z = 0.72; boneLUpperArm.rotation.x = 0.14; }
+      if (boneLLowerArm) boneLLowerArm.rotation.z = 0.50;
+      if (boneLHand)     { boneLHand.rotation.z = 0.18; boneLHand.rotation.x = 0.06; }
+      setLeftFingerCurl(0.35);    // loose pot-steadying grip
+
+      setExpression('neutral');
+      setBS('A', Math.max(0, Math.sin(t*2.6)) * 0.08); // subtle open-mouth focus
+      break;
+    }
+
     // Default: idle hands
     default:
       break;
@@ -2589,6 +2645,50 @@ export function activityUpdateMr(delta) {
       setExpressionMr('happy');
       if (setLeftFingerRelaxMr)  setLeftFingerRelaxMr();
       if (setRightFingerRelaxMr) setRightFingerRelaxMr();
+      break;
+    }
+
+    // ── COOK CHOP (Lora) ───────────────────────────────────────────
+    case 'cookChop': {
+      const chopCycle = t % 0.85;
+      const down      = chopCycle < 0.35 ? Math.sin(chopCycle / 0.35 * Math.PI) : 0;
+      const leanFwd   = 0.08 + down * 0.04;
+
+      if (boneSpineMr)     { boneSpineMr.rotation.x = leanFwd; boneSpineMr.rotation.z = Math.sin(t*0.6)*0.01; }
+      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.16 + down*0.06; boneHeadMr.rotation.z = 0; }
+      if (boneHipsMr)      boneHipsMr.rotation.z = Math.sin(t*0.9)*0.025;
+
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.58; boneRUpperArmMr.rotation.x = 0.48 - down*0.45; boneRUpperArmMr.rotation.y = 0.06; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.32; boneRLowerArmMr.rotation.x = 0.45 + down*0.55; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.10; boneRHandMr.rotation.x = -0.05 + down*0.08; }
+
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z = 0.62; boneLUpperArmMr.rotation.x = 0.52; boneLUpperArmMr.rotation.y = -0.08; }
+      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z = 0.30; boneLLowerArmMr.rotation.x = 0.18; }
+      if (boneLHandMr)     { boneLHandMr.rotation.z = 0.14; boneLHandMr.rotation.x = 0.12; }
+
+      setExpressionMr('neutral');
+      break;
+    }
+
+    // ── COOK STIR (Lora) ───────────────────────────────────────────
+    case 'cookStir': {
+      const stir  = t * 2.6;
+      const lean  = 0.06 + Math.abs(Math.sin(t*0.4)) * 0.02;
+
+      if (boneSpineMr)     { boneSpineMr.rotation.x = lean; boneSpineMr.rotation.z = Math.sin(stir*0.3)*0.015; }
+      if (boneHeadMr)      { boneHeadMr.rotation.x = 0.13; boneHeadMr.rotation.z = Math.sin(t*0.35)*0.02; }
+      if (boneHipsMr)      { boneHipsMr.rotation.z = Math.sin(t*0.7)*0.035; boneHipsMr.rotation.x = 0.02; }
+
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.62; boneRUpperArmMr.rotation.x = 0.46; boneRUpperArmMr.rotation.y = 0.10; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.38 + Math.sin(stir)*0.13; boneRLowerArmMr.rotation.x = 0.40 + Math.cos(stir)*0.09; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.14 + Math.sin(stir*0.75)*0.07; boneRHandMr.rotation.y = Math.cos(stir)*0.11; }
+
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z = 0.72; boneLUpperArmMr.rotation.x = 0.14; }
+      if (boneLLowerArmMr) boneLLowerArmMr.rotation.z = 0.50;
+      if (boneLHandMr)     { boneLHandMr.rotation.z = 0.18; boneLHandMr.rotation.x = 0.06; }
+
+      setExpressionMr('neutral');
+      setBSMr('A', Math.max(0, Math.sin(t*2.6)) * 0.08);
       break;
     }
 
