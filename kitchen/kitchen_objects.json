@@ -1,0 +1,1146 @@
+{
+  "_comment": "Miss OG Tinz & Lora — Kitchen Object Encyclopedia. Every .glb prop defined with full AI-readable properties. Used by kitchen_actions.js and kitchen_recipes.js to drive behaviour.",
+
+  "surfaces": {
+    "countertop": {
+      "id": "countertop",
+      "type": "surface",
+      "placeable": true,
+      "world_position": "kitchen_counter",
+      "nav_approach": "stand_in_front",
+      "description": "Main prep and staging area. Default place to set things down."
+    },
+    "cutting_board": {
+      "id": "cutting-board",
+      "glb": "cutting-board.glb",
+      "variants": ["cutting-board-japanese.glb", "cutting-board-round.glb"],
+      "type": "surface",
+      "placeable": true,
+      "required_for": ["cut", "chop", "slice", "dice", "mince", "julienne"],
+      "grip": "two_hand_flat",
+      "placement": "countertop",
+      "state": "clean",
+      "states": ["clean", "dirty", "in_use"]
+    },
+    "stove": {
+      "id": "stove",
+      "type": "appliance_surface",
+      "has_burners": 4,
+      "heat_levels": ["off", "low", "medium", "medium_high", "high"],
+      "default_heat": "off",
+      "danger": "hot_surface",
+      "nav_approach": "stand_in_front",
+      "required_for": ["fry", "boil", "simmer", "stew", "saute"]
+    },
+    "microwave": {
+      "id": "microwave",
+      "type": "appliance",
+      "required_for": ["reheat", "microwave_cook"],
+      "danger": "hot_after_use",
+      "nav_approach": "stand_in_front"
+    },
+    "sink": {
+      "id": "sink",
+      "type": "appliance",
+      "required_for": ["wash_hands", "wash_ingredient", "wash_tool"],
+      "nav_approach": "stand_in_front"
+    },
+    "fridge": {
+      "id": "fridge",
+      "type": "storage",
+      "stores": ["perishables", "drinks", "leftovers"],
+      "nav_approach": "stand_in_front",
+      "interaction": "open_door"
+    },
+    "oven": {
+      "id": "oven",
+      "type": "appliance",
+      "heat_levels": ["off", 150, 180, 200, 220, 240],
+      "required_for": ["bake", "roast"],
+      "danger": "hot_surface",
+      "nav_approach": "stand_in_front"
+    }
+  },
+
+  "cookware": {
+    "frying_pan": {
+      "id": "frying-pan",
+      "glb": "frying-pan.glb",
+      "type": "cookware",
+      "grip": "handle_dominant_hand",
+      "grip_warning": "NEVER grip pan surface — handle only",
+      "requires_surface": "stove",
+      "capacity": "medium",
+      "suitable_for": ["fry_egg", "fry_bacon", "saute_vegetables", "fry_fish", "fry_burger"],
+      "heat_response": "fast",
+      "danger": "hot_after_use",
+      "pickable": true,
+      "placeable_on": ["stove", "countertop"],
+      "lid": "frying-pan-lid.glb",
+      "states": ["cold", "warm", "hot", "very_hot"],
+      "default_state": "cold",
+      "body_motion": {
+        "pickup": ["extend_dominant_arm", "rotate_wrist_to_handle", "close_fingers_on_handle", "lift_level"],
+        "place_on_stove": ["carry_level", "lower_onto_burner", "release_handle"],
+        "stir": ["hold_handle", "circular_wrist_motion"]
+      }
+    },
+    "pot": {
+      "id": "pot",
+      "glb": "pot.glb",
+      "type": "cookware",
+      "grip": "two_hand_handles",
+      "requires_surface": "stove",
+      "capacity": "large",
+      "suitable_for": ["boil", "soup", "pasta", "stew", "rice"],
+      "heat_response": "slow",
+      "danger": "hot_after_use",
+      "pickable": true,
+      "lid": "pot-lid.glb",
+      "states": ["cold", "warm", "boiling", "simmering"],
+      "body_motion": {
+        "pickup": ["extend_both_arms", "grip_both_handles", "lift_level_with_core"],
+        "stir": ["hold_handle_or_rim", "insert_spoon", "circular_motion"]
+      }
+    },
+    "pot_stew": {
+      "id": "pot-stew",
+      "glb": "pot-stew.glb",
+      "type": "cookware",
+      "grip": "two_hand_handles",
+      "requires_surface": "stove",
+      "suitable_for": ["stew", "slow_cook", "casserole"],
+      "lid": "pot-stew-lid.glb",
+      "danger": "hot_after_use",
+      "pickable": true
+    },
+    "steamer": {
+      "id": "steamer",
+      "glb": "steamer.glb",
+      "type": "cookware",
+      "grip": "two_hand_sides",
+      "requires_surface": "stove",
+      "suitable_for": ["steam_vegetables", "steam_fish", "steam_dumplings"],
+      "danger": "steam_burn",
+      "pickable": true
+    },
+    "tajine": {
+      "id": "tajine",
+      "glb": "tajine.glb",
+      "type": "cookware",
+      "grip": "two_hand_base",
+      "requires_surface": ["stove", "oven"],
+      "suitable_for": ["slow_cook", "moroccan_dishes"],
+      "lid": "tajine-lid.glb",
+      "danger": "hot_after_use",
+      "pickable": true
+    }
+  },
+
+  "utensils": {
+    "cooking_knife": {
+      "id": "cooking-knife",
+      "glb": "cooking-knife.glb",
+      "type": "utensil",
+      "grip": "pinch_grip_dominant_hand",
+      "grip_detail": {
+        "thumb": "side_of_blade_near_handle",
+        "index": "opposite_side_of_blade",
+        "remaining_fingers": "wrapped_around_handle"
+      },
+      "danger": "sharp — always cut away from body, fingers tucked",
+      "required_for": ["cut", "slice", "dice", "chop", "mince", "julienne"],
+      "stored_in": "knife-block.glb",
+      "pickable": true,
+      "states": ["idle", "in_hand", "cutting", "dirty"],
+      "body_motion": {
+        "pickup_from_block": ["extend_dominant_arm", "pinch_grip_handle", "pull_upward_cleanly"],
+        "cutting_motion": ["place_item_on_board", "non_dominant_hand_stabilises_food_claw_grip", "raise_knife_10cm", "push_forward_and_down", "contact_board", "lift_repeat"],
+        "put_down": ["lower_to_board", "release_handle", "step_back"]
+      }
+    },
+    "chopping_knife": {
+      "id": "cooking-knife-chopping",
+      "glb": "cooking-knife-chopping.glb",
+      "type": "utensil",
+      "grip": "full_wrap_dominant_hand",
+      "danger": "sharp",
+      "required_for": ["heavy_chop", "chop_cabbage", "chop_meat"],
+      "pickable": true
+    },
+    "spatula": {
+      "id": "cooking-spatula",
+      "glb": "cooking-spatula.glb",
+      "type": "utensil",
+      "grip": "handle_dominant_hand",
+      "required_for": ["flip_bacon", "flip_egg", "flip_burger", "plate_food"],
+      "pickable": true,
+      "body_motion": {
+        "flip": ["slide_under_food", "quick_wrist_flick_upward", "reposition_pan_if_needed"]
+      }
+    },
+    "cooking_spoon": {
+      "id": "cooking-spoon",
+      "glb": "cooking-spoon.glb",
+      "type": "utensil",
+      "grip": "handle_dominant_hand",
+      "required_for": ["stir", "serve_soup", "taste_test"],
+      "pickable": true,
+      "body_motion": {
+        "stir": ["insert_into_pot", "rotate_wrist", "circular_motion_4_times", "lift_check"],
+        "taste": ["scoop_small_amount", "raise_to_mouth_level", "blow_cool", "sip"]
+      }
+    },
+    "cooking_fork": {
+      "id": "cooking-fork",
+      "glb": "cooking-fork.glb",
+      "type": "utensil",
+      "grip": "handle_dominant_hand",
+      "required_for": ["pierce_meat", "hold_meat_while_cutting", "serve_meat"],
+      "pickable": true
+    },
+    "whisk": {
+      "id": "whisk",
+      "glb": "whisk.glb",
+      "type": "utensil",
+      "grip": "handle_dominant_hand",
+      "required_for": ["whisk_egg", "mix_batter", "whip_cream"],
+      "pickable": true,
+      "body_motion": {
+        "whisk": ["insert_into_bowl", "rapid_circular_wrist_motion", "up_down_variation"]
+      }
+    },
+    "rolling_pin": {
+      "id": "rollingPin",
+      "glb": "rollingPin.glb",
+      "type": "utensil",
+      "grip": "two_hand_ends",
+      "required_for": ["roll_dough", "flatten_pastry"],
+      "pickable": true
+    },
+    "knife_block": {
+      "id": "knife-block",
+      "glb": "knife-block.glb",
+      "type": "storage",
+      "stores": ["cooking-knife", "cooking-knife-chopping"],
+      "placement": "countertop",
+      "pickable": false
+    },
+    "shaker_salt": {
+      "id": "shaker-salt",
+      "glb": "shaker-salt.glb",
+      "type": "utensil",
+      "grip": "one_hand_pinch",
+      "required_for": ["season_salt"],
+      "pickable": true,
+      "body_motion": {
+        "season": ["pickup", "tilt_over_food_45deg", "shake_2_to_3_times", "return_upright"]
+      }
+    },
+    "shaker_pepper": {
+      "id": "shaker-pepper",
+      "glb": "shaker-pepper.glb",
+      "type": "utensil",
+      "grip": "one_hand_pinch",
+      "required_for": ["season_pepper"],
+      "pickable": true,
+      "body_motion": {
+        "season": ["pickup", "tilt_over_food_45deg", "shake_2_to_3_times", "return_upright"]
+      }
+    },
+    "utensil_fork": {
+      "id": "utensil-fork",
+      "glb": "utensil-fork.glb",
+      "type": "eating_utensil",
+      "grip": "pinch_grip",
+      "required_for": ["eat_solid_food"],
+      "pickable": true
+    },
+    "utensil_knife": {
+      "id": "utensil-knife",
+      "glb": "utensil-knife.glb",
+      "type": "eating_utensil",
+      "grip": "full_wrap",
+      "required_for": ["cut_food_while_eating"],
+      "pickable": true
+    },
+    "utensil_spoon": {
+      "id": "utensil-spoon",
+      "glb": "utensil-spoon.glb",
+      "type": "eating_utensil",
+      "grip": "pinch_grip",
+      "required_for": ["eat_soup", "eat_cereal", "eat_dessert"],
+      "pickable": true
+    },
+    "chopstick": {
+      "id": "chopstick",
+      "glb": "chopstick.glb",
+      "type": "eating_utensil",
+      "grip": "two_finger_pinch_pair",
+      "required_for": ["eat_asian_food", "eat_sushi", "eat_dim_sum"],
+      "pickable": true
+    }
+  },
+
+  "serving": {
+    "bowl": {
+      "id": "bowl",
+      "glb": "bowl.glb",
+      "variants": {
+        "soup": "bowl-soup.glb",
+        "cereal": "bowl-cereal.glb",
+        "broth": "bowl-broth.glb"
+      },
+      "type": "serving",
+      "grip": "two_hand_sides_or_base",
+      "placeable_on": ["countertop", "table", "dining_table"],
+      "pickable": true,
+      "capacity": "medium"
+    },
+    "plate": {
+      "id": "plate",
+      "type": "serving",
+      "grip": "palm_up_flat",
+      "placeable_on": ["countertop", "table", "dining_table"],
+      "pickable": true,
+      "note": "Use flat palm under plate — do not grip edges"
+    },
+    "cup": {
+      "id": "cup",
+      "glb": "cup.glb",
+      "variants": {
+        "coffee": "cup-coffee.glb",
+        "tea": "cup-tea.glb",
+        "saucer": "cup-saucer.glb"
+      },
+      "type": "serving",
+      "grip": "handle_or_wrap",
+      "pickable": true
+    },
+    "glass": {
+      "id": "glass",
+      "glb": "glass.glb",
+      "variants": {
+        "wine": "glass-wine.glb",
+        "soda": "soda-glass.glb"
+      },
+      "type": "serving",
+      "grip": "wrap_base_or_stem",
+      "pickable": true
+    },
+    "egg_cup": {
+      "id": "egg-cup",
+      "glb": "egg-cup.glb",
+      "type": "serving",
+      "grip": "two_finger_base",
+      "used_for": ["serve_boiled_egg"],
+      "pickable": true
+    }
+  },
+
+  "ingredients": {
+
+    "_note": "All ingredients have: pickable, prep_required, prep_method, cookable, edible, cuttable where relevant. grasp_size guides hand animation scale.",
+
+    "egg": {
+      "id": "egg",
+      "glb": "egg.glb",
+      "cooked_glb": "egg-cooked.glb",
+      "half_glb": "egg-half.glb",
+      "type": "ingredient",
+      "category": "dairy_and_eggs",
+      "pickable": true,
+      "grasp_size": "small_one_hand_gentle",
+      "fragile": true,
+      "grip_warning": "Gentle grip — shell cracks under pressure",
+      "prep_required": true,
+      "prep_methods": ["crack_into_pan", "crack_into_bowl", "boil_whole"],
+      "cookable": true,
+      "cook_methods": ["fry", "boil", "scramble", "poach"],
+      "edible": true,
+      "states": ["raw_whole", "cracked", "fried", "boiled", "scrambled"],
+      "body_motion": {
+        "crack": ["hold_egg_dominant_hand", "tap_edge_of_pan_or_bowl", "pull_shell_halves_apart_both_hands", "drop_contents"]
+      }
+    },
+    "bacon_raw": {
+      "id": "bacon-raw",
+      "glb": "bacon-raw.glb",
+      "cooked_glb": "bacon.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "flat_strip_pinch",
+      "prep_required": false,
+      "cookable": true,
+      "cook_methods": ["fry", "grill", "bake"],
+      "cook_time_seconds": 240,
+      "heat_level": "medium",
+      "flip_required": true,
+      "flip_trigger": "edges_curl_and_colour_changes_brown",
+      "edible": true,
+      "states": ["raw", "cooking", "done", "burnt"]
+    },
+    "tomato": {
+      "id": "tomato",
+      "glb": "tomato.glb",
+      "sliced_glb": "tomato-slice.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_palm_cup",
+      "prep_required": true,
+      "prep_methods": ["wash", "slice", "dice", "chop"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["fry", "roast", "simmer"],
+      "edible": true,
+      "states": ["whole", "washed", "sliced", "diced", "cooked"]
+    },
+    "bread": {
+      "id": "bread",
+      "glb": "bread.glb",
+      "type": "ingredient",
+      "category": "bread_and_bakery",
+      "pickable": true,
+      "grasp_size": "two_hand_loaf",
+      "prep_required": true,
+      "prep_methods": ["slice", "toast"],
+      "requires_knife": true,
+      "cookable": true,
+      "cook_methods": ["toast", "grill"],
+      "edible": true,
+      "states": ["whole_loaf", "sliced", "toasted"]
+    },
+    "carrot": {
+      "id": "carrot",
+      "glb": "carrot.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "prep_required": true,
+      "prep_methods": ["wash", "peel", "slice", "dice", "julienne", "chop"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["boil", "roast", "steam", "fry"],
+      "edible": true,
+      "states": ["whole", "peeled", "chopped", "cooked"]
+    },
+    "avocado": {
+      "id": "avocado",
+      "glb": "avocado.glb",
+      "half_glb": "advocado-half.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "medium_palm_cup",
+      "prep_required": true,
+      "prep_methods": ["slice_in_half", "remove_pit", "scoop", "slice"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "edible": true,
+      "states": ["whole", "halved", "pitted", "sliced", "mashed"]
+    },
+    "apple": {
+      "id": "apple",
+      "glb": "apple.glb",
+      "half_glb": "apple-half.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "medium_palm_cup",
+      "prep_required": false,
+      "prep_methods": ["wash", "slice", "core"],
+      "requires_knife": true,
+      "edible": true,
+      "states": ["whole", "washed", "sliced", "cored"]
+    },
+    "banana": {
+      "id": "banana",
+      "glb": "banana.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "prep_required": true,
+      "prep_methods": ["peel"],
+      "edible": true,
+      "states": ["unpeeled", "peeled", "sliced"]
+    },
+    "broccoli": {
+      "id": "broccoli",
+      "glb": "broccoli.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_palm_cup",
+      "prep_required": true,
+      "prep_methods": ["wash", "cut_florets"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["steam", "boil", "stir_fry", "roast"],
+      "edible": true
+    },
+    "cabbage": {
+      "id": "cabbage",
+      "glb": "cabbage.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["wash", "quarter", "shred"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["stir_fry", "boil", "stew"],
+      "edible": true
+    },
+    "cauliflower": {
+      "id": "cauliflower",
+      "glb": "cauliflower.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["wash", "cut_florets"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["steam", "roast", "boil"],
+      "edible": true
+    },
+    "celery_stick": {
+      "id": "celery-stick",
+      "glb": "celery-stick.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "prep_required": true,
+      "prep_methods": ["wash", "slice", "dice"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "edible": true
+    },
+    "corn": {
+      "id": "corn",
+      "glb": "corn.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_two_hand",
+      "prep_required": true,
+      "prep_methods": ["husk", "slice_off_cob"],
+      "cookable": true,
+      "cook_methods": ["boil", "grill", "microwave"],
+      "edible": true
+    },
+    "eggplant": {
+      "id": "eggplant",
+      "glb": "eggplant.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "prep_required": true,
+      "prep_methods": ["wash", "slice", "dice", "chop"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["fry", "roast", "grill", "stew"],
+      "edible": true
+    },
+    "leek": {
+      "id": "leek",
+      "glb": "leek.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "prep_required": true,
+      "prep_methods": ["wash", "trim", "slice"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["saute", "boil", "steam"],
+      "edible": true
+    },
+    "pumpkin": {
+      "id": "pumpkin",
+      "glb": "pumpkin.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["wash", "halve", "scoop_seeds", "peel", "dice"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["roast", "boil", "soup"],
+      "edible": true
+    },
+    "radish": {
+      "id": "radish",
+      "glb": "radish.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "prep_required": true,
+      "prep_methods": ["wash", "slice"],
+      "edible": true
+    },
+    "beet": {
+      "id": "beet",
+      "glb": "beet.glb",
+      "type": "ingredient",
+      "category": "vegetable",
+      "pickable": true,
+      "grasp_size": "medium_palm_cup",
+      "prep_required": true,
+      "prep_methods": ["wash", "peel", "slice", "dice"],
+      "requires_knife": true,
+      "cookable": true,
+      "cook_methods": ["roast", "boil"],
+      "edible": true
+    },
+    "strawberry": {
+      "id": "strawberry",
+      "glb": "strawberry.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "small_two_finger_pinch",
+      "prep_required": true,
+      "prep_methods": ["wash", "hull", "slice"],
+      "edible": true
+    },
+    "cherries": {
+      "id": "cherries",
+      "glb": "cherries.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "small_two_finger_pinch",
+      "prep_required": false,
+      "edible": true
+    },
+    "grapes": {
+      "id": "grapes",
+      "glb": "grapes.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "two_hand_bunch",
+      "prep_required": false,
+      "edible": true
+    },
+    "watermelon": {
+      "id": "watermelon",
+      "glb": "watermelon.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["wash", "slice", "cube"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "edible": true
+    },
+    "coconut": {
+      "id": "coconut",
+      "glb": "coconut.glb",
+      "half_glb": "coconut-half.glb",
+      "type": "ingredient",
+      "category": "fruit",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["crack_open", "scoop_flesh", "extract_milk"],
+      "requires_knife": true,
+      "edible": true
+    },
+    "fish": {
+      "id": "fish",
+      "glb": "fish.glb",
+      "bones_glb": "fish-bones.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "two_hand_flat",
+      "prep_required": true,
+      "prep_methods": ["wash", "season", "fillet"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["fry", "steam", "grill", "bake"],
+      "edible": true,
+      "states": ["raw", "seasoned", "cooked", "eaten_bones_remain"]
+    },
+    "turkey": {
+      "id": "turkey",
+      "glb": "turkey.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["season", "stuff", "truss"],
+      "cookable": true,
+      "cook_methods": ["roast", "bake"],
+      "edible": true
+    },
+    "whole_ham": {
+      "id": "whole-ham",
+      "glb": "whole-ham.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "two_hand_large",
+      "prep_required": true,
+      "prep_methods": ["slice"],
+      "requires_knife": true,
+      "cookable": true,
+      "cook_methods": ["bake", "glaze"],
+      "edible": true
+    },
+    "sausage": {
+      "id": "sausage",
+      "glb": "sausage.glb",
+      "half_glb": "sausage-half.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "prep_required": false,
+      "cookable": true,
+      "cook_methods": ["fry", "grill", "boil"],
+      "edible": true
+    },
+    "hot_dog_raw": {
+      "id": "hot-dog-raw",
+      "glb": "hot-dog-raw.glb",
+      "cooked_glb": "hot-dog.glb",
+      "type": "ingredient",
+      "category": "meat",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "cookable": true,
+      "cook_methods": ["boil", "grill", "fry"],
+      "edible": true
+    },
+    "cheese": {
+      "id": "cheese",
+      "glb": "cheese.glb",
+      "cut_glb": "cheese-cut.glb",
+      "type": "ingredient",
+      "category": "dairy_and_eggs",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "prep_required": true,
+      "prep_methods": ["slice", "grate", "cube"],
+      "requires_knife": true,
+      "requires_cutting_board": true,
+      "cookable": true,
+      "cook_methods": ["melt"],
+      "edible": true
+    },
+    "milk_carton": {
+      "id": "milk-carton",
+      "glb": "carton.glb",
+      "type": "ingredient",
+      "category": "dairy_and_eggs",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "pour_action": "tilt_to_pour",
+      "edible": true
+    },
+    "oil": {
+      "id": "bottle-oil",
+      "glb": "bottle-oil.glb",
+      "type": "ingredient",
+      "category": "condiment",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "pour_action": "tilt_slowly_over_pan",
+      "quantity_control": "small_drizzle",
+      "required_for": ["fry", "saute", "dress_salad"]
+    },
+    "ketchup": {
+      "id": "bottle-ketchup",
+      "glb": "bottle-ketchup.glb",
+      "type": "condiment",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "pour_action": "squeeze_or_pour"
+    },
+    "mustard": {
+      "id": "bottle-musterd",
+      "glb": "bottle-musterd.glb",
+      "type": "condiment",
+      "pickable": true,
+      "grasp_size": "medium_one_hand",
+      "pour_action": "squeeze_or_pour"
+    },
+    "honey": {
+      "id": "honey",
+      "glb": "honey.glb",
+      "type": "condiment",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "pour_action": "drizzle"
+    },
+    "soy_sauce": {
+      "id": "soy",
+      "glb": "soy.glb",
+      "type": "condiment",
+      "pickable": true,
+      "grasp_size": "small_one_hand",
+      "pour_action": "tilt_to_pour"
+    },
+    "salad": {
+      "id": "salad",
+      "glb": "salad.glb",
+      "type": "prepared_food",
+      "category": "vegetable",
+      "pickable": false,
+      "edible": true,
+      "serve_in": "bowl"
+    },
+    "sandwich": {
+      "id": "sandwich",
+      "glb": "sandwich.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_hand_flat",
+      "edible": true
+    },
+    "sub": {
+      "id": "sub",
+      "glb": "sub.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_hand_long",
+      "edible": true
+    },
+    "burger": {
+      "id": "burger",
+      "glb": "burger.glb",
+      "variants": {
+        "cheese": "burger-cheese.glb",
+        "double": "burger-double.glb",
+        "cheese_double": "burger-cheese-double.glb"
+      },
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_hand_cup",
+      "edible": true
+    },
+    "taco": {
+      "id": "taco",
+      "glb": "taco.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_cup",
+      "edible": true
+    },
+    "skewer_vegetables": {
+      "id": "skewer-vegetables",
+      "glb": "skewer-vegetables.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_pinch_handle",
+      "cookable": true,
+      "cook_methods": ["grill", "broil"],
+      "edible": true
+    },
+    "rice_ball": {
+      "id": "rice-ball",
+      "glb": "rice-ball.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_gentle_cup",
+      "edible": true
+    },
+    "sushi_salmon": {
+      "id": "sushi-salmon",
+      "glb": "sushi-salmon.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_finger_pinch_gentle",
+      "edible": true,
+      "eat_with": "chopstick"
+    },
+    "dim_sum": {
+      "id": "dim-sum",
+      "glb": "dim-sum.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_finger_pinch_gentle",
+      "edible": true,
+      "eat_with": "chopstick"
+    },
+    "corn_dog": {
+      "id": "corn-dog",
+      "glb": "corn-dog.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_handle",
+      "edible": true
+    },
+    "fries": {
+      "id": "fries",
+      "glb": "fries.glb",
+      "empty_glb": "fries-empty.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "pinch_one_or_two_fingers",
+      "edible": true
+    },
+    "waffle": {
+      "id": "waffle",
+      "glb": "waffle.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_hand_flat",
+      "edible": true
+    },
+    "croissant": {
+      "id": "croissant",
+      "glb": "croissant.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_gentle_cup",
+      "edible": true
+    },
+    "donut": {
+      "id": "donut",
+      "glb": "donut.glb",
+      "variants": {
+        "chocolate": "donut-chocolate.glb",
+        "sprinkles": "donut-sprinkles.glb"
+      },
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_pinch_edge",
+      "edible": true
+    },
+    "cake": {
+      "id": "cake",
+      "glb": "cake.glb",
+      "slice_glb": "cake-slicer.glb",
+      "type": "prepared_food",
+      "pickable": false,
+      "prep_methods": ["slice"],
+      "requires_knife": true,
+      "edible": true
+    },
+    "cupcake": {
+      "id": "cupcake",
+      "glb": "cupcake.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "one_hand_base_pinch",
+      "edible": true
+    },
+    "cookie": {
+      "id": "cookie",
+      "glb": "cookie.glb",
+      "chocolate_glb": "cookie-chocolate.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_finger_pinch",
+      "edible": true
+    },
+    "ginger_bread": {
+      "id": "ginger-bread",
+      "glb": "ginger-bread.glb",
+      "type": "prepared_food",
+      "pickable": true,
+      "grasp_size": "two_finger_pinch",
+      "edible": true,
+      "cutter_glb": "ginger-bread-cutter.glb"
+    },
+    "chocolate": {
+      "id": "chocolate",
+      "glb": "chocolate.glb",
+      "wrapper_glb": "chocolate-wrapper.glb",
+      "type": "snack",
+      "pickable": true,
+      "grasp_size": "one_hand_flat",
+      "edible": true
+    },
+    "candy_bar": {
+      "id": "candy-bar",
+      "glb": "candy-bar.glb",
+      "wrapper_glb": "candy-bar-wrapper.glb",
+      "type": "snack",
+      "pickable": true,
+      "grasp_size": "one_hand_flat",
+      "edible": true
+    },
+    "ice_cream": {
+      "id": "ice-cream",
+      "glb": "ice-cream.glb",
+      "variants": {
+        "cone": "ice-cream-cne.glb",
+        "cup": "ice-cream-cup.glb",
+        "scoop_chocolate": "ice-cream-scoop-chocolate.glb",
+        "scoop_mint": "ice-cream-scoop-mint.glb"
+      },
+      "type": "dessert",
+      "pickable": true,
+      "grasp_size": "one_hand_handle_or_cup",
+      "fragile": true,
+      "grip_warning": "Hold cone/cup base gently — do not squeeze",
+      "edible": true
+    },
+    "popsicle": {
+      "id": "popsicle",
+      "glb": "popsicle-stick.glb",
+      "chocolate_glb": "popsicle-chocolate.glb",
+      "type": "dessert",
+      "pickable": true,
+      "grasp_size": "two_finger_pinch_stick",
+      "edible": true
+    },
+    "sundae": {
+      "id": "sundae",
+      "glb": "sundae.glb",
+      "type": "dessert",
+      "pickable": false,
+      "edible": true,
+      "eat_with": "utensil-spoon"
+    },
+    "pudding": {
+      "id": "pudding",
+      "glb": "pudding.glb",
+      "type": "dessert",
+      "pickable": false,
+      "edible": true,
+      "eat_with": "utensil-spoon"
+    },
+    "whipped_cream": {
+      "id": "whipped-cream",
+      "glb": "whipped-cream.glb",
+      "type": "topping",
+      "pickable": true,
+      "grasp_size": "one_hand_can",
+      "pour_action": "press_nozzle_and_swirl",
+      "edible": true
+    },
+    "cocktail": {
+      "id": "cocktail",
+      "glb": "cocktail.glb",
+      "type": "drink",
+      "pickable": true,
+      "grasp_size": "one_hand_stem",
+      "edible": true
+    },
+    "soda": {
+      "id": "soda",
+      "glb": "soda.glb",
+      "can_glb": "soda-can.glb",
+      "crushed_can_glb": "soda-can-crushed.glb",
+      "bottle_glb": "soda-bottle.glb",
+      "glass_glb": "soda-glass.glb",
+      "type": "drink",
+      "pickable": true,
+      "grasp_size": "one_hand_can_or_bottle",
+      "edible": true
+    },
+    "wine_red": {
+      "id": "wine-red",
+      "glb": "wine-red.glb",
+      "type": "drink",
+      "pickable": true,
+      "grasp_size": "one_hand_bottle_neck",
+      "pour_action": "tilt_into_glass",
+      "edible": true
+    },
+    "wine_white": {
+      "id": "wine-white",
+      "glb": "wine-white.glb",
+      "type": "drink",
+      "pickable": true,
+      "grasp_size": "one_hand_bottle_neck",
+      "pour_action": "tilt_into_glass",
+      "edible": true
+    },
+    "frappe": {
+      "id": "frappe",
+      "glb": "frappe.glb",
+      "type": "drink",
+      "pickable": true,
+      "grasp_size": "one_hand_cup",
+      "edible": true
+    },
+    "bowl_soup": {
+      "id": "bowl-soup",
+      "glb": "bowl-soup.glb",
+      "type": "prepared_food",
+      "pickable": false,
+      "edible": true,
+      "eat_with": "utensil-spoon"
+    }
+  },
+
+  "packaging_and_storage": {
+    "bag": {
+      "id": "bag",
+      "glb": "bag.glb",
+      "flat_glb": "bag-flat.glb",
+      "type": "packaging",
+      "pickable": true,
+      "grasp_size": "one_hand_handles"
+    },
+    "can": {
+      "id": "can",
+      "glb": "can.glb",
+      "small_glb": "can-small.glb",
+      "open_glb": "can-open.glb",
+      "type": "packaging",
+      "pickable": true,
+      "grasp_size": "one_hand_wrap",
+      "prep_methods": ["open_with_can_opener"]
+    },
+    "carton": {
+      "id": "carton",
+      "glb": "carton.glb",
+      "small_glb": "carton-small.glb",
+      "type": "packaging",
+      "pickable": true,
+      "grasp_size": "one_hand_wrap"
+    },
+    "barrel": {
+      "id": "barrel",
+      "glb": "barrel.glb",
+      "type": "storage",
+      "pickable": false
+    },
+    "styrofoam": {
+      "id": "styrofoam",
+      "glb": "styrofoam.glb",
+      "dinner_glb": "styrofoam-dinner.glb",
+      "type": "packaging",
+      "pickable": true,
+      "grasp_size": "two_hand_flat",
+      "note": "Takeout container"
+    },
+    "bottles": {
+      "id": "bottles",
+      "type": "storage",
+      "pickable": true,
+      "grasp_size": "one_hand_neck"
+    }
+  }
+}
