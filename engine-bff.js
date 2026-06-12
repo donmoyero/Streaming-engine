@@ -191,6 +191,36 @@ async function _ask(systemPrompt, userMessage) {
   }
 }
 
+async function _askLora(missSaid, context = '') {
+  if (_askBackoff > 0) {
+    console.log(`[BFF] Lora backing off ${Math.round(_askBackoff/1000)}s`);
+    return '';
+  }
+  try {
+    const res = await fetch('https://impactgrid-dijo.onrender.com/chat/lora', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        miss_said:    missSaid,
+        context:      context,
+        current_room: window._currentRoom || 'studio',
+      }),
+    });
+    if (res.status === 429) {
+      _askBackoff = 5 * 60_000;
+      setTimeout(() => { _askBackoff = 0; }, _askBackoff);
+      console.warn('[BFF] Lora 429 — backing off 5 min');
+      return '';
+    }
+    if (!res.ok) { console.warn('[BFF] Lora HTTP', res.status); return ''; }
+    const data = await res.json();
+    return data.reply || '';
+  } catch(e) {
+    console.warn('[BFF] Lora fetch error:', e);
+    return '';
+  }
+}
+
 // ════════════════════════════════════════════════════════════════
 //  CHARACTER PERSONAS
 // ════════════════════════════════════════════════════════════════
@@ -335,7 +365,12 @@ async function _exchange() {
 
   // Responder replies
   const rPersona = responder === 'miss' ? MISS_PERSONA : LORA_PERSONA;
-  const reply    = await _ask(rPersona, `Your bestie just said: "${question}"\nReply in character. SHORT — 1-3 sentences + emojis. Be real, funny, warm.`);
+  let reply;
+  if (responder === 'lora') {
+    reply = await _askLora(question, 'BFF exchange on stream — keep it SHORT, 1-3 sentences + emojis.');
+  } else {
+    reply = await _ask(rPersona, `Your bestie just said: "${question}"\nReply in character. SHORT — 1-3 sentences + emojis. Be real, funny, warm.`);
+  }
   if (!reply) return;
   await _turn(responder, reply, _mood(reply));
 
@@ -371,11 +406,16 @@ export function handleTwitchMessage(username, message, isNew = false) {
   if (!atMiss && !atLora) return;
 
   const who     = atLora ? 'lora' : 'miss';
-  const persona = who === 'lora' ? LORA_PERSONA : MISS_PERSONA;
   const clean   = message.replace(/@\S+/g, '').trim();
 
-  _ask(persona, `Twitch viewer "${username}" said: "${clean}"\nReply to them directly, in character. SHORT 1-2 sentences + emojis. Be warm and fun.`)
-    .then(reply => { if (reply) _turn(who, reply, _mood(reply)); });
+  if (who === 'lora') {
+    _askLora(`Twitch viewer "${username}" said to you: "${clean}"`, 'Reply to them directly, SHORT 1-2 sentences + emojis. Be warm and fun.')
+      .then(reply => { if (reply) _turn('lora', reply, _mood(reply)); });
+  } else {
+    const persona = MISS_PERSONA;
+    _ask(persona, `Twitch viewer "${username}" said: "${clean}"\nReply to them directly, in character. SHORT 1-2 sentences + emojis. Be warm and fun.`)
+      .then(reply => { if (reply) _turn('miss', reply, _mood(reply)); });
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
