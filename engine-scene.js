@@ -168,6 +168,65 @@ function _scaleInteriorWalls(s) {
 // Also expose on window so engine-life.js can call it without re-importing
 window.resolveWallCollision = resolveWallCollision;
 
+// ── Kitchen prop positions (unscaled — multiplied by hScale on load) ─
+// Kitchen room: x ≈ -6.0 to -1.5,  z ≈ -1.35 to +6.5
+// Confirmed anchors from house comment:
+//   stove/counter [-4.18, 0.03]   sink [-4.85, -0.93]
+export const KITCHEN_PROPS = [
+  // ── STOVE SURFACE ───────────────────────────────────────────────
+  { id: 'frying-pan',        x: -4.18, z:  0.10, rotY: 0, surface: 'stove'   },
+  { id: 'pot',               x: -4.40, z:  0.10, rotY: 0, surface: 'stove'   },
+  { id: 'pot-stew',          x: -4.60, z:  0.10, rotY: 0, surface: 'stove'   },
+
+  // ── COUNTER (main prep zone, right of stove) ────────────────────
+  { id: 'cutting-board',     x: -3.80, z:  0.30, rotY: 0, surface: 'counter' },
+  { id: 'cutting-board-round', x: -3.60, z: 0.30, rotY: 0, surface: 'counter' },
+  { id: 'knife-block',       x: -3.20, z:  0.20, rotY: 0, surface: 'counter' },
+  { id: 'shaker-salt',       x: -3.50, z:  0.50, rotY: 0, surface: 'counter' },
+  { id: 'shaker-pepper',     x: -3.40, z:  0.50, rotY: 0, surface: 'counter' },
+  { id: 'bottle-oil',        x: -3.30, z:  0.40, rotY: 0, surface: 'counter' },
+  { id: 'bottle-ketchup',    x: -3.10, z:  0.40, rotY: 0, surface: 'counter' },
+  { id: 'bottle-musterd',    x: -3.00, z:  0.40, rotY: 0, surface: 'counter' },
+  { id: 'honey',             x: -2.90, z:  0.45, rotY: 0, surface: 'counter' },
+  { id: 'bread',             x: -3.70, z:  0.55, rotY: 0, surface: 'counter' },
+  { id: 'banana',            x: -3.00, z:  0.55, rotY: 0, surface: 'counter' },
+  { id: 'apple',             x: -2.90, z:  0.55, rotY: 0, surface: 'counter' },
+  { id: 'carrot',            x: -3.10, z:  0.55, rotY: 0, surface: 'counter' },
+  { id: 'celery-stick',      x: -3.20, z:  0.55, rotY: 0, surface: 'counter' },
+
+  // ── UTENSILS (resting near stove) ──────────────────────────────
+  { id: 'cooking-spatula',   x: -4.10, z:  0.45, rotY: 0, surface: 'counter' },
+  { id: 'cooking-spoon',     x: -4.00, z:  0.45, rotY: 0, surface: 'counter' },
+  { id: 'cooking-fork',      x: -3.90, z:  0.45, rotY: 0, surface: 'counter' },
+  { id: 'whisk',             x: -3.80, z:  0.45, rotY: 0, surface: 'counter' },
+
+  // ── SINK AREA ───────────────────────────────────────────────────
+  { id: 'bowl',              x: -4.85, z: -0.93, rotY: 0, surface: 'sink'    },
+
+  // ── FRIDGE (far left wall, cold storage) ───────────────────────
+  { id: 'egg',               x: -5.50, z:  0.50, rotY: 0, surface: 'fridge'  },
+  { id: 'bacon-raw',         x: -5.50, z:  0.70, rotY: 0, surface: 'fridge'  },
+  { id: 'carton',            x: -5.40, z:  0.60, rotY: 0, surface: 'fridge'  },
+  { id: 'carton-small',      x: -5.30, z:  0.60, rotY: 0, surface: 'fridge'  },
+  { id: 'tomato',            x: -5.50, z:  0.80, rotY: 0, surface: 'fridge'  },
+  { id: 'avocado',           x: -5.40, z:  0.80, rotY: 0, surface: 'fridge'  },
+  { id: 'cheese',            x: -5.30, z:  0.80, rotY: 0, surface: 'fridge'  },
+
+  // ── DINING / SERVING (island / table edge) ─────────────────────
+  { id: 'bowl-soup',         x: -2.50, z:  1.60, rotY: 0, surface: 'table'   },
+  { id: 'bowl-cereal',       x: -2.40, z:  1.60, rotY: 0, surface: 'table'   },
+  { id: 'cup-coffee',        x: -2.30, z:  1.60, rotY: 0, surface: 'table'   },
+  { id: 'cup-tea',           x: -2.20, z:  1.60, rotY: 0, surface: 'table'   },
+  { id: 'utensil-fork',      x: -2.60, z:  1.70, rotY: 0, surface: 'table'   },
+  { id: 'utensil-knife',     x: -2.55, z:  1.70, rotY: 0, surface: 'table'   },
+  { id: 'utensil-spoon',     x: -2.50, z:  1.70, rotY: 0, surface: 'table'   },
+];
+
+// Filled at house-load time (hScale applied). Used by kitchen-behaviour.js
+// for IK walk targets. Access via window.KITCHEN_PROP_WORLD['frying-pan'].
+export const KITCHEN_PROP_WORLD = {};
+window.KITCHEN_PROP_WORLD = KITCHEN_PROP_WORLD;
+
 // ── Door nodes — collected after GLB loads ────────────────────────
 // Keyed by mesh name → { node: THREE.Object3D, open: bool, hingeAxis: 'x'|'z' }
 export const DOOR_NODES = {};
@@ -433,6 +492,10 @@ function _onBothLoaded() {
     _initDeadAir();
     initTwitchChat();
     import('./engine-bff.js').then(m => m.startCoupleEngine());
+    import('./kitchen/kitchen-behaviour.js').then(m => {
+      window._handleCookCommand = m.handleCookCommand;
+      console.log('[Kitchen] behaviour wired ✓  !cook command active');
+    });
     _initLoraWalk();
   }, 400);
 }
@@ -496,6 +559,17 @@ _gltfLoader.load('House.glb', (gltf) => {
         for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
       }
     }
+
+    // ── Scale kitchen prop positions and populate world lookup ────
+    for (const prop of KITCHEN_PROPS) {
+      KITCHEN_PROP_WORLD[prop.id] = {
+        x:       prop.x * hScale,
+        z:       prop.z * hScale,
+        rotY:    prop.rotY,
+        surface: prop.surface,
+      };
+    }
+    console.log(`[Kitchen] ${Object.keys(KITCHEN_PROP_WORLD).length} props registered at hScale=${hScale.toFixed(3)}`);
   }
   if (vrm || vrmMr) {
     requestAnimationFrame(() => {
