@@ -18,6 +18,7 @@ import { getVrm, scene, camera, renderer, ambient,
 
 import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
 import { startMusic, setMusicVolume } from './engine-music.js';
+import { handleCookCommand } from './kitchen/kitchen-behaviour.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   ACTIVITY_MR, activityUpdateMr,
@@ -1622,6 +1623,7 @@ window.speakMr = (text) => {
 // so the proactive timer doesn't fire mid-recipe.
 window._pauseDeadAir  = () => deadAir.stop();
 window._resumeDeadAir = () => { if (_deadAirActive) deadAir.start(); };
+window._handleCookCommand = handleCookCommand;
 
 // _sendTwitchMessage — lets kitchen-behaviour.js post status lines
 // back into the Twitch chat queue as StreamEvent messages.
