@@ -16,7 +16,7 @@ import { getVrm, scene, camera, renderer, ambient,
          TWITCH_CHANNEL, USER_ID,
        } from './engine-scene.js';
 
-import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
+import { setCamMode, updateCamera, onActivityChanged, setSleepMode } from './engine-camera.js';
 import { startMusic, setMusicVolume } from './engine-music.js';
 import { handleCookCommand } from './kitchen/kitchen-behaviour.js';
 import { learnNPCPosition, learnDoorState } from '../memory/memory-store.js';
@@ -659,6 +659,7 @@ function goToSpot(spot) {
     ACTIVITY.current  = next;
     ACTIVITY.timer    = 0; ACTIVITY.phase = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+    _updateSleepMode();
 
     // ── TV on/off based on activity ───────────────────────────────
     _setMissTV(TV_ACTIVITIES.has(next));
@@ -798,6 +799,7 @@ function _loraGoToSpot(spot) {
       ACTIVITY_MR.timer    = 0;
       ACTIVITY_MR.phase    = 0;
       ACTIVITY_MR.duration = 10 + Math.random() * 20;
+      _updateSleepMode();
 
       // ── TV on/off for Lora ─────────────────────────────────────
       _setLoraTV(TV_ACTIVITIES.has(next));
@@ -1601,18 +1603,28 @@ window.missOgTinz = {
 Object.defineProperty(window, '_missCurrentActivity', { get: () => ACTIVITY.current,    configurable: true });
 Object.defineProperty(window, '_loraCurrentActivity', { get: () => ACTIVITY_MR.current, configurable: true });
 window._onActivityChanged = onActivityChanged;
+const _SLEEP_ACTS = new Set(['bedLie', 'bedLiePhone']);
+
+function _updateSleepMode() {
+  const missAsleep = _SLEEP_ACTS.has(ACTIVITY.current);
+  const loraAsleep = _SLEEP_ACTS.has(ACTIVITY_MR.current);
+  setSleepMode(missAsleep && loraAsleep);
+}
+
 window._setMissActivity = (actName, duration) => {
   ACTIVITY.current  = actName;
   ACTIVITY.timer    = 0;
   ACTIVITY.phase    = 0;
   if (duration) ACTIVITY.duration = duration;
   onActivityChanged(actName);
+  _updateSleepMode();
 };
 window._setLoraActivity = (actName, duration) => {
   ACTIVITY_MR.current  = actName;
   ACTIVITY_MR.timer    = 0;
   ACTIVITY_MR.phase    = 0;
   if (duration) ACTIVITY_MR.duration = duration;
+  _updateSleepMode();
 };
 
 // ── Kitchen system bridges ───────────────────────────────────────
