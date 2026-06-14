@@ -158,6 +158,21 @@ export function resolveWallCollision(x, z, radius = AVATAR_RADIUS) {
   return { x: rx, z: rz };
 }
 
+// ── Wall-aware movement step ──────────────────────────────────────
+// Tries the full move; if a wall blocks >20% of it, slides along
+// each axis independently so avatars glide around corners.
+export function wallAwareStep(curX, curZ, moveX, moveZ, radius = AVATAR_RADIUS) {
+  const full      = resolveWallCollision(curX + moveX, curZ + moveZ, radius);
+  const fullMoved = Math.abs(full.x - curX) + Math.abs(full.z - curZ);
+  const wanted    = Math.abs(moveX) + Math.abs(moveZ);
+  if (fullMoved >= wanted * 0.8) return full;
+  const slideX = resolveWallCollision(curX + moveX, curZ,          radius);
+  const slideZ = resolveWallCollision(curX,          curZ + moveZ, radius);
+  const dxX    = Math.abs(slideX.x - curX);
+  const dzZ    = Math.abs(slideZ.z - curZ);
+  return dxX >= dzZ ? slideX : slideZ;
+}
+
 // Scale interior walls after hScale is known (called once inside House.glb loader)
 function _scaleInteriorWalls(s) {
   for (const w of INTERIOR_WALLS) {
@@ -167,6 +182,7 @@ function _scaleInteriorWalls(s) {
 
 // Also expose on window so engine-life.js can call it without re-importing
 window.resolveWallCollision = resolveWallCollision;
+window.wallAwareStep        = wallAwareStep;
 
 // ── Kitchen prop positions (unscaled — multiplied by hScale on load) ─
 // Kitchen room: x ≈ -6.0 to -1.5,  z ≈ -1.35 to +6.5
@@ -549,6 +565,11 @@ _gltfLoader.load('House.glb', (gltf) => {
       if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
     }
     for (const wp of Object.values(ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
+    // Scale Lora room destinations once, alongside all other coords
+    if (!window._loraRoomsScaled) {
+      window._loraRoomsScaled = true;
+      for (const r of _LORA_ROOMS) { r.x *= hScale; r.z *= hScale; }
+    }
     if (window.ROOM_CONNECTIONS_REF) {
       for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
         for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
@@ -673,12 +694,7 @@ function _loraPickNextRoom() {
 
 function _initLoraWalk() {
   if (!vrmMr) { setTimeout(_initLoraWalk, 500); return; }
-  // Derive hScale from the already-scaled LORA_SPAWN_X vs raw -3.2
-  const hScale = Math.abs(LORA_SPAWN_X / -3.2);
-  if (!window._loraRoomsScaled) {
-    window._loraRoomsScaled = true;
-    for (const r of _LORA_ROOMS) { r.x *= hScale; r.z *= hScale; }
-  }
+  // _LORA_ROOMS are scaled at house-load time — nothing to do here.
   _loraIdleT = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
   let _lastT  = performance.now();
 
@@ -792,22 +808,17 @@ function _updateLoraWalk(dt) {
     } else {
       // FIX: was Math.atan2(dx,dz) — Lora's forward is +PI offset from raw atan2
       vrmMr.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
-      const newX = pos.x + (dx / dist) * step;
-      const newZ = pos.z + (dz / dist) * step;
-      const safe = resolveWallCollision(newX, newZ, AVATAR_RADIUS);
+      const moveX = (dx / dist) * step;
+      const moveZ = (dz / dist) * step;
+      const safe  = wallAwareStep(pos.x, pos.z, moveX, moveZ, AVATAR_RADIUS);
       pos.x = safe.x;
       pos.z = safe.z;
     }
     return;
   }
 
-  // Idle countdown
-  _loraIdleT -= dt;
-  if (_loraIdleT <= 0) {
-    const room    = _loraPickNextRoom();
-    _loraTarget   = { x: room.x, z: room.z };
-    _loraOrigin   = { x: vrmMr.scene.position.x, z: vrmMr.scene.position.z };
-    _loraMoveT    = 0;
-    _loraWalking  = true;
-  }
+  // Scheduling is handled entirely by _loraLifeUpdate in engine-life.js,
+  // which calls window._loraSetTarget via _loraGoToSpot with BFS door routing,
+  // proper HOUSE spot facingY, yOffset, and ACTIVITY_MR callbacks.
+  // Nothing to do here when idle.
 }
