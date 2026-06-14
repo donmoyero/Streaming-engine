@@ -26,6 +26,35 @@ import { RECIPES, selectRecipe }     from './kitchen_recipes.js';
 import { KITCHEN_ACTIONS }           from './kitchen_actions.js';
 import { setMusicVolume }            from '../engine-music.js';
 
+// ================================================================
+//  SKILL MEMORY — tracks cooking proficiency per action
+//  Folded in from skill-memory.js to keep file count down.
+//
+//  Skills with technique that can succeed or fail:
+// ================================================================
+
+const SKILL_ACTIONS = new Set([
+  'slice','dice','chop','mince','julienne','crack_egg',
+  'flip_food','fry_egg','fry_bacon','stir','season',
+  'plate_food','taste_test','boil_water'
+]);
+
+const _skills = {}; // { slice: { attempts: 12, successes: 11 } }
+
+export function logSkillAttempt(skill, success) {
+  if (!_skills[skill]) _skills[skill] = { attempts: 0, successes: 0 };
+  _skills[skill].attempts++;
+  if (success) _skills[skill].successes++;
+}
+
+export function getSkillConfidence(skill) {
+  const s = _skills[skill];
+  if (!s || s.attempts === 0) return 0.7; // default starting confidence
+  return s.successes / s.attempts;
+}
+
+export function getAllSkills() { return { ..._skills }; }
+
 // ── Dialogue lines for each hook ────────────────────────────────
 //  These are passed to engine-bff.js speak() / showBubble()
 const DIALOGUE = {
@@ -169,6 +198,13 @@ const DIALOGUE = {
     "Kitchen's spotless. We professionals.",
     "Mum would be proud. Kitchen clean, food eaten.",
   ],
+  cooking_fumble: [
+    "Oop — let me redo that.",
+    "Okay that one didn't go to plan. We move.",
+    "Nah nah nah — again. Properly this time.",
+    "Don't laugh at me chat I'm learning okay.",
+    "That happens to everyone. I'm unbothered.",
+  ],
 };
 
 // ── Helper: pick a random line for a dialogue hook ──────────────
@@ -268,6 +304,7 @@ export const KitchenBehaviour = {
     _running = true;
     _currentRecipe = recipe;
     window._kitchenRunning = true;   // pauses BFF exchanges during cooking
+    window._getAllSkills = getAllSkills; // exposes skill data to memory-store without circular import
     if (window._pauseDeadAir) window._pauseDeadAir();
     console.log(`[Kitchen] Starting: ${recipe.name}`);
 
@@ -373,6 +410,23 @@ function _assignCharacter(who, charStep) {
       setTimeout(() => {
         const actName = ACTION_TO_ACTIVITY[item.action] || ACTION_TO_ACTIVITY[item.motion] || 'idle';
         _setActivity(who, actName, dur / 1000);
+
+        // ── Skill learning: roll success/fail for technique actions ──
+        const skillId = item.action;
+        if (skillId && SKILL_ACTIONS.has(skillId)) {
+          const confidence = getSkillConfidence(skillId);
+          const success    = Math.random() < confidence;
+          logSkillAttempt(skillId, success);
+          if (!success) {
+            // Small visible fumble — replays the activity briefly and speaks
+            setTimeout(() => {
+              _setActivity(who, actName, 3);
+              const fumble = _getDialogue('cooking_fumble');
+              if (fumble) setTimeout(() => _speak(who, fumble), 400);
+            }, 800);
+          }
+        }
+
         if (item.dialogue) {
           const line = _getDialogue(item.dialogue);
           if (line) setTimeout(() => _speak(who, line), 500);
