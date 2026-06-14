@@ -19,6 +19,8 @@ import { getVrm, scene, camera, renderer, ambient,
 import { setCamMode, updateCamera, onActivityChanged } from './engine-camera.js';
 import { startMusic, setMusicVolume } from './engine-music.js';
 import { handleCookCommand } from './kitchen/kitchen-behaviour.js';
+import { learnNPCPosition, learnDoorState } from '../memory/memory-store.js';
+import { shouldSkipBackgroundCall } from '../utils/token-budget.js';
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   ACTIVITY_MR, activityUpdateMr,
@@ -672,6 +674,7 @@ function goToSpot(spot) {
     maybeChangeOutfit(_currentRoom);
     setCamMode('IDLE');
     onActivityChanged(next);
+    learnNPCPosition('miss', _currentRoom, spot.label || spot.id || 'spot');
   });
 }
 
@@ -810,6 +813,7 @@ function _loraGoToSpot(spot) {
       if (spot.facingY !== undefined && window._loraSetFacing) {
         window._loraSetFacing(spot.facingY);
       }
+      learnNPCPosition('lora', _loraCurrentRoom, spot.label || spot.id || 'spot');
     });
   } else {
     // Fallback: no callback bridge — just set activity immediately
@@ -1128,7 +1132,7 @@ export function startTopicPolling() {
 // ── Dead air trigger ─────────────────────────────────────────────
 // Only ONE call ever in-flight. Backs off after 429s / errors.
 async function _triggerProactive() {
-  if (_deadAirBusy || _isSpeaking) {
+  if (_deadAirBusy || _isSpeaking || shouldSkipBackgroundCall()) {
     deadAir._arm(); // re-arm and wait longer
     return;
   }
