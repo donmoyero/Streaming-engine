@@ -42,9 +42,13 @@ export function getSleepMode()   { return _sleepMode; }
 // 'miss' | 'lora'  — which avatar the camera orbits right now
 let _focusTarget  = 'miss';
 let _focusTimer   = 0;
-const FOCUS_MIN   = 8;    // seconds on one avatar before possible switch
-const FOCUS_MAX   = 15;
+const FOCUS_MIN   = 25;   // minimum seconds on one avatar before any possible switch
+const FOCUS_MAX   = 45;   // maximum seconds before forced re-evaluation
 let _focusDwell   = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+
+// Hard cooldown after a cut — camera won't even evaluate switching during this window
+const FOCUS_COOLDOWN = 20; // seconds of guaranteed lock after any cut
+let _focusCooldown   = 0;
 
 // Force-lock: when Miss is speaking we never cut to Lora
 let _speakLock    = false;
@@ -107,9 +111,17 @@ export function setCamFacingY(y) { _camFacingY = y; }
 // ── Public API ───────────────────────────────────────────────────
 export function setCamMode(mode) {
   if (!['IDLE','SPEAK','THINK','WALK'].includes(mode)) return;
+  const wasSpeaking = camMode === 'SPEAK';
   camMode     = mode;
   _speakLock  = (mode === 'SPEAK');
-  if (_speakLock) _focusTarget = 'miss';   // always cut to Miss when she speaks
+  if (_speakLock) {
+    _focusTarget   = 'miss';   // always cut to Miss when she speaks
+    _focusCooldown = 0;        // reset cooldown — lock is handled by _speakLock
+  } else if (wasSpeaking) {
+    // Just finished speaking — hold on Miss for a natural beat before any cut is allowed
+    _focusTimer    = 0;
+    _focusCooldown = 12;       // 12-second post-speech lock
+  }
 }
 
 export function onActivityChanged(activityName) {
@@ -152,33 +164,90 @@ function _pickAngleForActivity(activityName) {
   _currentAnglePreset = pick;
 }
 
-// ── TV-director switch — interest-scored, not coin-flip ──────────
+// ── TV-director switch — patient, not trigger-happy ──────────────
+//
+//  Cuts only happen when:
+//   (a) The cooldown has fully expired AND the dwell time is up, OR
+//   (b) The OTHER character starts speaking / begins a HIGH-interest activity
+//      while we've already been watching the current one for at least FOCUS_MIN.
+//
 function _maybeSwitch(delta, lora) {
   if (_speakLock || !lora) return;
-  _focusTimer += delta;
-  if (_focusTimer < _focusDwell) return;
 
-  const missScore = _scoreTarget('miss');
-  const loraScore = _scoreTarget('lora');
-  _focusTarget = loraScore > missScore ? 'lora' : 'miss';
-  _focusTimer  = 0;
-  _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
-  _pickAngleForActivity(_currentActivity);
-  console.log(`[Cam] cut to ${_focusTarget} (miss ${missScore.toFixed(2)} / lora ${loraScore.toFixed(2)})`);
+  // Tick both timers
+  _focusCooldown = Math.max(0, _focusCooldown - delta);
+  _focusTimer   += delta;
+
+  // Still in hard cooldown — never cut
+  if (_focusCooldown > 0) return;
+
+  const otherWho   = _focusTarget === 'miss' ? 'lora' : 'miss';
+  const otherAct   = otherWho === 'miss'
+    ? (window._missCurrentActivity || 'idle')
+    : (window._loraCurrentActivity || 'idle');
+
+  const otherIsHot = _isHighInterest(otherAct);
+
+  // Fast-cut path: other character is doing something compelling
+  // and we've been on the current one for at least FOCUS_MIN already
+  if (otherIsHot && _focusTimer >= FOCUS_MIN) {
+    _doSwitch(otherWho, 'hot-activity');
+    return;
+  }
+
+  // Normal path: dwell time expired — re-evaluate
+  if (_focusTimer >= _focusDwell) {
+    const missScore = _scoreTarget('miss');
+    const loraScore = _scoreTarget('lora');
+    const winner    = loraScore > missScore ? 'lora' : 'miss';
+
+    // Only actually cut if the winner differs from current focus
+    // and the margin is meaningful (avoids aimless back-and-forth)
+    const margin = Math.abs(loraScore - missScore);
+    if (winner !== _focusTarget && margin > 1.0) {
+      _doSwitch(winner, 'dwell');
+    } else {
+      // Stay on current — reset timer for another dwell cycle
+      _focusTimer  = 0;
+      _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+    }
+  }
 }
+
+function _doSwitch(newTarget, reason) {
+  _focusTarget   = newTarget;
+  _focusTimer    = 0;
+  _focusCooldown = FOCUS_COOLDOWN;
+  _focusDwell    = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+  _pickAngleForActivity(_currentActivity);
+  console.log(`[Cam] cut → ${_focusTarget} (${reason})`);
+}
+
+// Activities that justify a fast cut to the OTHER character
+const HIGH_INTEREST_ACTS = new Set([
+  'stirring', 'chopping', 'dance', 'cookDance', 'tasting',
+  'flip_food', 'fry_egg', 'hairflick', 'noseCover', 'SPEAK',
+]);
+function _isHighInterest(act) { return HIGH_INTEREST_ACTS.has(act); }
 
 function _scoreTarget(who) {
   let score = 0;
   const act = who === 'miss'
     ? (window._missCurrentActivity || 'idle')
     : (window._loraCurrentActivity || 'idle');
-  // Active beats idle
-  if (['stirring','chopping','dance','cookDance','tasting','flip_food','fry_egg'].includes(act)) score += 3;
-  else if (act !== 'idle') score += 1;
-  // Slight bias toward whoever we're NOT already watching (avoids static lock)
-  if ((who === 'miss') !== (_focusTarget === 'miss')) score += 0.5;
-  // Small random factor so it never locks permanently
-  score += Math.random() * 0.8;
+
+  // Only truly active / visual activities earn a meaningful bonus
+  if (_isHighInterest(act))                                   score += 4;
+  else if (['phoneScroll','tvReact','watchTV','typing',
+            'monitor','readBook','eatAtTable','drinkCoffee',
+            'mirrorPose','windowLook','fireGaze'].includes(act)) score += 2;
+  // idle / sofaSit / bedLie earn 0 — no reason to cut there
+
+  // Bias toward whoever we're currently watching so the camera stays put
+  if (who === _focusTarget)                                   score += 2;
+
+  // Tiny random jitter — breaks exact ties, nothing more
+  score += Math.random() * 0.4;
   return score;
 }
 
