@@ -697,9 +697,60 @@ function _initLoraWalk() {
   // to hand off movement to this walk system, then gets a callback on arrival.
   let _loraArrivalCb = null;
 
-  window._loraSetTarget = (x, z, onArrival) => {
-    _loraTarget   = { x, z };
-    _loraWalking  = true;
+  // BFS door-path helper — mirrors engine-life's findRoomPath but
+  // uses the shared ROOM_CONNECTIONS_REF so scaled waypoints are used.
+  function _loraFindPath(fromRoom, toRoom) {
+    const CONN = window.ROOM_CONNECTIONS_REF || {};
+    if (fromRoom === toRoom) return [];
+    const visited = new Set([fromRoom]);
+    const queue   = [[fromRoom, []]];
+    while (queue.length) {
+      const [room, path] = queue.shift();
+      const conns = CONN[room] || {};
+      for (const [nextRoom, doorWp] of Object.entries(conns)) {
+        if (visited.has(nextRoom)) continue;
+        const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
+        if (nextRoom === toRoom) return newPath;
+        visited.add(nextRoom);
+        queue.push([nextRoom, newPath]);
+      }
+    }
+    return [];
+  }
+
+  // Walk Lora through a sequence of door waypoints then to the final spot.
+  // Mirrors engine-life's walkThroughWaypoints but uses Lora's own walk state.
+  function _loraWalkThroughWaypoints(waypoints, finalX, finalZ, onArrival) {
+    if (!waypoints.length) {
+      // Final leg — walk straight to destination
+      _loraTarget    = { x: finalX, z: finalZ };
+      _loraWalking   = true;
+      _loraArrivalCb = onArrival || null;
+      return;
+    }
+    const [first, ...rest] = waypoints;
+    _loraTarget    = { x: first.waypoint.x, z: first.waypoint.z };
+    _loraWalking   = true;
+    _loraArrivalCb = () => {
+      // Update Lora's tracked room in engine-life
+      if (window._loraCurrentRoomRef !== undefined) window._loraCurrentRoomRef = first.throughRoom;
+      _loraWalkThroughWaypoints(rest, finalX, finalZ, onArrival);
+    };
+  }
+
+  window._loraSetTarget = (x, z, onArrival, fromRoom, toRoom) => {
+    // If room info is provided, use BFS door pathfinding.
+    // engine-life._loraGoToSpot passes fromRoom = _loraCurrentRoom, toRoom = spot.room.
+    if (fromRoom && toRoom && fromRoom !== toRoom) {
+      const waypoints = _loraFindPath(fromRoom, toRoom);
+      if (waypoints.length) {
+        _loraWalkThroughWaypoints(waypoints, x, z, onArrival);
+        return;
+      }
+    }
+    // Same room or no path found — walk direct (original behaviour)
+    _loraTarget    = { x, z };
+    _loraWalking   = true;
     _loraArrivalCb = onArrival || null;
   };
 
