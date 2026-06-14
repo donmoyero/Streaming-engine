@@ -778,16 +778,18 @@ function _loraPickSpot() {
 function _loraGoToSpot(spot) {
   if (!spot) return;
   _loraCurrentSpot   = spot;
-  _loraCurrentRoom   = spot.room;
   _loraWalkingToSpot = true;
   _setLoraTV(false);   // leaving — TV off until she arrives
 
   // Tell engine-scene's walk system where to go
   // It exposes _loraTarget and _loraWalking via window for cross-module comms
   if (window._loraSetTarget) {
+    const _loraFromRoom = _loraCurrentRoom;   // capture BEFORE updating room
+    _loraCurrentRoom    = spot.room;           // update now so room lights switch early
     window._loraSetTarget(spot.x, spot.z, () => {
       // On arrival
       _loraWalkingToSpot = false;
+      _loraCurrentRoom   = spot.room;   // confirm room on arrival (may already match)
 
       // Pick activity from spot's list or room pool
       const pool = spot.activities?.length
