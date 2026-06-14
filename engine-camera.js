@@ -31,6 +31,13 @@ let _simsMode = false;
 export function setSimsMode(on) { _simsMode = on; }
 export function getSimsMode()   { return _simsMode; }
 
+// ── Sleep mode — slow cinematic house sweep ───────────────────────
+let _sleepMode       = false;
+let _sleepAngle      = 0;
+let _sleepSweepTimer = 0;
+export function setSleepMode(on) { _sleepMode = on; if (!on) _sleepAngle = 0; }
+export function getSleepMode()   { return _sleepMode; }
+
 // ── TV-director focus state ───────────────────────────────────────
 // 'miss' | 'lora'  — which avatar the camera orbits right now
 let _focusTarget  = 'miss';
@@ -145,17 +152,34 @@ function _pickAngleForActivity(activityName) {
   _currentAnglePreset = pick;
 }
 
-// ── TV-director switch ────────────────────────────────────────────
+// ── TV-director switch — interest-scored, not coin-flip ──────────
 function _maybeSwitch(delta, lora) {
-  if (_speakLock || !lora) return;    // can't switch when Miss is speaking or Lora not loaded
+  if (_speakLock || !lora) return;
   _focusTimer += delta;
-  if (_focusTimer >= _focusDwell) {
-    _focusTimer  = 0;
-    _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
-    _focusTarget = _focusTarget === 'miss' ? 'lora' : 'miss';
-    _pickAngleForActivity(_currentActivity);   // fresh angle on cut
-    console.log(`[Cam] cut to ${_focusTarget}`);
-  }
+  if (_focusTimer < _focusDwell) return;
+
+  const missScore = _scoreTarget('miss');
+  const loraScore = _scoreTarget('lora');
+  _focusTarget = loraScore > missScore ? 'lora' : 'miss';
+  _focusTimer  = 0;
+  _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+  _pickAngleForActivity(_currentActivity);
+  console.log(`[Cam] cut to ${_focusTarget} (miss ${missScore.toFixed(2)} / lora ${loraScore.toFixed(2)})`);
+}
+
+function _scoreTarget(who) {
+  let score = 0;
+  const act = who === 'miss'
+    ? (window._missCurrentActivity || 'idle')
+    : (window._loraCurrentActivity || 'idle');
+  // Active beats idle
+  if (['stirring','chopping','dance','cookDance','tasting','flip_food','fry_egg'].includes(act)) score += 3;
+  else if (act !== 'idle') score += 1;
+  // Slight bias toward whoever we're NOT already watching (avoids static lock)
+  if ((who === 'miss') !== (_focusTarget === 'miss')) score += 0.5;
+  // Small random factor so it never locks permanently
+  score += Math.random() * 0.8;
+  return score;
 }
 
 // ── Main update ──────────────────────────────────────────────────
@@ -166,6 +190,26 @@ export function updateCamera(delta) {
 
   // ── TV-director switch ────────────────────────────────────────
   _maybeSwitch(delta, lora);
+
+  // ── SLEEP MODE — slow cinematic house sweep ───────────────────
+  if (_sleepMode) {
+    _sleepSweepTimer += delta;
+    const speed = 0.04; // very slow pan
+    _sleepAngle += delta * speed;
+    const radius = 4.5, height = 2.8;
+    const tx = Math.sin(_sleepAngle) * radius;
+    const tz = Math.cos(_sleepAngle) * radius;
+    const L  = 0.008; // extremely slow lerp — cinematic
+    camCurrent.x += (tx     - camCurrent.x)    * Math.min(1, L * 60 * delta);
+    camCurrent.y += (height - camCurrent.y)     * Math.min(1, L * 60 * delta);
+    camCurrent.z += (tz     - camCurrent.z)     * Math.min(1, L * 60 * delta);
+    camCurrent.lookX += (0   - camCurrent.lookX) * Math.min(1, L * 60 * delta * 1.5);
+    camCurrent.lookY += (1.0 - camCurrent.lookY) * Math.min(1, L * 60 * delta * 1.5);
+    camCurrent.lookZ += (0   - camCurrent.lookZ) * Math.min(1, L * 60 * delta * 1.5);
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+    return;
+  }
 
   // ── Pick the avatar we're focused on right now ────────────────
   const focusVrm = (_focusTarget === 'lora' && lora) ? lora : vrm;
