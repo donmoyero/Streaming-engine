@@ -361,12 +361,24 @@ async function _exchange() {
   if (roll < 0.4) {
     question = STARTERS[Math.floor(Math.random() * STARTERS.length)];
   } else if (roll < 0.68) {
-    const game   = GAMES[Math.floor(Math.random() * GAMES.length)];
-    const persona = asker === 'miss' ? MISS_PERSONA : LORA_PERSONA;
-    question = await _ask(persona, `${game.prompt} Add 1-2 emojis. Keep it SHORT.`);
+    const game = GAMES[Math.floor(Math.random() * GAMES.length)];
+    if (asker === 'lora') {
+      question = await _askLora(
+        `It's your turn to kick off a chat segment on stream.`,
+        `${game.prompt} Add 1-2 emojis. Keep it SHORT — 1-2 sentences max.`
+      );
+    } else {
+      question = await _ask(MISS_PERSONA, `${game.prompt} Add 1-2 emojis. Keep it SHORT.`);
+    }
   } else {
-    const persona = asker === 'miss' ? MISS_PERSONA : LORA_PERSONA;
-    question = await _ask(persona, 'Start a fun conversation with your bestie on stream. Ask something interesting or funny. 1-2 sentences + emojis.');
+    if (asker === 'lora') {
+      question = await _askLora(
+        `It's your turn to start a conversation with Miss OG Tinz on stream.`,
+        'Ask something interesting, funny or spicy. 1-2 sentences + emojis. Keep it SHORT.'
+      );
+    } else {
+      question = await _ask(MISS_PERSONA, 'Start a fun conversation with your bestie on stream. Ask something interesting or funny. 1-2 sentences + emojis.');
+    }
   }
 
   if (!question || !_topicChanged(question)) return;
