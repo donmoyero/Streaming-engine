@@ -10,6 +10,7 @@ import { setExpressionMr, runLipSyncMr, doBlinkMr } from './engine-bones.js';
 import { speak, showBubble }                        from './engine-life.js';
 import { getVrm, getVrmMr, camera }                from './engine-scene.js';
 import { setMusicVolume }                           from './engine-music.js';
+import { getWorldContext }                          from '../memory/memory-store.js';
 import * as THREE from 'three';
 
 // ════════════════════════════════════════════════════════════════
@@ -160,6 +161,15 @@ const BACKEND = 'https://impactgrid-dijo.onrender.com/chat/message';
 
 let _askBackoff = 0;  // ms to wait after a 429
 
+// ── Topic cooldown — avoid the same opener twice in a row ────────
+let _lastTopic = '';
+function _topicChanged(text) {
+  const t = (text || '').slice(0, 40);
+  if (t === _lastTopic) return false;
+  _lastTopic = t;
+  return true;
+}
+
 async function _ask(systemPrompt, userMessage) {
   // Respect backoff after 429
   if (_askBackoff > 0) {
@@ -167,12 +177,13 @@ async function _ask(systemPrompt, userMessage) {
     return '';
   }
   try {
+    const worldCtx = getWorldContext();
     const res = await fetch(BACKEND, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_id: 'bff-engine-' + Math.random().toString(36).slice(2,6),
-        message: `[PERSONA]\n${systemPrompt}\n\n[SAY]\n${userMessage}`,
+        message: `[PERSONA]\n${systemPrompt}${worldCtx ? '\n\n' + worldCtx : ''}\n\n[SAY]\n${userMessage}`,
       }),
     });
     if (res.status === 429) {
@@ -358,7 +369,7 @@ async function _exchange() {
     question = await _ask(persona, 'Start a fun conversation with your bestie on stream. Ask something interesting or funny. 1-2 sentences + emojis.');
   }
 
-  if (!question) return;
+  if (!question || !_topicChanged(question)) return;
   await _turn(asker, question, _mood(question));
   await _delay(2000 + Math.random() * 1500);
   if (_busy) return;
