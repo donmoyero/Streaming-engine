@@ -786,6 +786,12 @@ function _loraGoToSpot(spot) {
   if (window._loraSetTarget) {
     const _loraFromRoom = _loraCurrentRoom;   // capture BEFORE updating room
     _loraCurrentRoom    = spot.room;           // update now so room lights switch early
+
+    // Restore standing Y before walking (mirrors Miss's updateWalk behaviour)
+    const loraVrm = window.getVrmLora ? window.getVrmLora() : null;
+    if (loraVrm) loraVrm.scene.position.y = loraVrm._restPosY || 0;
+
+    // Pass fromRoom + toRoom so engine-scene BFS routes through door waypoints
     window._loraSetTarget(spot.x, spot.z, () => {
       // On arrival
       _loraWalkingToSpot = false;
@@ -818,7 +824,7 @@ function _loraGoToSpot(spot) {
         window._loraSetFacing(spot.facingY);
       }
       learnNPCPosition('lora', _loraCurrentRoom, spot.label || spot.id || 'spot');
-    });
+    }, _loraFromRoom, spot.room);   // ← BFS args: tells engine-scene to route through doors
   } else {
     // Fallback: no callback bridge — just set activity immediately
     _loraWalkingToSpot = false;
