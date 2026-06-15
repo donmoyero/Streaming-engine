@@ -19,8 +19,15 @@ import { getVrm, scene, camera, renderer, ambient,
 import { setCamMode, updateCamera, onActivityChanged, setSleepMode } from './engine-camera.js';
 import { startMusic, setMusicVolume } from './engine-music.js';
 import { handleCookCommand } from './kitchen/kitchen-behaviour.js';
-import { learnNPCPosition, learnDoorState } from '../memory/memory-store.js';
-import { shouldSkipBackgroundCall } from '../utils/token-budget.js';
+// Memory — thin frontend stubs, real logic stays on backend
+const BACKEND = 'https://impactgrid-dijo.onrender.com';
+const learnNPCPosition = (who, room, spot) =>
+  fetch(`${BACKEND}/memory/record`, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ event:'npc_position', payload:{ who, room, spot } }) }).catch(()=>{});
+const learnDoorState = (doorId, state) =>
+  fetch(`${BACKEND}/memory/record`, { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ event:'door_state', payload:{ doorId, state } }) }).catch(()=>{});
+const shouldSkipBackgroundCall = () => false; // token budget managed server-side
 import {
   ACTIVITY, activityUpdate, activityPickNext,
   ACTIVITY_MR, activityUpdateMr,
