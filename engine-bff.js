@@ -10,7 +10,10 @@ import { setExpressionMr, runLipSyncMr, doBlinkMr } from './engine-bones.js';
 import { speak, showBubble }                        from './engine-life.js';
 import { getVrm, getVrmMr, camera }                from './engine-scene.js';
 import { setMusicVolume }                           from './engine-music.js';
-import { getWorldContext }                          from '../memory/memory-store.js';
+// World context fetched from backend, falls back to empty string
+let _worldCtx = '';
+fetch('https://impactgrid-dijo.onrender.com/memory/world-context').then(r => r.ok ? r.json() : null).then(d => { if (d?.context) _worldCtx = d.context; }).catch(()=>{});
+const getWorldContext = () => _worldCtx;
 import * as THREE from 'three';
 
 // ════════════════════════════════════════════════════════════════
