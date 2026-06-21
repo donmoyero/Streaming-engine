@@ -258,6 +258,28 @@ export const HOUSE = {
 };
 
 // ── Room waypoints ───────────────────────────────────────────────
+const ACTIVITY_RULES = {
+  sofaSit: ['Sofa', 'Sofa Side', 'Bedroom Chair', 'Table Head', 'Table Side'],
+  tvReact: ['Sofa', 'Sofa Side', 'TV Wall'],
+  phoneScroll: ['Sofa', 'Sofa Side', 'Coffee Table', 'Island', 'Bedroom Chair', 'Bedside'],
+  readBook: ['Sofa', 'Sofa Side', 'Bedroom Chair', 'Bed', 'Table Side'],
+  dance: ['Centre', 'Kitchen Centre', 'Dining Centre'],
+};
+
+function _getValidActivities(spot, fallbackActivities) {
+  const activities = spot.activities?.length ? spot.activities : fallbackActivities;
+  const valid = activities.filter(activity =>
+    !ACTIVITY_RULES[activity] || ACTIVITY_RULES[activity].includes(spot.label)
+  );
+  const result = valid.length ? valid : ['idle'];
+
+  if (import.meta.env?.DEV) {
+    console.log(`[Activity Filter] ${spot.label} → ${[...new Set(result)].join(', ')}`);
+  }
+
+  return result;
+}
+
 export const ROOM_WAYPOINT_DEFS = {
   studio:        { x:  0.6, z: -1.2, facingY: Math.PI    },
   'living-room': { x:  2.0, z: -3.5, facingY: 0.3        },
@@ -696,8 +718,7 @@ function goToSpot(spot) {
     _currentRoom = targetRoom;
     setRoomVisible(_currentRoom, true);
     if (spot.facingY !== undefined) _targetFacing = spot.facingY;
-    const spotActivities = spot.activities?.length
-      ? spot.activities : getFamiliarActivityPool(_currentRoom);
+    const spotActivities = _getValidActivities(spot, getFamiliarActivityPool(_currentRoom));
     const next = spotActivities[Math.floor(Math.random() * spotActivities.length)];
 
     _reserveSpot(spot, 'miss');
@@ -881,9 +902,10 @@ function _loraGoToSpot(spot) {
       _loraCurrentRoom   = spot.room;   // confirm room on arrival (may already match)
 
       // Pick activity from spot's list or room pool
-      const pool = spot.activities?.length
-        ? spot.activities
-        : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
+      const pool = _getValidActivities(
+        spot,
+        _loraActivityPool[spot.room] || _loraActivityPool.studio
+      );
       const next = pool[Math.floor(Math.random() * pool.length)];
 
       _reserveSpot(spot, 'lora');
@@ -921,9 +943,10 @@ function _loraGoToSpot(spot) {
   } else {
     // Fallback: no callback bridge — just set activity immediately
     _loraWalkingToSpot = false;
-    const pool = spot.activities?.length
-      ? spot.activities
-      : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
+    const pool = _getValidActivities(
+      spot,
+      _loraActivityPool[spot.room] || _loraActivityPool.studio
+    );
     const next = pool[Math.floor(Math.random() * pool.length)];
     _reserveSpot(spot, 'lora');
     ACTIVITY_MR.current  = next;
