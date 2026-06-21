@@ -173,9 +173,9 @@ export const HOUSE = {
     origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',         x: -4.159, z: -4.424, interactionPoint: { x: -3.95, z: -4.15 }, facingY: 0, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
+      { label: 'Sofa',         x: -4.159, z: -4.424, interactionPoint: { x: -3.95, z: -4.15 }, lookPoint: { x: -2.500, z: -5.000 }, facingY: 0, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
       { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
-      { label: 'TV Wall',      x: -2.500, z: -5.000, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
+      { label: 'TV Wall',      x: -2.500, z: -5.000, lookPoint: { x: -2.500, z: -5.000 }, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
       { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch'], prop: 'krb' },
       { label: 'Centre',       x: -3.200, z: -2.800, facingY: Math.PI,        activities: ['dance','stretch','hairflick','hiponhip','idle'] },
@@ -187,9 +187,9 @@ export const HOUSE = {
     origin: { x: -3.8, z: 1.0 }, size: { w: 4.5, d: 4.5 },
     ambientColor: 0x0a1005,
     spots: [
-      { label: 'Hob',            x: -4.180, z:  0.300, facingY: Math.PI * 0.5, activities: ['stirring','chopping','tasting','idle','noseCover'], prop: 'sporak' },
+      { label: 'Hob',            x: -4.180, z:  0.300, interactionPoint: { x: -3.750, z:  0.300 }, lookPoint: { x: -4.180, z:  0.300 }, facingY: Math.PI * 0.5, activities: ['stirring','chopping','tasting','idle','noseCover'], prop: 'sporak' },
       { label: 'Second Hob',     x: -4.185, z: -0.300, facingY: Math.PI * 0.5, activities: ['stirring','idle','tasting'], prop: 'varna deska' },
-      { label: 'Sink',           x: -4.849, z: -0.650, facingY: Math.PI * 0.5, activities: ['washingUp','idle','stretch'], prop: 'drez' },
+      { label: 'Sink',           x: -4.849, z: -0.650, lookPoint: { x: -4.849, z: -0.650 }, facingY: Math.PI * 0.5, activities: ['washingUp','idle','stretch'], prop: 'drez' },
       { label: 'Cabinets',       x: -4.000, z:  1.000, facingY: Math.PI * 0.5, activities: ['cabinetOpen','idle','noseCover','hairflick'], prop: 'linka' },
       { label: 'Island',         x: -1.004, z:  2.185, facingY: Math.PI,       activities: ['chopping','tasting','phoneScroll','idle','hiponhip','readBook'], prop: 'linka.001' },
       { label: 'Kitchen Centre', x: -2.800, z:  1.200, facingY: Math.PI,       activities: ['dance','stretch','idle','hairflick'] },
@@ -225,7 +225,7 @@ export const HOUSE = {
     origin: { x: 3.8, z: -2.0 }, size: { w: 4.5, d: 6.0 },
     ambientColor: 0x05050d,
     spots: [
-      { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
+      { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, lookPoint: { x:  2.755, z: -0.845 }, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
       { label: 'Wardrobe',        x:  4.356, z:  2.100, facingY: Math.PI,          activities: ['cabinetOpen','mirrorPose','idle','hairflick'], prop: 'closet.006' },
       { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'Plane.054' },
       { label: 'Bed',             x:  5.200, z: -4.200, facingY: 0,               yOffset: -0.85, activities: ['bedLie','bedLie','bedLiePhone','readBook'] },
@@ -280,11 +280,42 @@ let _lastLookActivity = null;
 let _lookYaw = 0;
 let _lookPitch = 0;
 
+function _lookTargetsEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  return a.kind === b.kind && a.x === b.x && a.z === b.z && a.label === b.label;
+}
+
+function _describeLookTarget(target) {
+  return typeof target === 'object'
+    ? `${target.label || 'point'} (${target.x.toFixed(3)}, ${target.z.toFixed(3)})`
+    : target;
+}
+
+function _pointLookTargetForSpot(spot) {
+  if (!spot?.lookPoint) return null;
+  return {
+    kind: 'point',
+    label: spot.label,
+    x: spot.lookPoint.x,
+    z: spot.lookPoint.z,
+  };
+}
+
+function _applySpotLookTarget(spot) {
+  const target = _pointLookTargetForSpot(spot);
+  if (!target) return false;
+  setLookTarget(target);
+  _lastLookActivity = ACTIVITY.current;
+  console.log(`[Interaction] Looking at ${spot.label} look point`);
+  return true;
+}
+
 export function setLookTarget(target) {
   if (!target) return clearLookTarget();
-  if (_lookTarget === target) return;
+  if (_lookTargetsEqual(_lookTarget, target)) return;
   _lookTarget = target;
-  console.log(`[Look] Miss → ${target}`);
+  console.log(`[Look] Miss -> ${_describeLookTarget(target)}`);
 }
 
 export function clearLookTarget() {
@@ -295,7 +326,14 @@ export function clearLookTarget() {
 }
 
 function _syncLookTarget() {
-  if (walk.active || ACTIVITY.current === _lastLookActivity) return;
+  if (walk.active) return;
+  const spotTarget = _pointLookTargetForSpot(_currentSpot);
+  if (spotTarget) {
+    setLookTarget(spotTarget);
+    _lastLookActivity = ACTIVITY.current;
+    return;
+  }
+  if (ACTIVITY.current === _lastLookActivity) return;
   _lastLookActivity = ACTIVITY.current;
   const target = LOOK_TARGETS[ACTIVITY.current];
   if (target) setLookTarget(target);
@@ -313,7 +351,10 @@ function _updateLookTarget(delta) {
   let targetZ = vrmPos.z + facingZ;
   let targetPitch = 0;
 
-  if (_lookTarget === 'tv') {
+  if (typeof _lookTarget === 'object' && _lookTarget.kind === 'point') {
+    targetX = _lookTarget.x;
+    targetZ = _lookTarget.z;
+  } else if (_lookTarget === 'tv') {
     targetX = -2.5;
     targetZ = -5.0;
   } else if (_lookTarget === 'window' || _lookTarget === 'mirror') {
@@ -807,6 +848,9 @@ function goToSpot(spot) {
   const doorPath   = findRoomPath(_currentRoom, targetRoom);
 
   const walkTarget = spot.interactionPoint || spot;
+  if (spot.interactionPoint) {
+    console.log(`[Interaction] Walking to ${spot.label} interaction point`);
+  }
   walkThroughWaypoints(doorPath, walkTarget.x, walkTarget.z, () => {
     _currentRoom = targetRoom;
     setRoomVisible(_currentRoom, true);
@@ -833,6 +877,7 @@ function goToSpot(spot) {
     ACTIVITY.current  = next;
     ACTIVITY.timer    = 0; ACTIVITY.phase = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
+    _applySpotLookTarget(spot);
     _updateSleepMode();
 
     // ── TV on/off based on activity ───────────────────────────────
@@ -1016,6 +1061,9 @@ function _loraGoToSpot(spot) {
 
     // Pass fromRoom + toRoom so engine-scene BFS routes through door waypoints
     const walkTarget = spot.interactionPoint || spot;
+    if (spot.interactionPoint) {
+      console.log(`[Interaction] Walking to ${spot.label} interaction point`);
+    }
     window._loraSetTarget(walkTarget.x, walkTarget.z, () => {
       // On arrival
       clearTimeout(_loraWalkWatchdog); // ← she made it — cancel the safety timer
