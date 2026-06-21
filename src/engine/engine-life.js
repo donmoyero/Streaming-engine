@@ -1088,51 +1088,136 @@ function moveToRoom(roomName) {
 }
 
 // ── Pathfinding: room-to-room door connection graph ──────────────
-// Each key = a room; values = rooms directly reachable and the
+// Each room lists directly reachable rooms; DOORS stores the model-space
 // door-threshold waypoint (world-space x/z) to pass through first.
-// Coords match the existing HOUSE.hallway door spot positions.
 // NOTE: engine-scene.js scales these by hScale on house load via
 //       window.ROOM_CONNECTIONS_REF — do not hardcode scaled values.
-const ROOM_CONNECTIONS = {
-  'studio':      { 'hallway':   { x:  0.6,  z: -1.2  } },
-  'living-room': { 'hallway':   { x:  0.2,  z: -0.4  } },
-  'kitchen':     { 'hallway':   { x:  0.2,  z:  0.9  } },
-  'dining':      { 'kitchen':   { x: -1.0,  z:  2.2  } },
-  'bedroom': {
-    'hallway':   { x:  1.59, z: -5.3  },   // front of bedroom door into hallway
-    'bathroom':  { x:  2.75, z:  0.85 },   // bedroom → bathroom direct (shared wall)
-  },
-  'bathroom': {
-    'bedroom':   { x:  2.75, z:  0.85 },   // bathroom → bedroom direct
-  },
-  'hallway': {
-    'studio':      { x:  0.6,  z: -1.2  },
-    'living-room': { x:  0.2,  z: -0.4  },
-    'kitchen':     { x:  0.2,  z:  0.9  },
-    'bedroom':     { x:  1.59, z: -5.3  },
-  },
+export const HOUSE_GRAPH = {
+  'living-room': { id: 'living-room', connectedRooms: ['hallway'] },
+  kitchen:       { id: 'kitchen', connectedRooms: ['hallway', 'dining'] },
+  dining:        { id: 'dining', connectedRooms: ['kitchen', 'hallway'] },
+  hallway:       { id: 'hallway', connectedRooms: ['living-room', 'kitchen', 'dining', 'bathroom', 'bedroom', 'studio'] },
+  bathroom:      { id: 'bathroom', connectedRooms: ['hallway', 'bedroom'] },
+  bedroom:       { id: 'bedroom', connectedRooms: ['hallway', 'bathroom'] },
+  studio:        { id: 'studio', connectedRooms: ['hallway'] },
 };
+
+export const DOORS = [
+  { fromRoom: 'hallway',     toRoom: 'living-room', x: -0.920, z: -0.021 },
+  { fromRoom: 'hallway',     toRoom: 'kitchen',     x: -0.920, z:  1.222 },
+  { fromRoom: 'kitchen',     toRoom: 'dining',      x:  0.382, z:  1.579 },
+  { fromRoom: 'hallway',     toRoom: 'dining',      x:  2.475, z:  2.040 },
+  { fromRoom: 'hallway',     toRoom: 'bathroom',    x:  1.925, z:  0.731 },
+  { fromRoom: 'bedroom',     toRoom: 'bathroom',    x:  1.925, z: -1.732 },
+  { fromRoom: 'hallway',     toRoom: 'bedroom',     x:  1.925, z: -3.870 },
+  { fromRoom: 'hallway',     toRoom: 'studio',      x:  0.477, z: -2.327 },
+  { fromRoom: 'hallway',     toRoom: 'outside',     x:  1.590, z: -5.636 },
+];
+
+const ROOM_CONNECTIONS = DOORS.reduce((connections, door) => {
+  const waypoint = { x: door.x, z: door.z };
+  connections[door.fromRoom] ||= {};
+  connections[door.fromRoom][door.toRoom] = waypoint;
+  if (HOUSE_GRAPH[door.toRoom]) {
+    connections[door.toRoom] ||= {};
+    connections[door.toRoom][door.fromRoom] = waypoint;
+  }
+  return connections;
+}, {});
 // Register reference so engine-scene.js can scale waypoints after hScale is known
 window.ROOM_CONNECTIONS_REF = ROOM_CONNECTIONS;
 
 // BFS — returns ordered array of { throughRoom, waypoint } steps,
 // or [] if already in same room / no path found (fallback: direct walk).
-function findRoomPath(fromRoom, toRoom) {
-  if (fromRoom === toRoom) return [];
-  const visited = new Set([fromRoom]);
-  const queue   = [[fromRoom, []]];
+export function getRoomPath(startRoom, endRoom) {
+  if (!startRoom || !endRoom || !HOUSE_GRAPH[startRoom] || !HOUSE_GRAPH[endRoom]) return [];
+  if (startRoom === endRoom) return [startRoom];
+  const visited = new Set([startRoom]);
+  const queue = [[startRoom, [startRoom]]];
   while (queue.length) {
     const [room, path] = queue.shift();
-    const connections  = ROOM_CONNECTIONS[room] || {};
-    for (const [nextRoom, doorWp] of Object.entries(connections)) {
-      if (visited.has(nextRoom)) continue;
-      const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
-      if (nextRoom === toRoom) return newPath;
+    for (const nextRoom of HOUSE_GRAPH[room]?.connectedRooms || []) {
+      if (visited.has(nextRoom) || !HOUSE_GRAPH[nextRoom]) continue;
+      const nextPath = [...path, nextRoom];
+      if (nextRoom === endRoom) {
+        console.log(`[Navigation] ${nextPath.map(_formatRoomForLog).join(' → ')}`);
+        return nextPath;
+      }
       visited.add(nextRoom);
-      queue.push([nextRoom, newPath]);
+      queue.push([nextRoom, nextPath]);
     }
   }
   return [];
+}
+
+function _formatRoomForLog(roomName) {
+  return String(roomName)
+    .split('-')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function _doorForRooms(fromRoom, toRoom) {
+  return DOORS.find(door =>
+    (door.fromRoom === fromRoom && door.toRoom === toRoom) ||
+    (door.fromRoom === toRoom && door.toRoom === fromRoom)
+  );
+}
+
+function _buildDoorWaypoints(roomPath, actorName = 'Miss') {
+  if (!Array.isArray(roomPath) || roomPath.length <= 1) return [];
+  return roomPath.slice(1).map((room, index) => {
+    const previousRoom = roomPath[index];
+    const waypoint = ROOM_CONNECTIONS[previousRoom]?.[room];
+    const door = _doorForRooms(previousRoom, room);
+    if (!waypoint || !door) return null;
+    return {
+      throughRoom: room,
+      waypoint,
+      onPass: index === 0
+        ? () => console.log(`[Navigation] ${actorName} passing ${_formatRoomForLog(previousRoom).toLowerCase()} door`)
+        : null,
+      onEnter: () => console.log(`[Navigation] ${actorName} entering ${_formatRoomForLog(room).toLowerCase()}`),
+    };
+  }).filter(Boolean);
+}
+
+function findRoomPath(fromRoom, toRoom) {
+  return _buildDoorWaypoints(getRoomPath(fromRoom, toRoom));
+}
+
+// ── Door-queue navigation adapter ───────────────────────────────
+// Wraps findRoomPath with:
+//   • same-room short-circuit (returns [] immediately, no BFS)
+//   • per-door entry log with door id and direction
+//   • records each door passage to the memory backend
+// Only Miss uses this path; Lora routes via engine-scene's _loraSetTarget.
+function _buildNavQueue(fromRoom, toRoom, actorName = 'Miss') {
+  if (!fromRoom || !toRoom || fromRoom === toRoom) return [];
+  const waypoints = findRoomPath(fromRoom, toRoom);
+  if (!waypoints.length) return [];
+
+  // Annotate each waypoint with enriched per-door logging + memory record
+  return waypoints.map((wp, index) => {
+    const prevRoom = index === 0 ? fromRoom : waypoints[index - 1].throughRoom;
+    const door     = _doorForRooms(prevRoom, wp.throughRoom);
+    const doorId   = door
+      ? `${door.fromRoom}↔${door.toRoom}`
+      : `${prevRoom}→${wp.throughRoom}`;
+
+    return {
+      ...wp,
+      onPass: () => {
+        console.log(`[NavQueue] ${actorName} at door [${doorId}] leg ${index + 1}/${waypoints.length}`);
+        wp.onPass?.();
+      },
+      onEnter: () => {
+        console.log(`[NavQueue] ${actorName} entered ${_formatRoomForLog(wp.throughRoom)} via [${doorId}]`);
+        learnDoorState(doorId, 'passed');
+        wp.onEnter?.();
+      },
+    };
+  });
 }
 
 // Walk through an ordered list of door waypoints, then arrive at
@@ -1161,6 +1246,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
 
   // Walk to the next door threshold, then continue recursively
   const [first, ...rest] = waypoints;
+  first.onPass?.();
   const dx   = first.waypoint.x - vrmPos.x;
   const dz   = first.waypoint.z - vrmPos.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
@@ -1177,6 +1263,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
     vrmPos.x     = first.waypoint.x;
     vrmPos.z     = first.waypoint.z;
     _currentRoom = first.throughRoom;
+    first.onEnter?.();
     setRoomVisible(_currentRoom, true);
     walkThroughWaypoints(rest, finalX, finalZ, onArrive);
   };
@@ -1195,7 +1282,10 @@ function goToSpot(spot, options = {}) {
   _setMissTV(false);   // leaving current spot — TV off until she arrives somewhere new
 
   const targetRoom = spot.room;
-  const doorPath   = findRoomPath(_currentRoom, targetRoom);
+  // Same room → _buildNavQueue returns [] immediately, walkThroughWaypoints
+  // skips the door layer and goes straight to the final leg. Cross-room →
+  // each door passage is logged and recorded via the adapter.
+  const doorPath   = _buildNavQueue(_currentRoom, targetRoom, 'Miss');
 
   const walkTarget = spot.interactionPoint || spot;
   if (spot.interactionPoint) {
