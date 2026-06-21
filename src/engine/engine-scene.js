@@ -305,7 +305,34 @@ function _collectDoors(houseScene) {
   console.log(`[Door] ${Object.keys(DOOR_NODES).length} doors indexed`);
 }
 
-// ── Miss OG Tinz VRM ref ─────────────────────────────────────────
+// ── TV mesh ref — populated after house GLB loads ────────────────
+export let tvMesh = null;
+
+// Call this when any character starts/stops watching TV.
+// Finds the 'tv' node in House.glb and toggles its emissive glow
+// so the screen visually turns on/off.
+export function setTVOn(on) {
+  if (!tvMesh) return;
+  tvMesh.traverse(obj => {
+    if (!obj.isMesh) return;
+    if (!obj.material) return;
+    // Clone material once so we don't dirty the shared GLB material
+    if (!obj._tvMatCloned) {
+      obj.material = obj.material.clone();
+      obj._tvMatCloned = true;
+    }
+    if (on) {
+      // Bright blue-white screen glow
+      obj.material.emissive     = new THREE.Color(0x88aaff);
+      obj.material.emissiveIntensity = 1.8;
+    } else {
+      obj.material.emissive     = new THREE.Color(0x000000);
+      obj.material.emissiveIntensity = 0;
+    }
+    obj.material.needsUpdate = true;
+  });
+}
+
 export let vrm            = null;
 export let VRM_BASE_ROT_Y = Math.PI;
 export function getVrm()   { return vrm; }
@@ -568,6 +595,11 @@ _gltfLoader.load('/House.glb', (gltf) => {
     }
   });
   _collectDoors(house);
+
+  // ── Collect TV mesh (node name 'tv' in House.glb) ─────────────
+  house.traverse(n => {
+    if (n.name === 'tv') { tvMesh = n; console.log('[TV] mesh found ✓'); }
+  });
   _houseLoaded = true;
   if (!window._houseScaled) {
     window._houseScaled = true;
@@ -615,8 +647,7 @@ _gltfLoader.load('/House.glb', (gltf) => {
         surface: prop.surface,
       };
     }
-    console.log(`[Kitchen] ${Object.keys(KITCHEN_PROP_WORLD).length} props registered at hScale=${hScale.toFixed(3)}`);
-  }
+    console.log(`[Kitchen] ${Object.keys(KITCHEN_PROP_WORLD).length} props registered at hScale=${hScale.toFixed(3)}`);  }
   if (vrm || vrmMr) {
     requestAnimationFrame(() => {
       if (vrm)   _finaliseVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
