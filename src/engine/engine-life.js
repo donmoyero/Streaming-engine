@@ -1593,11 +1593,90 @@ function queueTwitchMessage(username, message) {
   if (!_msgBusy) processNextMessage();
 }
 
+function _findPhoneScrollSpot() {
+  const phoneSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
+    (roomDef?.spots || [])
+      .filter(spot => spot.activities?.includes('phoneScroll'))
+      .filter(spot => ACTIVITY_RULES.phoneScroll.includes(spot.label))
+      .filter(spot => spot.yOffset === undefined || !occupiedSpots.has(spot.label))
+      .map(spot => ({ ...spot, room: roomKey }))
+  );
+
+  return phoneSpots.sort((a, b) => {
+    const distanceA = Math.hypot(a.x - vrmPos.x, a.z - vrmPos.z);
+    const distanceB = Math.hypot(b.x - vrmPos.x, b.z - vrmPos.z);
+    return distanceA - distanceB;
+  })[0] || null;
+}
+
+function _waitUntil(predicate, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (predicate()) {
+        clearInterval(timer);
+        resolve();
+      } else if (Date.now() - startedAt >= timeoutMs) {
+        clearInterval(timer);
+        reject(new Error('Timed out waiting for activity transition'));
+      }
+    }, 50);
+  });
+}
+
+export async function respondToTwitchMessage(message, displayName = 'Viewer') {
+  console.log('[Twitch] Message received');
+
+  const previousActivity = ACTIVITY.current;
+  const previousSpot = _currentSpot ? { ..._currentSpot } : null;
+  _apiOverride = true;
+  _apiOverrideTimer = API_OVERRIDE_DURATION;
+
+  try {
+    const phoneSpot = _findPhoneScrollSpot();
+    if (!phoneSpot) throw new Error('No available phoneScroll spot');
+
+    console.log('[Twitch] Walking to phone');
+    goToSpot({ ...phoneSpot, activities: ['phoneScroll'] });
+    const activePhoneSpot = _currentSpot;
+    await _waitUntil(() =>
+      !walk.active &&
+      ACTIVITY.current === 'phoneScroll' &&
+      _currentSpot === activePhoneSpot
+    );
+
+    console.log('[Twitch] Replying');
+    await sendMessage(message, displayName);
+  } catch (error) {
+    console.warn('[Twitch] Phone response workflow failed:', error);
+  } finally {
+    console.log('[Twitch] Returning to normal behaviour');
+
+    if (previousSpot) {
+      goToSpot({ ...previousSpot, activities: [previousActivity] });
+      const returnSpot = _currentSpot;
+      try {
+        await _waitUntil(() =>
+          !walk.active &&
+          ACTIVITY.current === previousActivity &&
+          _currentSpot === returnSpot
+        );
+      } catch (error) {
+        console.warn('[Twitch] Could not restore previous spot:', error);
+      }
+    }
+
+    _apiOverride = false;
+    _apiOverrideTimer = 0;
+    _lifeTimer = 0;
+  }
+}
+
 async function processNextMessage() {
   if (_msgQueue.length === 0) { _msgBusy = false; return; }
   _msgBusy = true;
   const { username, message } = _msgQueue.shift();
-  await sendMessage(message, username);
+  await respondToTwitchMessage(message, username);
   setTimeout(processNextMessage, 15000);
 }
 
