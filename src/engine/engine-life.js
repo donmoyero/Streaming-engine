@@ -424,6 +424,82 @@ export const walk = {
 };
 
 export const vrmPos = { x: 0, z: 0 };
+const AVATAR_SEPARATION = 0.9;
+let _avoidancePausedAvatar = null;
+let _loraPausedForAvoidance = false;
+
+function _getLoraPosition() {
+  const lora = window.getVrmLora ? window.getVrmLora() : null;
+  return lora?.scene?.position || null;
+}
+
+function _getLoraWalkTarget() {
+  const target = window._loraTarget;
+  if (!target) return null;
+  const x = target.x ?? target.toX ?? target[0];
+  const z = target.z ?? target.toZ ?? target[1];
+  return Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null;
+}
+
+function _getMissRemainingWalkDistance() {
+  if (!walk.active) return 0;
+  return Math.hypot(walk.toX - vrmPos.x, walk.toZ - vrmPos.z);
+}
+
+function _getLoraRemainingWalkDistance(loraPos = _getLoraPosition()) {
+  if (!loraPos || !(window._loraWalking || _loraWalkingToSpot)) return 0;
+  const target = _getLoraWalkTarget();
+  if (!target) return 0;
+  return Math.hypot(target.x - loraPos.x, target.z - loraPos.z);
+}
+
+function _setAvoidancePausedAvatar(next) {
+  if (_avoidancePausedAvatar === next) return;
+  if (_avoidancePausedAvatar === 'miss' && next !== 'miss') {
+    console.log('[Avoidance] Miss resumed');
+  }
+  _avoidancePausedAvatar = next;
+  if (next === 'miss') {
+    console.log('[Avoidance] Miss waiting for Lora');
+  }
+}
+
+function _updateAvatarAvoidance() {
+  const loraPos = _getLoraPosition();
+  if (!loraPos) {
+    _setAvoidancePausedAvatar(null);
+    return;
+  }
+
+  const missWalking = walk.active;
+  const loraWalking = window._loraWalking || _loraWalkingToSpot;
+  if (!missWalking && !loraWalking) {
+    _setAvoidancePausedAvatar(null);
+    return;
+  }
+
+  const distance = Math.hypot(vrmPos.x - loraPos.x, vrmPos.z - loraPos.z);
+  if (distance >= AVATAR_SEPARATION) {
+    _setAvoidancePausedAvatar(null);
+    return;
+  }
+
+  if (_avoidancePausedAvatar) return;
+
+  const missRemaining = _getMissRemainingWalkDistance();
+  const loraRemaining = _getLoraRemainingWalkDistance(loraPos);
+  _setAvoidancePausedAvatar(missRemaining >= loraRemaining ? 'miss' : 'lora');
+}
+
+function _applyLoraAvoidancePause() {
+  if (_avoidancePausedAvatar === 'lora') {
+    _loraPausedForAvoidance = true;
+    window._loraWalking = false;
+  } else if (_loraPausedForAvoidance) {
+    _loraPausedForAvoidance = false;
+    if (_loraWalkingToSpot) window._loraWalking = true;
+  }
+}
 
 // _targetFacing — render loop smoothly rotates VRM toward this each frame
 export let _targetFacing = Math.PI;
@@ -463,6 +539,7 @@ let _walkPhase = 0;
 export function updateWalk(delta) {
   const vrm = _vrm();
   if (!walk.active || !vrm) return;
+  if (_avoidancePausedAvatar === 'miss') return;
 
   // Restore standing height at the very first frame of each walk
   // so she stands up from seated/lying position before moving.
@@ -2326,6 +2403,8 @@ function render() {
     hyperUpdate(delta);
 
     // ── Walk / life scheduler ──────────────────────────────────
+    _updateAvatarAvoidance();
+    _applyLoraAvoidancePause();
     updateWalk(delta);
     lifeUpdate();
     _loraLifeUpdate();
@@ -2448,7 +2527,7 @@ function render() {
 
       // ── Lora walk bones — driven here, position driven by engine-scene ──
       // Use both the local flag and engine-scene's window bridge
-      if (window._loraWalking || _loraWalkingToSpot) {
+      if ((window._loraWalking || _loraWalkingToSpot) && _avoidancePausedAvatar !== 'lora') {
         loraWalkUpdate(delta);
       } else {
         resetLoraWalkPhase();
