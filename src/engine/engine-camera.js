@@ -1,0 +1,424 @@
+// ================================================================
+//  engine-camera.js
+//  TV-director camera — alternates focus between Miss OG Tinz and
+//  Lora every 8–15 s. Always locks to the speaker when talking.
+//  Never orbits the midpoint (that puts the camera inside walls).
+//
+//  KEY CHANGE: orbit ONE avatar at a time, not the midpoint.
+//  resolveWallCollision() from engine-scene keeps it out of walls.
+// ================================================================
+
+import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
+import { walk } from './engine-life.js';
+
+// ── Wall-clamp margin ────────────────────────────────────────────
+const CAM_WALL_MARGIN = 1.6;
+
+// ── Max safe orbit distance — beyond this walls become visible ───
+// Derived from HOUSE_BOUNDS: interior is ~±5 units, avatar near centre
+// means we can go at most ~3 units before risking a wall.
+const MAX_SAFE_DIST = 2.8;
+
+// ── Interaction mode ─────────────────────────────────────────────
+let camMode = 'IDLE';
+export const CAM_LERP = 0.04;
+
+export const STREAMER_CAM = {
+  IDLE:  { dist: 2.00, height: 1.60, lookHeight: 1.15, sideShift: 0.0 },
+  SPEAK: { dist: 1.25, height: 1.65, lookHeight: 1.42, sideShift: 0.0 },
+  THINK: { dist: 1.60, height: 1.58, lookHeight: 1.30, sideShift: 0.22 },
+  WALK:  { dist: 2.00, height: 1.65, lookHeight: 1.20, sideShift: 0.0 }, // was 2.40 — too far
+};
+
+// ── Sims mode ────────────────────────────────────────────────────
+const SIMS_CAM = { heightAbove: 4.5, distBack: 5.0, distSide: 2.5, lookAtHeight: 0.8 };
+let _simsMode = false;
+export function setSimsMode(on) { _simsMode = on; }
+export function getSimsMode()   { return _simsMode; }
+
+// ── Sleep mode — slow cinematic house sweep ───────────────────────
+let _sleepMode       = false;
+let _sleepAngle      = 0;
+let _sleepSweepTimer = 0;
+export function setSleepMode(on) { _sleepMode = on; if (!on) _sleepAngle = 0; }
+export function getSleepMode()   { return _sleepMode; }
+
+// ── TV-director focus state ───────────────────────────────────────
+// 'miss' | 'lora'  — which avatar the camera orbits right now
+let _focusTarget  = 'miss';
+let _focusTimer   = 0;
+const FOCUS_MIN   = 25;   // minimum seconds on one avatar before any possible switch
+const FOCUS_MAX   = 45;   // maximum seconds before forced re-evaluation
+let _focusDwell   = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+
+// Hard cooldown after a cut — camera won't even evaluate switching during this window
+const FOCUS_COOLDOWN = 20; // seconds of guaranteed lock after any cut
+let _focusCooldown   = 0;
+
+// Force-lock: when Miss is speaking we never cut to Lora
+let _speakLock    = false;
+
+// ── Angle presets ─────────────────────────────────────────────────
+// distMult is applied to STREAMER_CAM dist. WIDE was 1.80 which pushed
+// the camera 2.4–3.6 units out — into walls. Capped to 1.30 (2.0–2.6 units max).
+const ANGLE_PRESETS = {
+  FRONT:      { angleOffset:  0,           distMult: 1.0,  heightMult: 1.0,  lookOffset:  0.0  },
+  FRONT_LOW:  { angleOffset:  0,           distMult: 1.1,  heightMult: 0.82, lookOffset: -0.08 },
+  CLOSE:      { angleOffset:  0,           distMult: 0.70, heightMult: 1.06, lookOffset:  0.06 },
+  SIDE_L:     { angleOffset: -Math.PI / 2, distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
+  SIDE_R:     { angleOffset:  Math.PI / 2, distMult: 1.05, heightMult: 1.0,  lookOffset:  0.0  },
+  WIDE:       { angleOffset:  0,           distMult: 1.30, heightMult: 1.10, lookOffset: -0.05 }, // was 1.80 — caused wall clips
+  QUARTER_L:  { angleOffset: -Math.PI / 4, distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
+  QUARTER_R:  { angleOffset:  Math.PI / 4, distMult: 1.1,  heightMult: 1.0,  lookOffset:  0.0  },
+};
+
+const ACTIVITY_ANGLES = {
+  idle:        ['FRONT', 'FRONT', 'FRONT', 'QUARTER_L', 'QUARTER_R', 'WIDE'],
+  dance:       ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT', 'FRONT_LOW'],
+  listenDance: ['WIDE', 'WIDE', 'SIDE_L', 'SIDE_R', 'FRONT', 'FRONT_LOW'],
+  stretch:     ['SIDE_L', 'SIDE_R', 'WIDE', 'FRONT', 'FRONT'],
+  hairflick:   ['SIDE_L', 'SIDE_R', 'QUARTER_R', 'CLOSE', 'FRONT'],
+  hiponhip:    ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'QUARTER_R', 'FRONT'],
+  sofaSit:     ['FRONT', 'FRONT', 'FRONT', 'SIDE_L', 'SIDE_R', 'QUARTER_L'],
+  phoneScroll: ['SIDE_R', 'QUARTER_R', 'FRONT', 'FRONT'],
+  tvReact:     ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'WIDE', 'FRONT'],
+  watchTV:     ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'WIDE', 'FRONT'],
+  readBook:    ['SIDE_L', 'SIDE_R', 'FRONT', 'FRONT'],
+  typing:      ['SIDE_L', 'SIDE_R', 'QUARTER_L', 'FRONT'],
+  monitor:     ['SIDE_R', 'SIDE_L', 'QUARTER_R', 'FRONT'],
+  stirring:    ['SIDE_L', 'QUARTER_L', 'FRONT', 'FRONT'],
+  chopping:    ['SIDE_R', 'SIDE_L', 'FRONT'],
+  tasting:     ['FRONT', 'FRONT', 'CLOSE', 'QUARTER_R'],
+  mirrorPose:  ['SIDE_L', 'SIDE_R', 'FRONT', 'FRONT'],
+  noseCover:   ['CLOSE', 'FRONT', 'FRONT', 'QUARTER_R'],
+  windowLook:  ['SIDE_L', 'SIDE_R', 'WIDE'],
+  fireGaze:    ['SIDE_L', 'SIDE_R', 'FRONT_LOW', 'FRONT'],
+  washingUp:   ['SIDE_L', 'QUARTER_L', 'FRONT'],
+  cabinetOpen: ['SIDE_R', 'QUARTER_R', 'FRONT'],
+  eatAtTable:  ['FRONT', 'FRONT', 'SIDE_L', 'SIDE_R'],
+  drinkCoffee: ['FRONT', 'CLOSE', 'QUARTER_R'],
+  cookDance:   ['SIDE_L', 'WIDE', 'FRONT', 'FRONT'],
+  bedLie:      ['SIDE_L', 'SIDE_R', 'FRONT'],
+  bedLiePhone: ['SIDE_R', 'FRONT'],
+};
+
+const ANGLE_DWELL_MIN_MS = 4000;
+const ANGLE_DWELL_MAX_MS = 9000;
+
+let _currentAnglePreset = 'FRONT';
+let _angleDwellTimer    = 0;
+let _angleDwellDuration = ANGLE_DWELL_MIN_MS;
+let _currentActivity    = 'idle';
+
+export const camCurrent = { x: 0, y: 1.55, z: 3.8, lookX: 0, lookY: 1.15, lookZ: 0 };
+
+export let _camFacingY = Math.PI;
+export function setCamFacingY(y) { _camFacingY = y; }
+
+// ── Public API ───────────────────────────────────────────────────
+export function setCamMode(mode) {
+  if (!['IDLE','SPEAK','THINK','WALK'].includes(mode)) return;
+  const wasSpeaking = camMode === 'SPEAK';
+  camMode     = mode;
+  _speakLock  = (mode === 'SPEAK');
+  if (_speakLock) {
+    _focusTarget   = 'miss';   // always cut to Miss when she speaks
+    _focusCooldown = 0;        // reset cooldown — lock is handled by _speakLock
+  } else if (wasSpeaking) {
+    // Just finished speaking — hold on Miss for a natural beat before any cut is allowed
+    _focusTimer    = 0;
+    _focusCooldown = 12;       // 12-second post-speech lock
+  }
+}
+
+export function onActivityChanged(activityName) {
+  _currentActivity    = activityName || 'idle';
+  _angleDwellTimer    = 0;
+  _angleDwellDuration = ANGLE_DWELL_MIN_MS + Math.random() * (ANGLE_DWELL_MAX_MS - ANGLE_DWELL_MIN_MS);
+  _pickAngleForActivity(_currentActivity);
+}
+
+export function setCamAngle(presetName) {
+  if (ANGLE_PRESETS[presetName]) _currentAnglePreset = presetName;
+}
+
+// ── Snap on first load — orbit Miss ─────────────────────────────
+export function _snapCameraToVRM() {
+  const vrm = getVrm();
+  if (!vrm) return;
+  const p  = STREAMER_CAM.IDLE;
+  const fy = vrm.scene.rotation.y;
+  _camFacingY = fy;
+  const mx = vrm.scene.position.x;
+  const my = vrm.scene.position.y;
+  const mz = vrm.scene.position.z;
+  const cx = mx + Math.sin(fy) * p.dist;
+  const cy = my + p.height;
+  const cz = mz + Math.cos(fy) * p.dist;
+  camCurrent.x = cx; camCurrent.y = cy; camCurrent.z = cz;
+  camCurrent.lookX = mx; camCurrent.lookY = my + p.lookHeight; camCurrent.lookZ = mz;
+  camera.position.set(cx, cy, cz);
+  camera.lookAt(mx, my + p.lookHeight, mz);
+}
+
+// ── Internal: pick angle ─────────────────────────────────────────
+function _pickAngleForActivity(activityName) {
+  const pool = ACTIVITY_ANGLES[activityName] || ACTIVITY_ANGLES.idle;
+  let pick = pool[Math.floor(Math.random() * pool.length)];
+  if (pick === _currentAnglePreset && pool.length > 1) {
+    pick = pool[Math.floor(Math.random() * pool.length)];
+  }
+  _currentAnglePreset = pick;
+}
+
+// ── TV-director switch — patient, not trigger-happy ──────────────
+//
+//  Cuts only happen when:
+//   (a) The cooldown has fully expired AND the dwell time is up, OR
+//   (b) The OTHER character starts speaking / begins a HIGH-interest activity
+//      while we've already been watching the current one for at least FOCUS_MIN.
+//
+function _maybeSwitch(delta, lora) {
+  if (_speakLock || !lora) return;
+
+  // Tick both timers
+  _focusCooldown = Math.max(0, _focusCooldown - delta);
+  _focusTimer   += delta;
+
+  // Still in hard cooldown — never cut
+  if (_focusCooldown > 0) return;
+
+  const otherWho   = _focusTarget === 'miss' ? 'lora' : 'miss';
+  const otherAct   = otherWho === 'miss'
+    ? (window._missCurrentActivity || 'idle')
+    : (window._loraCurrentActivity || 'idle');
+
+  const otherIsHot = _isHighInterest(otherAct);
+
+  // Fast-cut path: other character is doing something compelling
+  // and we've been on the current one for at least FOCUS_MIN already
+  if (otherIsHot && _focusTimer >= FOCUS_MIN) {
+    _doSwitch(otherWho, 'hot-activity');
+    return;
+  }
+
+  // Normal path: dwell time expired — re-evaluate
+  if (_focusTimer >= _focusDwell) {
+    const missScore = _scoreTarget('miss');
+    const loraScore = _scoreTarget('lora');
+    const winner    = loraScore > missScore ? 'lora' : 'miss';
+
+    // Only actually cut if the winner differs from current focus
+    // and the margin is meaningful (avoids aimless back-and-forth)
+    const margin = Math.abs(loraScore - missScore);
+    if (winner !== _focusTarget && margin > 1.0) {
+      _doSwitch(winner, 'dwell');
+    } else {
+      // Stay on current — reset timer for another dwell cycle
+      _focusTimer  = 0;
+      _focusDwell  = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+    }
+  }
+}
+
+function _doSwitch(newTarget, reason) {
+  _focusTarget   = newTarget;
+  _focusTimer    = 0;
+  _focusCooldown = FOCUS_COOLDOWN;
+  _focusDwell    = FOCUS_MIN + Math.random() * (FOCUS_MAX - FOCUS_MIN);
+  _pickAngleForActivity(_currentActivity);
+  console.log(`[Cam] cut → ${_focusTarget} (${reason})`);
+}
+
+// Activities that justify a fast cut to the OTHER character
+const HIGH_INTEREST_ACTS = new Set([
+  'stirring', 'chopping', 'dance', 'cookDance', 'tasting',
+  'flip_food', 'fry_egg', 'hairflick', 'noseCover', 'SPEAK',
+]);
+function _isHighInterest(act) { return HIGH_INTEREST_ACTS.has(act); }
+
+function _scoreTarget(who) {
+  let score = 0;
+  const act = who === 'miss'
+    ? (window._missCurrentActivity || 'idle')
+    : (window._loraCurrentActivity || 'idle');
+
+  // Only truly active / visual activities earn a meaningful bonus
+  if (_isHighInterest(act))                                   score += 4;
+  else if (['phoneScroll','tvReact','watchTV','typing',
+            'monitor','readBook','eatAtTable','drinkCoffee',
+            'mirrorPose','windowLook','fireGaze'].includes(act)) score += 2;
+  // idle / sofaSit / bedLie earn 0 — no reason to cut there
+
+  // Bias toward whoever we're currently watching so the camera stays put
+  if (who === _focusTarget)                                   score += 2;
+
+  // Tiny random jitter — breaks exact ties, nothing more
+  score += Math.random() * 0.4;
+  return score;
+}
+
+// ── Main update ──────────────────────────────────────────────────
+export function updateCamera(delta) {
+  const vrm  = getVrm();
+  if (!vrm) return;
+  const lora = (typeof getVrmLora === 'function') ? getVrmLora() : null;
+
+  // ── TV-director switch ────────────────────────────────────────
+  _maybeSwitch(delta, lora);
+
+  // ── SLEEP MODE — slow cinematic house sweep ───────────────────
+  if (_sleepMode) {
+    _sleepSweepTimer += delta;
+    const speed = 0.04; // very slow pan
+    _sleepAngle += delta * speed;
+    // Orbit the focused avatar rather than world origin (which clips walls)
+    const sleepTarget = (_focusTarget === 'lora' && lora) ? lora : vrm;
+    const scx = sleepTarget.scene.position.x;
+    const scz = sleepTarget.scene.position.z;
+    const radius = 2.5; // safe indoor radius (was 4.5 — too far, hit walls)
+    const height = 2.2;
+    const tx = scx + Math.sin(_sleepAngle) * radius;
+    const tz = scz + Math.cos(_sleepAngle) * radius;
+    // Clamp sleep camera inside bounds too
+    const safeSleep = resolveWallCollision(tx, tz, CAM_WALL_MARGIN);
+    const L  = 0.008; // extremely slow lerp — cinematic
+    camCurrent.x += (safeSleep.x - camCurrent.x)    * Math.min(1, L * 60 * delta);
+    camCurrent.y += (height      - camCurrent.y)     * Math.min(1, L * 60 * delta);
+    camCurrent.z += (safeSleep.z - camCurrent.z)     * Math.min(1, L * 60 * delta);
+    camCurrent.lookX += (scx - camCurrent.lookX) * Math.min(1, L * 60 * delta * 1.5);
+    camCurrent.lookY += (1.0 - camCurrent.lookY) * Math.min(1, L * 60 * delta * 1.5);
+    camCurrent.lookZ += (scz - camCurrent.lookZ) * Math.min(1, L * 60 * delta * 1.5);
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+    return;
+  }
+
+  // ── Pick the avatar we're focused on right now ────────────────
+  const focusVrm = (_focusTarget === 'lora' && lora) ? lora : vrm;
+  const fx = focusVrm.scene.position.x;
+  const fy_ = focusVrm.scene.position.y;   // height
+  const fz = focusVrm.scene.position.z;
+
+  // ── SIMS MODE ─────────────────────────────────────────────────
+  if (_simsMode) {
+    // Sims orbits midpoint — fine because camera is high and angled down
+    const mx = lora ? (vrm.scene.position.x + lora.scene.position.x) / 2 : vrm.scene.position.x;
+    const my = vrm.scene.position.y;
+    const mz = lora ? (vrm.scene.position.z + lora.scene.position.z) / 2 : vrm.scene.position.z;
+    const tx = mx + SIMS_CAM.distSide;
+    const ty = my + SIMS_CAM.heightAbove;
+    const tz = mz + SIMS_CAM.distBack;
+    const L  = 0.025;
+    camCurrent.x += (tx - camCurrent.x) * Math.min(1, L * 60 * delta);
+    camCurrent.y += (ty - camCurrent.y) * Math.min(1, L * 60 * delta);
+    camCurrent.z += (tz - camCurrent.z) * Math.min(1, L * 60 * delta);
+    camCurrent.lookX += (mx - camCurrent.lookX) * Math.min(1, L * 60 * delta * 2);
+    camCurrent.lookY += (my + SIMS_CAM.lookAtHeight - camCurrent.lookY) * Math.min(1, L * 60 * delta * 2);
+    camCurrent.lookZ += (mz - camCurrent.lookZ) * Math.min(1, L * 60 * delta * 2);
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+    return;
+  }
+
+  // ── Smooth facing — track the focused avatar ──────────────────
+  const rawFacing = focusVrm.scene.rotation.y;
+  let df = rawFacing - _camFacingY;
+  while (df >  Math.PI) df -= Math.PI * 2;
+  while (df < -Math.PI) df += Math.PI * 2;
+  const facingLerp = walk.active ? 0.025 : 0.035;
+  _camFacingY += df * Math.min(1, delta / facingLerp);
+  _camFacingY  = ((_camFacingY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+
+  // ── Angle dwell timer ─────────────────────────────────────────
+  if (camMode === 'IDLE' && !walk.active) {
+    _angleDwellTimer += delta * 1000;
+    if (_angleDwellTimer >= _angleDwellDuration) {
+      _angleDwellTimer    = 0;
+      _angleDwellDuration = ANGLE_DWELL_MIN_MS + Math.random() * (ANGLE_DWELL_MAX_MS - ANGLE_DWELL_MIN_MS);
+      _pickAngleForActivity(_currentActivity);
+    }
+  }
+
+  // ── Resolve preset & angle ────────────────────────────────────
+  let interactionPreset;
+  let effectiveAngle;
+
+  // ── TWO-SHOT: both characters are speaking/interacting ────────
+  // When Miss is in SPEAK mode AND Lora exists, frame both characters
+  // together using the midpoint — but only if they're close enough
+  // that a two-shot won't zoom out into walls.
+  const missAct = window._missCurrentActivity || 'idle';
+  const loraAct = window._loraCurrentActivity || 'idle';
+  const bothTalking = camMode === 'SPEAK' && lora &&
+    (loraAct === 'SPEAK' || loraAct === 'listenDance' || loraAct === 'idle');
+
+  let twoShotActive = false;
+  let twoShotMidX = fx, twoShotMidZ = fz;
+
+  if (bothTalking && lora) {
+    const lx = lora.scene.position.x;
+    const lz = lora.scene.position.z;
+    const separation = Math.sqrt((fx - lx) ** 2 + (fz - lz) ** 2);
+    // Only do a two-shot if characters are within 2.5 units of each other
+    // — beyond that a two-shot would need to zoom out too far
+    if (separation < 2.5) {
+      twoShotActive = true;
+      twoShotMidX = (fx + lx) / 2;
+      twoShotMidZ = (fz + lz) / 2;
+    }
+  }
+
+  if (walk.active) {
+    interactionPreset = STREAMER_CAM.WALK;
+    effectiveAngle    = ANGLE_PRESETS.FRONT; // was WIDE — FRONT tracks character safely
+  } else if (camMode === 'SPEAK') {
+    interactionPreset = STREAMER_CAM.SPEAK;
+    effectiveAngle    = ANGLE_PRESETS.FRONT;
+  } else if (camMode === 'THINK') {
+    interactionPreset = STREAMER_CAM.THINK;
+    effectiveAngle    = ANGLE_PRESETS.QUARTER_R;
+  } else {
+    interactionPreset = STREAMER_CAM.IDLE;
+    effectiveAngle    = ANGLE_PRESETS[_currentAnglePreset] || ANGLE_PRESETS.FRONT;
+  }
+
+  // ── Compute target — orbit the FOCUSED avatar only ────────────
+  const orbitAngle = _camFacingY + effectiveAngle.angleOffset;
+  // Hard-cap dist so it can never reach walls regardless of preset/mult
+  const rawDist    = interactionPreset.dist * effectiveAngle.distMult;
+  const dist       = Math.min(rawDist, MAX_SAFE_DIST);
+  const height     = interactionPreset.height * effectiveAngle.heightMult;
+  const lookHeight = interactionPreset.lookHeight + effectiveAngle.lookOffset;
+
+  // Orbit origin: midpoint for two-shot, focused character otherwise
+  const orbitX = twoShotActive ? twoShotMidX : fx;
+  const orbitZ = twoShotActive ? twoShotMidZ : fz;
+
+  let tx = orbitX + Math.sin(orbitAngle) * dist;
+  const ty = fy_ + height;
+  let tz = orbitZ + Math.cos(orbitAngle) * dist;
+
+  // ── Wall push-out ─────────────────────────────────────────────
+  const safe = resolveWallCollision(tx, tz, CAM_WALL_MARGIN);
+  tx = safe.x;
+  tz = safe.z;
+
+  // ── Lerp ──────────────────────────────────────────────────────
+  const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : 0.018;
+  const lf = Math.min(1, L * 60 * delta);
+
+  // Look at midpoint when two-shot, otherwise focused character
+  const lookAtX = twoShotActive ? twoShotMidX : fx;
+  const lookAtZ = twoShotActive ? twoShotMidZ : fz;
+
+  camCurrent.x     += (tx              - camCurrent.x)    * lf;
+  camCurrent.y     += (ty              - camCurrent.y)     * lf;
+  camCurrent.z     += (tz              - camCurrent.z)     * lf;
+  camCurrent.lookX += (lookAtX         - camCurrent.lookX) * Math.min(1, lf * 1.5);
+  camCurrent.lookY += (fy_ + lookHeight - camCurrent.lookY) * Math.min(1, lf * 1.5);
+  camCurrent.lookZ += (lookAtZ         - camCurrent.lookZ) * Math.min(1, lf * 1.5);
+
+  camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+  camera.lookAt(camCurrent.lookX, camCurrent.lookY, camCurrent.lookZ);
+}
