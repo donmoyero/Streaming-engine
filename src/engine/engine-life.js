@@ -482,6 +482,10 @@ let _nextDwell    = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwe
 let _apiOverride      = false;
 let _apiOverrideTimer = 0;
 const API_OVERRIDE_DURATION = 60;
+const transitionState = {
+  active: false,
+  timer: 0,
+};
 
 let _currentRoom = 'studio';
 let _currentSpot = null;
@@ -789,9 +793,37 @@ function lifeUpdate() {
     if (_apiOverrideTimer <= 0) { _apiOverride = false; _targetFacing = Math.PI; }
     return;
   }
-  _lifeTimer += delta;
-  if (_lifeTimer >= _nextDwell - 3 && _lifeTimer < _nextDwell) _targetFacing = Math.PI;
-  if (_lifeTimer < _nextDwell) return;
+
+  if (transitionState.active) {
+    transitionState.timer -= delta;
+    if (transitionState.timer > 0) return;
+    transitionState.active = false;
+    transitionState.timer = 0;
+    console.log('[Transition] Complete');
+  } else {
+    _lifeTimer += delta;
+    if (_lifeTimer >= _nextDwell - 3 && _lifeTimer < _nextDwell) _targetFacing = Math.PI;
+    if (_lifeTimer < _nextDwell) return;
+
+    transitionState.active = true;
+    transitionState.timer = 2 + Math.random() * 4;
+    ACTIVITY.current = 'idle';
+    ACTIVITY.timer = 0;
+    ACTIVITY.phase = 0;
+    ACTIVITY.duration = Number.POSITIVE_INFINITY;
+    onActivityChanged('idle');
+
+    const facingRoll = Math.random();
+    if (facingRoll < 0.3) {
+      _targetFacing -= Math.random() * 0.4;
+    } else if (facingRoll < 0.6) {
+      _targetFacing += Math.random() * 0.4;
+    }
+
+    console.log(`[Transition] Waiting ${transitionState.timer.toFixed(1)}s`);
+    return;
+  }
+
   _lifeTimer = 0;
   _nextDwell = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
   const spot = pickNextSpotFamiliar();
