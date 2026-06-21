@@ -463,6 +463,30 @@ const API_OVERRIDE_DURATION = 60;
 
 let _currentRoom = 'studio';
 let _currentSpot = null;
+const occupiedSpots = new Map();
+
+function _pickAvailableSpot(spot) {
+  if (spot.yOffset === undefined || !occupiedSpots.has(spot.label)) return spot;
+
+  const candidates = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
+    (roomDef?.spots || [])
+      .filter(candidate => candidate.yOffset === undefined || !occupiedSpots.has(candidate.label))
+      .map(candidate => ({ ...candidate, room: roomKey }))
+  );
+  return candidates[Math.floor(Math.random() * candidates.length)] || null;
+}
+
+function _reserveSpot(spot, avatar) {
+  if (spot?.yOffset === undefined) return;
+  occupiedSpots.set(spot.label, avatar);
+  console.log(`[Seat Reserved] ${spot.label} → ${avatar}`);
+}
+
+function _releaseSpot(spot, avatar) {
+  if (spot?.yOffset === undefined || occupiedSpots.get(spot.label) !== avatar) return;
+  occupiedSpots.delete(spot.label);
+  console.log(`[Seat Released] ${spot.label}`);
+}
 
 // ── Familiarity ──────────────────────────────────────────────────
 const _familiarity = {
@@ -657,6 +681,9 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
 function goToSpot(spot) {
   const vrm = _vrm();
   if (!spot || !vrm) return;
+  spot = _pickAvailableSpot(spot);
+  if (!spot) return;
+  _releaseSpot(_currentSpot, 'miss');
   _currentSpot = spot;
   setCamMode('WALK');
   _setMissTV(false);   // leaving current spot — TV off until she arrives somewhere new
@@ -672,6 +699,8 @@ function goToSpot(spot) {
     const spotActivities = spot.activities?.length
       ? spot.activities : getFamiliarActivityPool(_currentRoom);
     const next = spotActivities[Math.floor(Math.random() * spotActivities.length)];
+
+    _reserveSpot(spot, 'miss');
 
     if (next === 'sofaSit') {
       vrmPos.x = spot.x;
@@ -825,6 +854,9 @@ function _loraWalkSafetyReset() {
 // Send Lora to a spot — sets ACTIVITY_MR on arrival
 function _loraGoToSpot(spot) {
   if (!spot) return;
+  spot = _pickAvailableSpot(spot);
+  if (!spot) return;
+  _releaseSpot(_loraCurrentSpot, 'lora');
   _loraCurrentSpot   = spot;
   _loraWalkingToSpot = true;
   _loraWalkSafetyReset(); // ← watchdog: auto-clears if she gets stuck
@@ -853,6 +885,8 @@ function _loraGoToSpot(spot) {
         ? spot.activities
         : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
       const next = pool[Math.floor(Math.random() * pool.length)];
+
+      _reserveSpot(spot, 'lora');
 
       if (next === 'sofaSit' && loraVrm) {
         loraVrm.scene.position.x = spot.x;
@@ -891,6 +925,7 @@ function _loraGoToSpot(spot) {
       ? spot.activities
       : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
     const next = pool[Math.floor(Math.random() * pool.length)];
+    _reserveSpot(spot, 'lora');
     ACTIVITY_MR.current  = next;
     ACTIVITY_MR.timer    = 0;
     ACTIVITY_MR.phase    = 0;
