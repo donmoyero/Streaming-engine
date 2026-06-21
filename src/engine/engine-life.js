@@ -281,6 +281,8 @@ let _lookYaw = 0;
 let _lookNeckYaw = 0;
 let _lookPitch = 0;
 let _lookClampWarned = false;
+let _lookBodyAssistActive = false;
+let _lookBodyAssistLogged = false;
 
 function _lookTargetsEqual(a, b) {
   if (a === b) return true;
@@ -327,6 +329,8 @@ export function clearLookTarget() {
   _lookNeckYaw = 0;
   _lookPitch = 0;
   _lookClampWarned = false;
+  _lookBodyAssistActive = false;
+  _lookBodyAssistLogged = false;
 }
 
 function _syncLookTarget() {
@@ -392,6 +396,14 @@ function _updateLookTarget(delta) {
 
   if (Math.abs(relativeAngle) > 0.8) {
     _targetFacing = targetAngle;
+    _lookBodyAssistActive = true;
+    if (!_lookBodyAssistLogged) {
+      console.log('[Look] Body assist active');
+      _lookBodyAssistLogged = true;
+    }
+  } else {
+    _lookBodyAssistActive = false;
+    _lookBodyAssistLogged = false;
   }
 
   const unclampedHeadYaw = relativeAngle * 0.6;
@@ -2444,7 +2456,14 @@ function render() {
     let   diff = _targetFacing - cur;
     while (diff >  Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    vrm.scene.rotation.y += diff * Math.min(1, delta * (walk.active ? 6.0 : 3.5));
+    if (walk.active) {
+      vrm.scene.rotation.y += diff * Math.min(1, delta * 6.0);
+    } else if (_lookBodyAssistActive) {
+      const maxTurn = 1.2 * delta;
+      vrm.scene.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, diff));
+    } else {
+      vrm.scene.rotation.y += diff * Math.min(1, delta * 3.5);
+    }
 
     // ── Idle body sway — ONLY when truly idle ─────────────────
     // This block must NOT run during dance, sofaSit, typing, etc.
