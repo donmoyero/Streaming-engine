@@ -173,7 +173,7 @@ export const HOUSE = {
     origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',         x: -4.159, z: -4.424, facingY: 0,              yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
+      { label: 'Sofa',         x: -4.159, z: -4.424, interactionPoint: { x: -3.95, z: -4.15 }, facingY: 0, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
       { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
       { label: 'TV Wall',      x: -2.500, z: -5.000, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
@@ -664,13 +664,29 @@ function goToSpot(spot) {
   const targetRoom = spot.room;
   const doorPath   = findRoomPath(_currentRoom, targetRoom);
 
-  walkThroughWaypoints(doorPath, spot.x, spot.z, () => {
+  const walkTarget = spot.interactionPoint || spot;
+  walkThroughWaypoints(doorPath, walkTarget.x, walkTarget.z, () => {
     _currentRoom = targetRoom;
     setRoomVisible(_currentRoom, true);
     if (spot.facingY !== undefined) _targetFacing = spot.facingY;
     const spotActivities = spot.activities?.length
       ? spot.activities : getFamiliarActivityPool(_currentRoom);
     const next = spotActivities[Math.floor(Math.random() * spotActivities.length)];
+
+    if (next === 'sofaSit') {
+      vrmPos.x = spot.x;
+      vrmPos.z = spot.z;
+      vrm.scene.position.x = spot.x;
+      vrm.scene.position.z = spot.z;
+      _missYOffsetTarget = spot.yOffset || 0;
+      _missYOffsetCurrent = _missYOffsetTarget;
+      vrm.scene.position.y = (vrm._restPosY || 0) + _missYOffsetTarget;
+      if (spot.facingY !== undefined) {
+        _targetFacing = spot.facingY;
+        vrm.scene.rotation.y = spot.facingY;
+      }
+    }
+
     ACTIVITY.current  = next;
     ACTIVITY.timer    = 0; ACTIVITY.phase = 0;
     ACTIVITY.duration = _lifeMinDwell + Math.random() * (_lifeMaxDwell - _lifeMinDwell);
@@ -680,7 +696,6 @@ function goToSpot(spot) {
     _setMissTV(TV_ACTIVITIES.has(next));
 
     // ── Drop Y for seated/lying spots — lerped to avoid snapping ──
-    const vrm = _vrm();
     if (vrm) {
       const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
       _missYOffsetTarget = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
@@ -826,7 +841,8 @@ function _loraGoToSpot(spot) {
     if (loraVrm) loraVrm.scene.position.y = loraVrm._restPosY || 0;
 
     // Pass fromRoom + toRoom so engine-scene BFS routes through door waypoints
-    window._loraSetTarget(spot.x, spot.z, () => {
+    const walkTarget = spot.interactionPoint || spot;
+    window._loraSetTarget(walkTarget.x, walkTarget.z, () => {
       // On arrival
       clearTimeout(_loraWalkWatchdog); // ← she made it — cancel the safety timer
       _loraWalkingToSpot = false;
@@ -837,6 +853,18 @@ function _loraGoToSpot(spot) {
         ? spot.activities
         : (_loraActivityPool[spot.room] || _loraActivityPool.studio);
       const next = pool[Math.floor(Math.random() * pool.length)];
+
+      if (next === 'sofaSit' && loraVrm) {
+        loraVrm.scene.position.x = spot.x;
+        loraVrm.scene.position.z = spot.z;
+        _loraYOffsetTarget = spot.yOffset || 0;
+        _loraYOffsetCurrent = _loraYOffsetTarget;
+        loraVrm.scene.position.y = (loraVrm._restPosY || 0) + _loraYOffsetTarget;
+        if (spot.facingY !== undefined) {
+          loraVrm.scene.rotation.y = spot.facingY;
+          if (window._loraSetFacing) window._loraSetFacing(spot.facingY);
+        }
+      }
 
       ACTIVITY_MR.current  = next;
       ACTIVITY_MR.timer    = 0;
