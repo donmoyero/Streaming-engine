@@ -278,7 +278,9 @@ const LOOK_TARGETS = {
 let _lookTarget = null;
 let _lastLookActivity = null;
 let _lookYaw = 0;
+let _lookNeckYaw = 0;
 let _lookPitch = 0;
+let _lookClampWarned = false;
 
 function _lookTargetsEqual(a, b) {
   if (a === b) return true;
@@ -322,7 +324,9 @@ export function clearLookTarget() {
   if (_lookTarget) console.log('[Look] Cleared');
   _lookTarget = null;
   _lookYaw = 0;
+  _lookNeckYaw = 0;
   _lookPitch = 0;
+  _lookClampWarned = false;
 }
 
 function _syncLookTarget() {
@@ -376,19 +380,45 @@ function _updateLookTarget(delta) {
 
   const dx = targetX - vrmPos.x;
   const dz = targetZ - vrmPos.z;
-  let desiredYaw = Math.hypot(dx, dz) < 0.01
-    ? 0
-    : Math.atan2(dx, dz) + Math.PI - vrm.scene.rotation.y;
-  while (desiredYaw > Math.PI) desiredYaw -= Math.PI * 2;
-  while (desiredYaw < -Math.PI) desiredYaw += Math.PI * 2;
-  desiredYaw = Math.max(-0.65, Math.min(0.65, desiredYaw));
+  const targetAngle = Math.hypot(dx, dz) < 0.01
+    ? vrm.scene.rotation.y
+    : Math.atan2(targetX - vrmPos.x, targetZ - vrmPos.z);
+  let relativeAngle = targetAngle - vrm.scene.rotation.y;
 
+  relativeAngle = Math.atan2(
+    Math.sin(relativeAngle),
+    Math.cos(relativeAngle)
+  );
+
+  if (Math.abs(relativeAngle) > 0.8) {
+    _targetFacing = targetAngle;
+  }
+
+  const unclampedHeadYaw = relativeAngle * 0.6;
+  const unclampedNeckYaw = relativeAngle * 0.4;
+  const headYaw = Math.max(-0.7, Math.min(0.7, unclampedHeadYaw));
+  const neckYaw = Math.max(-0.5, Math.min(0.5, unclampedNeckYaw));
   const blend = Math.min(1, delta * 4.5);
-  _lookYaw += (desiredYaw - _lookYaw) * blend;
+  _lookYaw += (headYaw - _lookYaw) * blend;
+  _lookNeckYaw += (neckYaw - _lookNeckYaw) * blend;
   _lookPitch += (targetPitch - _lookPitch) * blend;
-  boneHead.rotation.y += _lookYaw * 0.65;
+  const nextHeadYaw = boneHead.rotation.y + _lookYaw;
+  const nextNeckYaw = boneNeck.rotation.y + _lookNeckYaw;
+  const clampedHeadYaw = Math.max(-0.7, Math.min(0.7, nextHeadYaw));
+  const clampedNeckYaw = Math.max(-0.5, Math.min(0.5, nextNeckYaw));
+  const clamped = headYaw !== unclampedHeadYaw ||
+    neckYaw !== unclampedNeckYaw ||
+    clampedHeadYaw !== nextHeadYaw ||
+    clampedNeckYaw !== nextNeckYaw;
+
+  if (clamped && !_lookClampWarned) {
+    console.warn('[Look] Head angle clamped');
+  }
+  _lookClampWarned = clamped;
+
+  boneHead.rotation.y = clampedHeadYaw;
   boneHead.rotation.x += _lookPitch * 0.65;
-  boneNeck.rotation.y += _lookYaw * 0.35;
+  boneNeck.rotation.y = clampedNeckYaw;
   boneNeck.rotation.x += _lookPitch * 0.35;
 }
 
