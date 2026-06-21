@@ -12,6 +12,7 @@ import { getVrm, scene, camera, renderer, ambient,
          canvas, monitorGlowLight,
          VRM_PATH, API_URL, PROACTIVE_URL, TOPIC_URL, TTS_URL,
          TWITCH_CHANNEL, USER_ID,
+         setTVOn,
        } from './engine-scene.js';
 
 import { setCamMode, updateCamera, onActivityChanged, setSleepMode } from './engine-camera.js';
@@ -173,8 +174,10 @@ export const HOUSE = {
     origin: { x: -3.0, z: -3.5 }, size: { w: 5.5, d: 5.5 },
     ambientColor: 0x0d0a05,
     spots: [
-      { label: 'Sofa',         x: -4.159, z: -4.424, interactionPoint: { x: -3.95, z: -4.15 }, lookPoint: { x: -2.500, z: -5.000 }, facingY: 0, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
-      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.52, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
+      // GLB sedacka seat surface is at y=0.430. VRM restPosY≈0.82. yOffset = 0.430 - 0.82 = -0.39
+      // interactionPoint keeps her body clear of the armrest before snapping into seat
+      { label: 'Sofa',         x: -4.159, z: -4.424, interactionPoint: { x: -3.95, z: -4.15 }, lookPoint: { x: -2.500, z: -5.000 }, facingY: 0, yOffset: -0.39, activities: ['sofaSit','sofaSit','phoneScroll','tvReact','readBook'], prop: 'sedacka' },
+      { label: 'Sofa Side',    x: -3.200, z: -4.200, facingY: Math.PI * 0.15, yOffset: -0.39, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'sedacka' },
       { label: 'TV Wall',      x: -2.500, z: -5.000, lookPoint: { x: -2.500, z: -5.000 }, facingY: 0,              activities: ['tvReact','idle','dance','hiponhip'], prop: 'tv' },
       { label: 'Coffee Table', x: -3.040, z: -3.300, facingY: Math.PI,        activities: ['idle','phoneScroll','tasting','readBook'], prop: 'stolek konf' },
       { label: 'Fireplace',    x: -1.800, z: -1.700, facingY: Math.PI * 0.5,  activities: ['fireGaze','idle','stretch'], prop: 'krb' },
@@ -187,9 +190,11 @@ export const HOUSE = {
     origin: { x: -3.8, z: 1.0 }, size: { w: 4.5, d: 4.5 },
     ambientColor: 0x0a1005,
     spots: [
-      { label: 'Hob',            x: -4.180, z:  0.300, interactionPoint: { x: -3.750, z:  0.300 }, lookPoint: { x: -4.180, z:  0.300 }, facingY: Math.PI * 0.5, activities: ['stirring','chopping','tasting','idle','noseCover'], prop: 'sporak' },
-      { label: 'Second Hob',     x: -4.185, z: -0.300, facingY: Math.PI * 0.5, activities: ['stirring','idle','tasting'], prop: 'varna deska' },
-      { label: 'Sink',           x: -4.849, z: -0.650, lookPoint: { x: -4.849, z: -0.650 }, facingY: Math.PI * 0.5, activities: ['washingUp','idle','stretch'], prop: 'drez' },
+      // GLB sporak (stove) is at (-4.180, 1.430, -0.031). Stand 0.43m to the right (+x), face the counter wall.
+      { label: 'Hob',            x: -4.180, z: -0.031, interactionPoint: { x: -3.600, z: -0.031 }, lookPoint: { x: -4.180, z: -0.031 }, facingY: Math.PI * 0.5, activities: ['stirring','chopping','tasting','idle','noseCover'], prop: 'sporak' },
+      { label: 'Second Hob',     x: -4.185, z: -0.031, interactionPoint: { x: -3.600, z: -0.031 }, facingY: Math.PI * 0.5, activities: ['stirring','idle','tasting'], prop: 'varna deska' },
+      // GLB drez (sink) is at (-4.849, 1.257, -0.933). Stand to the right of it.
+      { label: 'Sink',           x: -4.849, z: -0.933, interactionPoint: { x: -4.100, z: -0.933 }, lookPoint: { x: -4.849, z: -0.933 }, facingY: Math.PI * 0.5, activities: ['washingUp','idle','stretch'], prop: 'drez' },
       { label: 'Cabinets',       x: -4.000, z:  1.000, facingY: Math.PI * 0.5, activities: ['cabinetOpen','idle','noseCover','hairflick'], prop: 'linka' },
       { label: 'Island',         x: -1.004, z:  2.185, facingY: Math.PI,       activities: ['chopping','tasting','phoneScroll','idle','hiponhip','readBook'], prop: 'linka.001' },
       { label: 'Kitchen Centre', x: -2.800, z:  1.200, facingY: Math.PI,       activities: ['dance','stretch','idle','hairflick'] },
@@ -201,9 +206,13 @@ export const HOUSE = {
     origin: { x: -2.0, z: 2.5 }, size: { w: 3.5, d: 4.0 },
     ambientColor: 0x0a0a05,
     spots: [
-      { label: 'Table Head',   x: -2.286, z:  1.300, facingY: Math.PI,          yOffset: -0.42, activities: ['sofaSit','sofaSit','tasting','phoneScroll','readBook'], prop: 'jidelni stul' },
-      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset: -0.42, activities: ['sofaSit','sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle' },
-      { label: 'Table End',    x: -2.132, z:  3.500, facingY: 0,                activities: ['idle','dance','hairflick','hiponhip'], prop: 'jidelni stul.001' },
+      // GLB zidle chairs: y=0.894 (seat top incl. chair frame). VRM restPosY≈0.82. yOffset = 0.894-0.82 = +0.07
+      // 'Table Head' was wrongly pointing at the TABLE (jidelni stul z=1.579). Use chair zidle.002 instead.
+      { label: 'Table Head',   x: -2.017, z:  1.026, facingY: 0,                yOffset:  0.07, activities: ['sofaSit','sofaSit','tasting','phoneScroll','readBook'], prop: 'zidle.002' },
+      { label: 'Table Side',   x: -2.477, z:  2.369, facingY: -Math.PI * 0.5,   yOffset:  0.07, activities: ['sofaSit','sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle' },
+      { label: 'Table Side 2', x: -2.935, z:  1.943, facingY: Math.PI * 0.5,    yOffset:  0.07, activities: ['sofaSit','sofaSit','readBook','phoneScroll','tasting'], prop: 'zidle.001' },
+      { label: 'Table End',    x: -1.608, z:  1.499, facingY: -Math.PI * 0.5,   yOffset:  0.07, activities: ['sofaSit','tasting','readBook','phoneScroll'],           prop: 'zidle.003' },
+      { label: 'Table End',    x: -1.877, z:  3.636, facingY: Math.PI,           yOffset:  0.07, activities: ['sofaSit','tasting','phoneScroll'],                   prop: 'zidle.004' },
       { label: 'Dining Window',x: -1.200, z:  3.800, facingY: 0,                activities: ['windowLook','idle','hairflick','stretch'], prop: 'parapet' },
       { label: 'Dining Centre',x: -1.800, z:  2.200, facingY: Math.PI,           activities: ['dance','stretch','idle','hiponhip'] },
     ]
@@ -227,8 +236,13 @@ export const HOUSE = {
     spots: [
       { label: 'Wardrobe Mirror', x:  2.755, z: -0.845, lookPoint: { x:  2.755, z: -0.845 }, facingY: -Math.PI * 0.5,  activities: ['mirrorPose','hairflick','idle','noseCover'], prop: 'closet.003' },
       { label: 'Wardrobe',        x:  4.356, z:  2.100, facingY: Math.PI,          activities: ['cabinetOpen','mirrorPose','idle','hairflick'], prop: 'closet.006' },
-      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset: -0.44, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'Plane.054' },
-      { label: 'Bed',             x:  5.200, z: -4.200, facingY: 0,               yOffset: -0.85, activities: ['bedLie','bedLie','bedLiePhone','readBook'] },
+      // GLB Plane.054 is a floor rug at y=0.953 (used as bedroom chair/cushion spot)
+      // yOffset = 0.953 - 0.82 = +0.133 so she sits ON the rug surface not through it
+      { label: 'Bedroom Chair',   x:  3.214, z:  0.863, facingY: -Math.PI * 0.5,  yOffset:  0.13, activities: ['sofaSit','sofaSit','phoneScroll','readBook'], prop: 'Plane.054' },
+      // GLB has no dedicated bed node — position estimated at right bedroom wall.
+      // Mattress surface ≈ y=0.55. VRM restPosY≈0.82. yOffset = 0.55-0.82 = -0.27 (not -0.85 which went below floor)
+      // facingY: Math.PI*0.5 = lies along bed length (not perpendicular to wall which made her face the door)
+      { label: 'Bed',             x:  5.200, z: -4.200, facingY: Math.PI * 0.5,   yOffset: -0.27, activities: ['bedLie','bedLie','bedLiePhone','readBook'] },
       { label: 'Bedside',         x:  4.313, z: -1.125, facingY: Math.PI * 0.5,   activities: ['idle','phoneScroll','stretch'], prop: 'jidelni stul.003' },
       { label: 'Window 1',        x:  5.000, z: -2.091, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick','stretch'], prop: 'window.008' },
       { label: 'Window 2',        x:  5.000, z: -4.241, facingY: -Math.PI * 0.5,  activities: ['windowLook','idle','hairflick'], prop: 'window.010' },
@@ -470,8 +484,9 @@ function _updateLookTarget(delta) {
     targetX = activeLookTarget.x;
     targetZ = activeLookTarget.z;
   } else if (activeLookTarget === 'tv') {
-    targetX = -2.5;
-    targetZ = -5.0;
+    // GLB 'tv' node is at (-1.930, 1.933, -4.460) — use actual position not old hardcoded guess
+    targetX = -1.930;
+    targetZ = -4.460;
   } else if (activeLookTarget === 'window' || activeLookTarget === 'mirror') {
     targetX = _currentSpot?.x ?? targetX;
     targetZ = _currentSpot?.z ?? targetZ;
@@ -1441,10 +1456,13 @@ function _updateTVVolume() {
 function _setMissTV(on) {
   _missWatchingTV = on;
   _updateTVVolume();
+  // Update the TV mesh emissive — glows when anyone is watching
+  setTVOn(_missWatchingTV || _loraWatchingTV);
 }
 function _setLoraTV(on) {
   _loraWatchingTV = on;
   _updateTVVolume();
+  setTVOn(_missWatchingTV || _loraWatchingTV);
 }
 
 let _loraLifeTimer    = 0;
