@@ -9,7 +9,7 @@
 // ================================================================
 
 import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
-import { walk } from './engine-life.js';
+import { walk, getRoomPath, DOORS, HOUSE_GRAPH, vrmPos } from './engine-life.js';
 
 // ── Wall-clamp margin ────────────────────────────────────────────
 const CAM_WALL_MARGIN = 1.6;
@@ -109,6 +109,190 @@ let _currentAnglePreset = 'FRONT';
 let _angleDwellTimer    = 0;
 let _angleDwellDuration = ANGLE_DWELL_MIN_MS;
 let _currentActivity    = 'idle';
+
+// ================================================================
+//  ROOM-AWARE CAMERA DRONE
+//  Tracks which room the camera is conceptually "in" and routes
+//  it through door waypoints — exactly mirroring the avatar walker
+//  but for camera positioning — so it never cuts through walls.
+// ================================================================
+
+// ── Camera room ──────────────────────────────────────────────────
+// Starts in the same room Miss starts in (studio).
+let _cameraRoom = 'studio';
+
+// ── Room-based camera presets ────────────────────────────────────
+// Each entry describes the orbital shape for that room.
+// dist / height / lookHeight map 1-to-1 onto the STREAMER_CAM schema
+// so they slot cleanly into the existing orbit maths.
+const ROOM_CAM_PRESETS = {
+  'living-room': { dist: 2.10, height: 1.55, lookHeight: 1.20, label: 'medium shot'         },
+  kitchen:       { dist: 1.70, height: 1.80, lookHeight: 1.10, label: 'over-counter shot'    },
+  bedroom:       { dist: 1.60, height: 1.65, lookHeight: 1.35, label: 'medium close-up'      },
+  hallway:       { dist: 2.50, height: 1.70, lookHeight: 1.15, label: 'wider shot'           },
+  dining:        { dist: 2.00, height: 1.60, lookHeight: 1.20, label: 'medium shot'          },
+  bathroom:      { dist: 1.50, height: 1.65, lookHeight: 1.30, label: 'medium close-up'      },
+  studio:        { dist: 1.90, height: 1.60, lookHeight: 1.25, label: 'medium shot'          },
+};
+
+// ── Activity modifiers — override the room preset when active ────
+// null fields fall through to the room preset value.
+const ACTIVITY_CAM_MODIFIERS = {
+  bedLie:      { dist: 2.50, height: 2.20, lookHeight: 0.80, anglePreset: 'SIDE_L', label: 'static wide shot'    },
+  bedLiePhone: { dist: 2.50, height: 2.20, lookHeight: 0.80, anglePreset: 'SIDE_R', label: 'static wide shot'    },
+  dance:       { dist: 2.60, height: 1.55, lookHeight: 1.10, anglePreset: 'WIDE',   label: 'full body shot'      },
+  listenDance: { dist: 2.60, height: 1.55, lookHeight: 1.10, anglePreset: 'WIDE',   label: 'full body shot'      },
+  cookDance:   { dist: 2.60, height: 1.55, lookHeight: 1.10, anglePreset: 'WIDE',   label: 'full body shot'      },
+  stirring:    { dist: 1.55, height: 1.90, lookHeight: 1.15, anglePreset: 'SIDE_L', label: 'over-shoulder shot'  },
+  chopping:    { dist: 1.55, height: 1.90, lookHeight: 1.15, anglePreset: 'SIDE_R', label: 'over-shoulder shot'  },
+  washingUp:   { dist: 1.55, height: 1.90, lookHeight: 1.15, anglePreset: 'SIDE_L', label: 'over-shoulder shot'  },
+};
+// SPEAK modifier is handled inline (camMode === 'SPEAK') — no entry needed here.
+
+// ── Resolve effective preset for current room + activity ─────────
+function _resolveRoomPreset(roomName, activityName) {
+  const mod = ACTIVITY_CAM_MODIFIERS[activityName];
+  const base = ROOM_CAM_PRESETS[roomName] || ROOM_CAM_PRESETS['studio'];
+  if (!mod) return { ...base };
+  // Activity modifier wins — merge onto base so any null field falls back
+  return {
+    dist:        mod.dist        ?? base.dist,
+    height:      mod.height      ?? base.height,
+    lookHeight:  mod.lookHeight  ?? base.lookHeight,
+    label:       mod.label       ?? base.label,
+    anglePreset: mod.anglePreset ?? null,   // null = keep current angle logic
+  };
+}
+
+// ── Major-transition cooldown — 10 s minimum between room cuts ───
+const CAM_ROOM_TRANSITION_COOLDOWN = 10; // seconds
+let _camTransitionCooldown = 0;
+
+// ── Drone waypoint queue ─────────────────────────────────────────
+// When the camera needs to move to a different room it queues
+// the door thresholds from DOORS and steps through them one by one,
+// identical in structure to walkThroughWaypoints in engine-life.js.
+let _droneWaypoints = [];   // [{ x, z, toRoom }, ...]
+let _droneActive    = false;
+let _droneTargetX   = 0;
+let _droneTargetZ   = 0;
+let _droneTargetRoom = null;
+const DRONE_SPEED   = 1.8;   // units per second — slightly faster than avatar walk
+
+function _buildDroneWaypoints(fromRoom, toRoom) {
+  if (!fromRoom || !toRoom || fromRoom === toRoom) return [];
+  if (!HOUSE_GRAPH[fromRoom] || !HOUSE_GRAPH[toRoom]) return [];
+  const roomPath = getRoomPath(fromRoom, toRoom);
+  if (!roomPath || roomPath.length <= 1) return [];
+
+  // Build ROOM_CONNECTIONS map from DOORS on the fly (mirrors engine-life.js logic)
+  const connections = DOORS.reduce((acc, door) => {
+    const wp = { x: door.x, z: door.z };
+    acc[door.fromRoom] = acc[door.fromRoom] || {};
+    acc[door.fromRoom][door.toRoom] = wp;
+    if (HOUSE_GRAPH[door.toRoom]) {
+      acc[door.toRoom] = acc[door.toRoom] || {};
+      acc[door.toRoom][door.fromRoom] = wp;
+    }
+    return acc;
+  }, {});
+
+  const waypoints = [];
+  for (let i = 1; i < roomPath.length; i++) {
+    const prev = roomPath[i - 1];
+    const next = roomPath[i];
+    const wp   = connections[prev]?.[next];
+    if (!wp) continue;
+    waypoints.push({ x: wp.x, z: wp.z, toRoom: next });
+    console.log(`[Camera] Moving through ${_fmtRoom(prev)}→${_fmtRoom(next)} door`);
+  }
+  return waypoints;
+}
+
+function _fmtRoom(r) {
+  return String(r).split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+
+// Called once per frame while drone is active.
+// Returns { x, z } for the camera's current en-route position,
+// or null when the final destination is reached.
+function _updateDrone(delta, finalX, finalZ) {
+  if (!_droneActive) return null;
+
+  const target = _droneWaypoints.length
+    ? _droneWaypoints[0]
+    : { x: finalX, z: finalZ, toRoom: _droneTargetRoom };
+
+  const dx   = target.x - camCurrent.x;
+  const dz   = target.z - camCurrent.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  const step = DRONE_SPEED * delta;
+
+  if (dist <= step) {
+    // Arrived at this waypoint
+    camCurrent.x = target.x;
+    camCurrent.z = target.z;
+
+    if (_droneWaypoints.length) {
+      const arrived = _droneWaypoints.shift();
+      _cameraRoom   = arrived.toRoom;
+      console.log(`[Camera] Entering ${_fmtRoom(_cameraRoom)}`);
+    } else {
+      // All legs done
+      _droneActive    = false;
+      _cameraRoom     = _droneTargetRoom;
+      const preset    = _resolveRoomPreset(_cameraRoom, _currentActivity);
+      console.log(`[Camera] ${_fmtRoom(_cameraRoom)} ${preset.label}`);
+    }
+  } else {
+    camCurrent.x += (dx / dist) * step;
+    camCurrent.z += (dz / dist) * step;
+  }
+
+  return { x: camCurrent.x, z: camCurrent.z };
+}
+
+// Kick off a drone route from _cameraRoom to subjectRoom.
+// Respects the 10 s cooldown — silently skips if too soon.
+function _startDroneRoute(subjectRoom) {
+  if (_camTransitionCooldown > 0) return;
+  if (subjectRoom === _cameraRoom)  return;
+  if (_droneActive && _droneTargetRoom === subjectRoom) return;
+
+  const waypoints = _buildDroneWaypoints(_cameraRoom, subjectRoom);
+  if (!waypoints.length && subjectRoom !== _cameraRoom) {
+    // No path found — just update the room label silently
+    _cameraRoom = subjectRoom;
+    return;
+  }
+
+  _droneWaypoints  = waypoints;
+  _droneActive     = true;
+  _droneTargetRoom = subjectRoom;
+  _camTransitionCooldown = CAM_ROOM_TRANSITION_COOLDOWN;
+  console.log(`[Camera] Routing ${_fmtRoom(_cameraRoom)} → ${_fmtRoom(subjectRoom)}`);
+}
+
+// ── Determine which room the focused avatar is in ─────────────────
+// Uses the avatar's world-space X/Z against HOUSE room origin+size bounds.
+function _getAvatarRoom(x, z) {
+  // Import is not available at module level, so we check HOUSE bounds inline.
+  // HOUSE is not exported from engine-life so we replicate the bounds here
+  // using the same origin/size values defined in HOUSE.
+  const BOUNDS = {
+    'living-room': { minX: -5.75, maxX: -0.25, minZ: -6.25, maxZ: -0.75 },
+    kitchen:       { minX: -6.05, maxX: -1.55, minZ: -1.25, maxZ:  3.25 },
+    dining:        { minX: -3.75, maxX: -0.25, minZ:  0.50, maxZ:  4.50 },
+    hallway:       { minX: -0.50, maxX:  1.70, minZ: -5.75, maxZ:  0.75 },
+    bedroom:       { minX:  1.55, maxX:  6.05, minZ: -5.00, maxZ:  1.00 },
+    bathroom:      { minX:  2.30, maxX:  5.30, minZ:  0.00, maxZ:  3.00 },
+    studio:        { minX: -3.95, maxX: -1.45, minZ: -5.25, maxZ: -2.75 },
+  };
+  for (const [room, b] of Object.entries(BOUNDS)) {
+    if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return room;
+  }
+  return 'hallway'; // safe fallback — hallway connects everything
+}
 
 export const camCurrent = { x: 0, y: 1.55, z: 3.8, lookX: 0, lookY: 1.15, lookZ: 0 };
 
@@ -264,8 +448,22 @@ export function updateCamera(delta) {
   if (!vrm) return;
   const lora = (typeof getVrmLora === 'function') ? getVrmLora() : null;
 
+  // ── Tick major-transition cooldown ───────────────────────────
+  _camTransitionCooldown = Math.max(0, _camTransitionCooldown - delta);
+
   // ── TV-director switch ────────────────────────────────────────
   _maybeSwitch(delta, lora);
+
+  // ── Determine subject room and start drone if rooms differ ───
+  // Only check when not speaking (req 10 — no random moves while speaking)
+  const focusVrmForRoom = (_focusTarget === 'lora' && lora) ? lora : vrm;
+  const subjectRoom = _getAvatarRoom(
+    focusVrmForRoom.scene.position.x,
+    focusVrmForRoom.scene.position.z
+  );
+  if (!_speakLock && subjectRoom !== _cameraRoom) {
+    _startDroneRoute(subjectRoom);
+  }
 
   // ── SLEEP MODE — slow cinematic house sweep ───────────────────
   if (_sleepMode) {
@@ -330,8 +528,8 @@ export function updateCamera(delta) {
   _camFacingY += df * Math.min(1, delta / facingLerp);
   _camFacingY  = ((_camFacingY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
-  // ── Angle dwell timer ─────────────────────────────────────────
-  if (camMode === 'IDLE' && !walk.active) {
+  // ── Angle dwell timer — suppressed while speaking (req 10) ───
+  if (camMode === 'IDLE' && !walk.active && !_speakLock) {
     _angleDwellTimer += delta * 1000;
     if (_angleDwellTimer >= _angleDwellDuration) {
       _angleDwellTimer    = 0;
@@ -369,6 +567,14 @@ export function updateCamera(delta) {
     }
   }
 
+  // ── Room preset + activity modifier ──────────────────────────
+  // SPEAK and WALK modes use STREAMER_CAM directly (unchanged).
+  // IDLE/THINK use the room preset, optionally overridden by the
+  // activity modifier. This gives per-room framing without touching
+  // any of the existing SPEAK/WALK/THINK paths.
+  const roomPreset     = _resolveRoomPreset(_cameraRoom, _currentActivity);
+  const actMod         = ACTIVITY_CAM_MODIFIERS[_currentActivity];
+
   if (walk.active) {
     interactionPreset = STREAMER_CAM.WALK;
     effectiveAngle    = ANGLE_PRESETS.FRONT; // was WIDE — FRONT tracks character safely
@@ -379,8 +585,20 @@ export function updateCamera(delta) {
     interactionPreset = STREAMER_CAM.THINK;
     effectiveAngle    = ANGLE_PRESETS.QUARTER_R;
   } else {
-    interactionPreset = STREAMER_CAM.IDLE;
-    effectiveAngle    = ANGLE_PRESETS[_currentAnglePreset] || ANGLE_PRESETS.FRONT;
+    // IDLE — blend room preset into the orbital shape
+    interactionPreset = {
+      dist:       roomPreset.dist,
+      height:     roomPreset.height,
+      lookHeight: roomPreset.lookHeight,
+      sideShift:  STREAMER_CAM.IDLE.sideShift,
+    };
+    // Activity modifier can pin a specific angle preset (e.g. WIDE for dance)
+    const pinnedAngle = actMod?.anglePreset;
+    if (pinnedAngle && ANGLE_PRESETS[pinnedAngle]) {
+      effectiveAngle = ANGLE_PRESETS[pinnedAngle];
+    } else {
+      effectiveAngle = ANGLE_PRESETS[_currentAnglePreset] || ANGLE_PRESETS.FRONT;
+    }
   }
 
   // ── Compute target — orbit the FOCUSED avatar only ────────────
@@ -403,6 +621,18 @@ export function updateCamera(delta) {
   const safe = resolveWallCollision(tx, tz, CAM_WALL_MARGIN);
   tx = safe.x;
   tz = safe.z;
+
+  // ── Drone in-transit: override XZ with waypoint path ─────────
+  // Y and look-at still lerp to the subject so the avatar stays
+  // visible throughout the transit. Only the camera's XZ position
+  // is driven by the drone queue.
+  if (_droneActive) {
+    _updateDrone(delta, tx, tz);
+    // tx/tz already mutated inside _updateDrone via camCurrent — skip normal lerp
+    camera.position.set(camCurrent.x, camCurrent.y, camCurrent.z);
+    camera.lookAt(fx, fy_ + lookHeight, fz);
+    return;
+  }
 
   // ── Lerp ──────────────────────────────────────────────────────
   const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : 0.018;
