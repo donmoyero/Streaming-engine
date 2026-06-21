@@ -266,6 +266,91 @@ const ACTIVITY_RULES = {
   dance: ['Centre', 'Kitchen Centre', 'Dining Centre'],
 };
 
+const LOOK_TARGETS = {
+  tvReact: 'tv',
+  phoneScroll: 'phone',
+  readBook: 'lap',
+  stirring: 'counter',
+  windowLook: 'window',
+  mirrorPose: 'mirror',
+};
+
+let _lookTarget = null;
+let _lastLookActivity = null;
+let _lookYaw = 0;
+let _lookPitch = 0;
+
+export function setLookTarget(target) {
+  if (!target) return clearLookTarget();
+  if (_lookTarget === target) return;
+  _lookTarget = target;
+  console.log(`[Look] Miss → ${target}`);
+}
+
+export function clearLookTarget() {
+  if (_lookTarget) console.log('[Look] Cleared');
+  _lookTarget = null;
+  _lookYaw = 0;
+  _lookPitch = 0;
+}
+
+function _syncLookTarget() {
+  if (walk.active || ACTIVITY.current === _lastLookActivity) return;
+  _lastLookActivity = ACTIVITY.current;
+  const target = LOOK_TARGETS[ACTIVITY.current];
+  if (target) setLookTarget(target);
+  else clearLookTarget();
+}
+
+function _updateLookTarget(delta) {
+  if (!_lookTarget || walk.active || !boneHead || !boneNeck) return;
+  const vrm = _vrm();
+  if (!vrm) return;
+
+  const facingX = -Math.sin(vrm.scene.rotation.y);
+  const facingZ = -Math.cos(vrm.scene.rotation.y);
+  let targetX = vrmPos.x + facingX;
+  let targetZ = vrmPos.z + facingZ;
+  let targetPitch = 0;
+
+  if (_lookTarget === 'tv') {
+    targetX = -2.5;
+    targetZ = -5.0;
+  } else if (_lookTarget === 'window' || _lookTarget === 'mirror') {
+    targetX = _currentSpot?.x ?? targetX;
+    targetZ = _currentSpot?.z ?? targetZ;
+  } else if (_lookTarget === 'phone') {
+    targetX = vrmPos.x + facingX * 0.35;
+    targetZ = vrmPos.z + facingZ * 0.35;
+    targetPitch = 0.32;
+  } else if (_lookTarget === 'lap') {
+    targetX = vrmPos.x + facingX * 0.45;
+    targetZ = vrmPos.z + facingZ * 0.45;
+    targetPitch = 0.42;
+  } else if (_lookTarget === 'counter') {
+    targetX = vrmPos.x + facingX * 0.7;
+    targetZ = vrmPos.z + facingZ * 0.7;
+    targetPitch = 0.18;
+  }
+
+  const dx = targetX - vrmPos.x;
+  const dz = targetZ - vrmPos.z;
+  let desiredYaw = Math.hypot(dx, dz) < 0.01
+    ? 0
+    : Math.atan2(dx, dz) + Math.PI - vrm.scene.rotation.y;
+  while (desiredYaw > Math.PI) desiredYaw -= Math.PI * 2;
+  while (desiredYaw < -Math.PI) desiredYaw += Math.PI * 2;
+  desiredYaw = Math.max(-0.65, Math.min(0.65, desiredYaw));
+
+  const blend = Math.min(1, delta * 4.5);
+  _lookYaw += (desiredYaw - _lookYaw) * blend;
+  _lookPitch += (targetPitch - _lookPitch) * blend;
+  boneHead.rotation.y += _lookYaw * 0.65;
+  boneHead.rotation.x += _lookPitch * 0.65;
+  boneNeck.rotation.y += _lookYaw * 0.35;
+  boneNeck.rotation.x += _lookPitch * 0.35;
+}
+
 function _getValidActivities(spot, fallbackActivities) {
   const activities = spot.activities?.length ? spot.activities : fallbackActivities;
   const valid = activities.filter(activity =>
@@ -315,6 +400,8 @@ export function walkTo(waypointName, onArrive = null) {
   const wp  = WAYPOINTS[waypointName];
   const vrm = _vrm();
   if (!wp || !vrm) return;
+  clearLookTarget();
+  _lastLookActivity = null;
   walk.fromX    = vrmPos.x;
   walk.fromZ    = vrmPos.z;
   walk.toX      = wp.x;
@@ -709,6 +796,8 @@ function goToSpot(spot) {
   if (!spot || !vrm) return;
   spot = _pickAvailableSpot(spot);
   if (!spot) return;
+  clearLookTarget();
+  _lastLookActivity = null;
   _releaseSpot(_currentSpot, 'miss');
   _currentSpot = spot;
   setCamMode('WALK');
@@ -2254,6 +2343,8 @@ function render() {
 
     // ── Gesture override ───────────────────────────────────────
     updateGesture(delta);
+    _syncLookTarget();
+    _updateLookTarget(delta);
 
     vrm.update(delta);
 
