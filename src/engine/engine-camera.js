@@ -8,8 +8,22 @@
 //  resolveWallCollision() from engine-scene keeps it out of walls.
 // ================================================================
 
-import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
-import { walk, getRoomPath, DOORS, HOUSE_GRAPH, vrmPos } from './engine-life.js';
+import { camera, getVrm, getVrmLora, resolveWallCollision } from './engine-scene.js';
+
+// NOTE: engine-life.js imports setCamMode/updateCamera/onActivityChanged/
+// setSleepMode FROM this file, so importing it back statically here would
+// create a circular import (engine-camera.js ⇄ engine-life.js). Turbopack's
+// static export analysis can misresolve that cycle and report real exports
+// (e.g. setTVOn) as missing. Load it dynamically once instead — walk,
+// getRoomPath, DOORS, and HOUSE_GRAPH are all stable references/objects
+// that are safe to read every frame once the import resolves.
+// (vrmPos and HOUSE_BOUNDS were imported but never used here — dropped.)
+let _life = null;
+(async () => { _life = await import('./engine-life.js'); })();
+
+// Safe accessor for walk — used every frame in updateCamera() below, so it
+// needs a harmless fallback for the brief window before _life resolves.
+function _getWalk() { return _life ? _life.walk : { active: false }; }
 
 // ── Wall-clamp margin ────────────────────────────────────────────
 const CAM_WALL_MARGIN = 1.6;
@@ -180,6 +194,8 @@ let _droneTargetRoom = null;
 const DRONE_SPEED   = 1.8;   // units per second — slightly faster than avatar walk
 
 function _buildDroneWaypoints(fromRoom, toRoom) {
+  if (!_life) return []; // life.js hasn't resolved yet — skip, room label still updates elsewhere
+  const { getRoomPath, DOORS, HOUSE_GRAPH } = _life;
   if (!fromRoom || !toRoom || fromRoom === toRoom) return [];
   if (!HOUSE_GRAPH[fromRoom] || !HOUSE_GRAPH[toRoom]) return [];
   const roomPath = getRoomPath(fromRoom, toRoom);
@@ -524,12 +540,12 @@ export function updateCamera(delta) {
   let df = rawFacing - _camFacingY;
   while (df >  Math.PI) df -= Math.PI * 2;
   while (df < -Math.PI) df += Math.PI * 2;
-  const facingLerp = walk.active ? 0.025 : 0.035;
+  const facingLerp = _getWalk().active ? 0.025 : 0.035;
   _camFacingY += df * Math.min(1, delta / facingLerp);
   _camFacingY  = ((_camFacingY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
   // ── Angle dwell timer — suppressed while speaking (req 10) ───
-  if (camMode === 'IDLE' && !walk.active && !_speakLock) {
+  if (camMode === 'IDLE' && !_getWalk().active && !_speakLock) {
     _angleDwellTimer += delta * 1000;
     if (_angleDwellTimer >= _angleDwellDuration) {
       _angleDwellTimer    = 0;
@@ -575,7 +591,7 @@ export function updateCamera(delta) {
   const roomPreset     = _resolveRoomPreset(_cameraRoom, _currentActivity);
   const actMod         = ACTIVITY_CAM_MODIFIERS[_currentActivity];
 
-  if (walk.active) {
+  if (_getWalk().active) {
     interactionPreset = STREAMER_CAM.WALK;
     effectiveAngle    = ANGLE_PRESETS.FRONT; // was WIDE — FRONT tracks character safely
   } else if (camMode === 'SPEAK') {
@@ -653,7 +669,7 @@ export function updateCamera(delta) {
   }
 
   // ── Lerp ──────────────────────────────────────────────────────
-  const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : 0.018;
+  const L = camMode === 'SPEAK' ? 0.09 : _getWalk().active ? 0.03 : 0.018;
   const lf = Math.min(1, L * 60 * delta);
 
   // Look at midpoint when two-shot, otherwise focused character
