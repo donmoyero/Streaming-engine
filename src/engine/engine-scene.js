@@ -14,7 +14,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 import { cacheBones, cacheBonesMr, setRestPose, setRestPoseMr, ACTIVITY } from './engine-bones.js';
-import { _snapCameraToVRM, setCamFacingY } from './engine-camera.js';
 
 // NOTE: engine-life.js imports renderer/scene/camera/etc. FROM this file,
 // so importing it back statically here would create a circular import
@@ -23,6 +22,14 @@ import { _snapCameraToVRM, setCamFacingY } from './engine-camera.js';
 // we load it dynamically once, inside startEngine(), after this module's
 // own exports (renderer, scene, camera, ...) are already in place.
 let _life = null;
+
+// Same problem, one module over: engine-camera.js statically imports
+// camera/getVrm/getVrmLora/resolveWallCollision FROM this file, so a
+// static import of _snapCameraToVRM here would create a second circular
+// import (engine-scene.js ⇄ engine-camera.js). Loaded dynamically once
+// in startEngine() too. (setCamFacingY was imported but never used here
+// — dropped.)
+let _cam = null;
 
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = '/MissOgTinz_Master.vrm';
@@ -382,7 +389,7 @@ function _rayFloor(spawnX, spawnZ) {
 export function _placeVRMOnFloor() {
   _placeOneVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
   _placeOneVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-  _snapCameraToVRM();
+  _cam?._snapCameraToVRM?.();
 }
 
 function _placeOneVRM(v, spawnX, spawnZ, faceY) {
@@ -567,6 +574,7 @@ function _onBothLoaded() {
 // All loading must happen AFTER initScene() has run (renderer/scene exist).
 export async function startEngine() {
   _life = await import('./engine-life.js');
+  _cam  = await import('./engine-camera.js');
 
 // ── House GLB loader ─────────────────────────────────────────────
 const _gltfLoader = new GLTFLoader();
@@ -652,7 +660,7 @@ _gltfLoader.load('/House.glb', (gltf) => {
     requestAnimationFrame(() => {
       if (vrm)   _finaliseVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
       if (vrmMr) _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-      _snapCameraToVRM();
+      _cam?._snapCameraToVRM?.();
     });
   }
   console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}`);
