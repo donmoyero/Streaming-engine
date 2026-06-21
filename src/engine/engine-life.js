@@ -266,6 +266,16 @@ const ACTIVITY_RULES = {
   dance: ['Centre', 'Kitchen Centre', 'Dining Centre'],
 };
 
+const SOCIAL_DISTANCE = 2.5;
+
+const SHARED_ACTIVITIES = {
+  watchTV: ['tvReact', 'sofaSit'],
+  tvReact: ['tvReact', 'sofaSit'],
+  dance: ['dance'],
+  stirring: ['chopping', 'tasting'],
+  readBook: ['sofaSit']
+};
+
 const LOOK_TARGETS = {
   tvReact: 'tv',
   phoneScroll: 'phone',
@@ -283,6 +293,14 @@ let _lookPitch = 0;
 let _lookClampWarned = false;
 let _lookBodyAssistActive = false;
 let _lookBodyAssistLogged = false;
+const SOCIAL_BLOCKED_ACTIVITIES = new Set(['bedLie', 'bedLiePhone', 'mirrorPose']);
+let _socialCheckTimer = 5 + Math.random() * 5;
+let _socialMissLookTimer = 0;
+let _socialLoraLookTimer = 0;
+let _socialMissLogged = false;
+let _socialLoraLogged = false;
+let _loraSocialHeadYaw = 0;
+let _loraSocialNeckYaw = 0;
 
 function _lookTargetsEqual(a, b) {
   if (a === b) return true;
@@ -313,6 +331,89 @@ function _applySpotLookTarget(spot) {
   _lastLookActivity = ACTIVITY.current;
   console.log(`[Interaction] Looking at ${spot.label} look point`);
   return true;
+}
+
+function _normalizeAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function _isMissSocialBlocked() {
+  return walk.active || SOCIAL_BLOCKED_ACTIVITIES.has(ACTIVITY.current);
+}
+
+function _isLoraSocialBlocked() {
+  return window._loraWalking || _loraWalkingToSpot || SOCIAL_BLOCKED_ACTIVITIES.has(ACTIVITY_MR.current);
+}
+
+function _startMissSocialLook(duration = 1 + Math.random() * 2) {
+  if (_isMissSocialBlocked()) return;
+  _socialMissLookTimer = Math.max(_socialMissLookTimer, duration);
+  if (!_socialMissLogged) {
+    console.log('[Social] Miss looking at Lora');
+    _socialMissLogged = true;
+  }
+}
+
+function _startLoraSocialLook(duration = 1 + Math.random() * 2) {
+  if (_isLoraSocialBlocked()) return;
+  _socialLoraLookTimer = Math.max(_socialLoraLookTimer, duration);
+  if (!_socialLoraLogged) {
+    console.log('[Social] Lora looking at Miss');
+    _socialLoraLogged = true;
+  }
+}
+
+function _clearSocialLookState() {
+  _socialMissLookTimer = 0;
+  _socialLoraLookTimer = 0;
+  _socialMissLogged = false;
+  _socialLoraLogged = false;
+}
+
+function _updateSocialAttention(delta) {
+  const loraPos = _getLoraPosition();
+  if (!loraPos) {
+    _clearSocialLookState();
+    return;
+  }
+
+  const distance = Math.hypot(vrmPos.x - loraPos.x, vrmPos.z - loraPos.z);
+  if (distance > SOCIAL_DISTANCE) {
+    _clearSocialLookState();
+    return;
+  }
+
+  if (_socialMissLookTimer > 0) _socialMissLookTimer = Math.max(0, _socialMissLookTimer - delta);
+  if (_socialLoraLookTimer > 0) _socialLoraLookTimer = Math.max(0, _socialLoraLookTimer - delta);
+  if (_socialMissLookTimer === 0) _socialMissLogged = false;
+  if (_socialLoraLookTimer === 0) _socialLoraLogged = false;
+
+  if (window._loraIsSpeaking || _isSpeaking) {
+    if (window._loraIsSpeaking) _startMissSocialLook(delta + 0.15);
+    if (_isSpeaking) _startLoraSocialLook(delta + 0.15);
+    return;
+  }
+
+  _socialCheckTimer -= delta;
+  if (_socialCheckTimer > 0) return;
+  _socialCheckTimer = 5 + Math.random() * 5;
+  if (Math.random() >= 0.25) return;
+
+  if (!_isMissSocialBlocked() && !_isLoraSocialBlocked()) {
+    if (Math.random() < 0.5) _startMissSocialLook();
+    else _startLoraSocialLook();
+  } else if (!_isMissSocialBlocked()) {
+    _startMissSocialLook();
+  } else if (!_isLoraSocialBlocked()) {
+    _startLoraSocialLook();
+  }
+}
+
+function _getActiveMissLookTarget() {
+  if (_socialMissLookTimer > 0 && !_isMissSocialBlocked()) {
+    return { kind: 'avatar', label: 'Lora', getPosition: _getLoraPosition };
+  }
+  return _lookTarget;
 }
 
 export function setLookTarget(target) {
@@ -349,7 +450,8 @@ function _syncLookTarget() {
 }
 
 function _updateLookTarget(delta) {
-  if (!_lookTarget || walk.active || !boneHead || !boneNeck) return;
+  const activeLookTarget = _getActiveMissLookTarget();
+  if (!activeLookTarget || walk.active || !boneHead || !boneNeck) return;
   const vrm = _vrm();
   if (!vrm) return;
 
@@ -359,24 +461,29 @@ function _updateLookTarget(delta) {
   let targetZ = vrmPos.z + facingZ;
   let targetPitch = 0;
 
-  if (typeof _lookTarget === 'object' && _lookTarget.kind === 'point') {
-    targetX = _lookTarget.x;
-    targetZ = _lookTarget.z;
-  } else if (_lookTarget === 'tv') {
+  if (typeof activeLookTarget === 'object' && activeLookTarget.kind === 'avatar') {
+    const avatarPos = activeLookTarget.getPosition();
+    if (!avatarPos) return;
+    targetX = avatarPos.x;
+    targetZ = avatarPos.z;
+  } else if (typeof activeLookTarget === 'object' && activeLookTarget.kind === 'point') {
+    targetX = activeLookTarget.x;
+    targetZ = activeLookTarget.z;
+  } else if (activeLookTarget === 'tv') {
     targetX = -2.5;
     targetZ = -5.0;
-  } else if (_lookTarget === 'window' || _lookTarget === 'mirror') {
+  } else if (activeLookTarget === 'window' || activeLookTarget === 'mirror') {
     targetX = _currentSpot?.x ?? targetX;
     targetZ = _currentSpot?.z ?? targetZ;
-  } else if (_lookTarget === 'phone') {
+  } else if (activeLookTarget === 'phone') {
     targetX = vrmPos.x + facingX * 0.35;
     targetZ = vrmPos.z + facingZ * 0.35;
     targetPitch = 0.32;
-  } else if (_lookTarget === 'lap') {
+  } else if (activeLookTarget === 'lap') {
     targetX = vrmPos.x + facingX * 0.45;
     targetZ = vrmPos.z + facingZ * 0.45;
     targetPitch = 0.42;
-  } else if (_lookTarget === 'counter') {
+  } else if (activeLookTarget === 'counter') {
     targetX = vrmPos.x + facingX * 0.7;
     targetZ = vrmPos.z + facingZ * 0.7;
     targetPitch = 0.18;
@@ -389,10 +496,7 @@ function _updateLookTarget(delta) {
     : Math.atan2(targetX - vrmPos.x, targetZ - vrmPos.z);
   let relativeAngle = targetAngle - vrm.scene.rotation.y;
 
-  relativeAngle = Math.atan2(
-    Math.sin(relativeAngle),
-    Math.cos(relativeAngle)
-  );
+  relativeAngle = _normalizeAngle(relativeAngle);
 
   if (Math.abs(relativeAngle) > 0.8) {
     _targetFacing = targetAngle;
@@ -432,6 +536,42 @@ function _updateLookTarget(delta) {
   boneHead.rotation.x += _lookPitch * 0.65;
   boneNeck.rotation.y = clampedNeckYaw;
   boneNeck.rotation.x += _lookPitch * 0.35;
+}
+
+function _updateLoraSocialLook(delta, lora) {
+  const loraHead = window._loraHead;
+  const loraNeck = window._loraNeck;
+  if (!lora || !loraHead || !loraNeck) return;
+
+  const active = _socialLoraLookTimer > 0 && !_isLoraSocialBlocked();
+  const blend = Math.min(1, delta * 4.5);
+
+  if (!active) {
+    _loraSocialHeadYaw += (0 - _loraSocialHeadYaw) * blend;
+    _loraSocialNeckYaw += (0 - _loraSocialNeckYaw) * blend;
+    if (Math.abs(_loraSocialHeadYaw) < 0.001 && Math.abs(_loraSocialNeckYaw) < 0.001) return;
+  } else {
+    const dx = vrmPos.x - lora.scene.position.x;
+    const dz = vrmPos.z - lora.scene.position.z;
+    if (Math.hypot(dx, dz) < 0.01) return;
+
+    const targetAngle = Math.atan2(dx, dz);
+    let relativeAngle = _normalizeAngle(targetAngle - lora.scene.rotation.y);
+
+    if (Math.abs(relativeAngle) > 0.8) {
+      const maxTurn = 1.2 * delta;
+      lora.scene.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, relativeAngle));
+      relativeAngle = _normalizeAngle(targetAngle - lora.scene.rotation.y);
+    }
+
+    const headYaw = Math.max(-0.7, Math.min(0.7, relativeAngle * 0.6));
+    const neckYaw = Math.max(-0.5, Math.min(0.5, relativeAngle * 0.4));
+    _loraSocialHeadYaw += (headYaw - _loraSocialHeadYaw) * blend;
+    _loraSocialNeckYaw += (neckYaw - _loraSocialNeckYaw) * blend;
+  }
+
+  loraHead.rotation.y = Math.max(-0.7, Math.min(0.7, loraHead.rotation.y + _loraSocialHeadYaw));
+  loraNeck.rotation.y = Math.max(-0.5, Math.min(0.5, loraNeck.rotation.y + _loraSocialNeckYaw));
 }
 
 function _getValidActivities(spot, fallbackActivities) {
@@ -762,6 +902,97 @@ function _releaseSpot(spot, avatar) {
 }
 
 // ── Familiarity ──────────────────────────────────────────────────
+function _avatarDisplayName(avatar) {
+  return avatar === 'miss' ? 'Miss' : 'Lora';
+}
+
+function _getAvatarPosition(avatar) {
+  if (avatar === 'miss') return vrmPos;
+  return _getLoraPosition();
+}
+
+function _isAvatarWalking(avatar) {
+  return avatar === 'miss'
+    ? walk.active
+    : Boolean(window._loraWalking || _loraWalkingToSpot);
+}
+
+function _isAvatarSpeaking(avatar) {
+  return avatar === 'miss' ? _isSpeaking : Boolean(window._loraIsSpeaking);
+}
+
+function _isAvatarSleeping(avatar) {
+  const activity = avatar === 'miss' ? ACTIVITY.current : ACTIVITY_MR.current;
+  return activity === 'bedLie' || activity === 'bedLiePhone';
+}
+
+function _isSharedActivityProtected(avatar) {
+  const activity = avatar === 'miss' ? ACTIVITY.current : ACTIVITY_MR.current;
+  if (activity === 'bedLie' || activity === 'mirrorPose') return true;
+  return avatar === 'miss' && _twitchResponseActive;
+}
+
+function _canJoinSharedActivity(avatar, leaderPos) {
+  const joinerPos = _getAvatarPosition(avatar);
+  if (!leaderPos || !joinerPos) return false;
+  if (_isAvatarWalking(avatar)) return false;
+  if (_isAvatarSpeaking(avatar)) return false;
+  if (_isAvatarSleeping(avatar)) return false;
+  if (_isSharedActivityProtected(avatar)) return false;
+  return Math.hypot(joinerPos.x - leaderPos.x, joinerPos.z - leaderPos.z) <= 4;
+}
+
+function _findSharedActivitySpot(leaderSpot, compatibleActivities, joinerAvatar) {
+  if (!leaderSpot || !compatibleActivities?.length) return null;
+  const leaderX = leaderSpot.x;
+  const leaderZ = leaderSpot.z;
+  const currentSpot = joinerAvatar === 'miss' ? _currentSpot : _loraCurrentSpot;
+
+  const candidates = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) =>
+    (roomDef?.spots || []).flatMap(spot => {
+      if (spot.yOffset !== undefined && occupiedSpots.has(spot.label)) return [];
+      const validActivities = _getValidActivities(spot, compatibleActivities);
+      return compatibleActivities
+        .filter(activity => validActivities.includes(activity))
+        .map(activity => ({ ...spot, room: roomKey, sharedActivity: activity }));
+    })
+  ).filter(spot => {
+    if (spot.label === currentSpot?.label && spot.room === currentSpot?.room) return false;
+    return Math.hypot(spot.x - leaderX, spot.z - leaderZ) <= 4;
+  });
+
+  return candidates.sort((a, b) => {
+    const distanceA = Math.hypot(a.x - leaderX, a.z - leaderZ);
+    const distanceB = Math.hypot(b.x - leaderX, b.z - leaderZ);
+    if (distanceA !== distanceB) return distanceA - distanceB;
+    return `${a.room}:${a.label}:${a.sharedActivity}`.localeCompare(`${b.room}:${b.label}:${b.sharedActivity}`);
+  })[0] || null;
+}
+
+function _trySharedActivity(leaderAvatar, activity, leaderSpot) {
+  const compatibleActivities = SHARED_ACTIVITIES[activity];
+  if (!compatibleActivities) return;
+  if (_twitchResponseActive) return;
+
+  const joinerAvatar = leaderAvatar === 'miss' ? 'lora' : 'miss';
+  const leaderPos = leaderAvatar === 'miss' ? vrmPos : _getLoraPosition();
+  if (!_canJoinSharedActivity(joinerAvatar, leaderPos)) return;
+  if (Math.random() >= 0.4) return;
+
+  const sharedSpot = _findSharedActivitySpot(leaderSpot, compatibleActivities, joinerAvatar);
+  if (!sharedSpot) return;
+
+  const joinActivity = sharedSpot.sharedActivity;
+  const spot = { ...sharedSpot, activities: [joinActivity] };
+  console.log(`[Shared] ${_avatarDisplayName(joinerAvatar)} joined ${_avatarDisplayName(leaderAvatar)} for ${activity}`);
+
+  if (joinerAvatar === 'miss') {
+    goToSpot(spot, { sharedJoin: true, forceActivity: joinActivity });
+  } else {
+    _loraGoToSpot(spot, { sharedJoin: true, forceActivity: joinActivity });
+  }
+}
+
 const _familiarity = {
   studio:        { room: 0, activities: {} },
   kitchen:       { room: 0, activities: {} },
@@ -951,7 +1182,7 @@ function walkThroughWaypoints(waypoints, finalX, finalZ, onArrive) {
   };
 }
 
-function goToSpot(spot) {
+function goToSpot(spot, options = {}) {
   const vrm = _vrm();
   if (!spot || !vrm) return;
   spot = _pickAvailableSpot(spot);
@@ -975,7 +1206,9 @@ function goToSpot(spot) {
     setRoomVisible(_currentRoom, true);
     if (spot.facingY !== undefined) _targetFacing = spot.facingY;
     const spotActivities = _getValidActivities(spot, getFamiliarActivityPool(_currentRoom));
-    const next = spotActivities[Math.floor(Math.random() * spotActivities.length)];
+    const next = options.forceActivity && spotActivities.includes(options.forceActivity)
+      ? options.forceActivity
+      : spotActivities[Math.floor(Math.random() * spotActivities.length)];
 
     _reserveSpot(spot, 'miss');
 
@@ -1004,7 +1237,6 @@ function goToSpot(spot) {
 
     // ── Drop Y for seated/lying spots — lerped to avoid snapping ──
     if (vrm) {
-      const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
       _missYOffsetTarget = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
     }
 
@@ -1012,6 +1244,7 @@ function goToSpot(spot) {
     setCamMode('IDLE');
     onActivityChanged(next);
     learnNPCPosition('miss', _currentRoom, spot.label || spot.id || 'spot');
+    if (!options.sharedJoin) _trySharedActivity('miss', next, spot);
   });
 }
 
@@ -1035,6 +1268,7 @@ export function doActivity(actName) {
   _apiOverride      = true;
   _apiOverrideTimer = 12;
   onActivityChanged(actName);
+  _trySharedActivity('miss', actName, _currentSpot);
 }
 
 function lifeUpdate() {
@@ -1104,6 +1338,7 @@ const _loraActivityPool = {
 // Both avatars can independently turn the TV on by sitting to watch.
 // Music volume rises when anyone is watching, drops when both leave.
 const TV_ACTIVITIES = new Set(['watchTV', 'tvReact']);
+const SEATED_ACTIVITIES = new Set(['sofaSit','phoneScroll','readBook','tvReact','watchTV','eatAtTable','tasting','bedLie','bedLiePhone']);
 let _missWatchingTV = false;
 let _loraWatchingTV = false;
 
@@ -1158,7 +1393,7 @@ function _loraWalkSafetyReset() {
 }
 
 // Send Lora to a spot — sets ACTIVITY_MR on arrival
-function _loraGoToSpot(spot) {
+function _loraGoToSpot(spot, options = {}) {
   if (!spot) return;
   spot = _pickAvailableSpot(spot);
   if (!spot) return;
@@ -1194,7 +1429,9 @@ function _loraGoToSpot(spot) {
         spot,
         _loraActivityPool[spot.room] || _loraActivityPool.studio
       );
-      const next = pool[Math.floor(Math.random() * pool.length)];
+      const next = options.forceActivity && pool.includes(options.forceActivity)
+        ? options.forceActivity
+        : pool[Math.floor(Math.random() * pool.length)];
 
       _reserveSpot(spot, 'lora');
 
@@ -1220,13 +1457,14 @@ function _loraGoToSpot(spot) {
       _setLoraTV(TV_ACTIVITIES.has(next));
 
       // Apply yOffset for seated/lying activities — lerped for smooth transition
-      _loraYOffsetTarget = (_LORA_SEATED.has(next) && spot.yOffset) ? spot.yOffset : 0;
+      _loraYOffsetTarget = (SEATED_ACTIVITIES.has(next) && spot.yOffset) ? spot.yOffset : 0;
 
       // Face the spot's designated direction
       if (spot.facingY !== undefined && window._loraSetFacing) {
         window._loraSetFacing(spot.facingY);
       }
       learnNPCPosition('lora', _loraCurrentRoom, spot.label || spot.id || 'spot');
+      if (!options.sharedJoin) _trySharedActivity('lora', next, spot);
     }, _loraFromRoom, spot.room);   // ← BFS args: tells engine-scene to route through doors
   } else {
     // Fallback: no callback bridge — just set activity immediately
@@ -1235,12 +1473,15 @@ function _loraGoToSpot(spot) {
       spot,
       _loraActivityPool[spot.room] || _loraActivityPool.studio
     );
-    const next = pool[Math.floor(Math.random() * pool.length)];
+    const next = options.forceActivity && pool.includes(options.forceActivity)
+      ? options.forceActivity
+      : pool[Math.floor(Math.random() * pool.length)];
     _reserveSpot(spot, 'lora');
     ACTIVITY_MR.current  = next;
     ACTIVITY_MR.timer    = 0;
     ACTIVITY_MR.phase    = 0;
     ACTIVITY_MR.duration = 10 + Math.random() * 20;
+    if (!options.sharedJoin) _trySharedActivity('lora', next, spot);
   }
 
   _loraLifeTimer = 0;
@@ -1861,6 +2102,7 @@ function _parseTags(tagStr) {
 // ── Message queue ────────────────────────────────────────────────
 let _msgQueue = [];
 let _msgBusy  = false;
+let _twitchResponseActive = false;
 
 // Spam patterns — she won't waste tokens on these
 const _spamPatterns = [
@@ -1917,6 +2159,7 @@ export async function respondToTwitchMessage(message, displayName = 'Viewer') {
 
   const previousActivity = ACTIVITY.current;
   const previousSpot = _currentSpot ? { ..._currentSpot } : null;
+  _twitchResponseActive = true;
   _apiOverride = true;
   _apiOverrideTimer = API_OVERRIDE_DURATION;
 
@@ -1956,6 +2199,7 @@ export async function respondToTwitchMessage(message, displayName = 'Viewer') {
 
     _apiOverride = false;
     _apiOverrideTimer = 0;
+    _twitchResponseActive = false;
     _lifeTimer = 0;
   }
 }
@@ -2267,6 +2511,7 @@ window._setMissActivity = (actName, duration) => {
   if (duration) ACTIVITY.duration = duration;
   onActivityChanged(actName);
   _updateSleepMode();
+  _trySharedActivity('miss', actName, _currentSpot);
 };
 window._setLoraActivity = (actName, duration) => {
   ACTIVITY_MR.current  = actName;
@@ -2274,6 +2519,7 @@ window._setLoraActivity = (actName, duration) => {
   ACTIVITY_MR.phase    = 0;
   if (duration) ACTIVITY_MR.duration = duration;
   _updateSleepMode();
+  _trySharedActivity('lora', actName, _loraCurrentSpot);
 };
 
 // ── Kitchen system bridges ───────────────────────────────────────
@@ -2450,6 +2696,7 @@ function render() {
     updateWalk(delta);
     lifeUpdate();
     _loraLifeUpdate();
+    _updateSocialAttention(delta);
 
     // ── Facing — smoothly rotate toward _targetFacing ─────────
     const cur  = vrm.scene.rotation.y;
@@ -2573,6 +2820,7 @@ function render() {
 
       // ── Lora micro-movements — subtle idle fidgets so she looks alive ──
       _updateLoraMicro(delta);
+      _updateLoraSocialLook(delta, lora);
 
       // ── Lora walk bones — driven here, position driven by engine-scene ──
       // Use both the local flag and engine-scene's window bridge
