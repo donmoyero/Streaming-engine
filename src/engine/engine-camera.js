@@ -273,22 +273,22 @@ function _startDroneRoute(subjectRoom) {
   console.log(`[Camera] Routing ${_fmtRoom(_cameraRoom)} → ${_fmtRoom(subjectRoom)}`);
 }
 
-// ── Room bounding boxes ────────────────────────────────────────────
-// Shared by _getAvatarRoom() (below) and the cinematic orbit room-clamp.
-const _ROOM_BOUNDS = {
-  'living-room': { minX: -5.75, maxX: -0.25, minZ: -6.25, maxZ: -0.75 },
-  kitchen:       { minX: -6.05, maxX: -1.55, minZ: -1.25, maxZ:  3.25 },
-  dining:        { minX: -3.75, maxX: -0.25, minZ:  0.50, maxZ:  4.50 },
-  hallway:       { minX: -0.50, maxX:  1.70, minZ: -5.75, maxZ:  0.75 },
-  bedroom:       { minX:  1.55, maxX:  6.05, minZ: -5.00, maxZ:  1.00 },
-  bathroom:      { minX:  2.30, maxX:  5.30, minZ:  0.00, maxZ:  3.00 },
-  studio:        { minX: -3.95, maxX: -1.45, minZ: -5.25, maxZ: -2.75 },
-};
-
 // ── Determine which room the focused avatar is in ─────────────────
 // Uses the avatar's world-space X/Z against HOUSE room origin+size bounds.
 function _getAvatarRoom(x, z) {
-  for (const [room, b] of Object.entries(_ROOM_BOUNDS)) {
+  // Import is not available at module level, so we check HOUSE bounds inline.
+  // HOUSE is not exported from engine-life so we replicate the bounds here
+  // using the same origin/size values defined in HOUSE.
+  const BOUNDS = {
+    'living-room': { minX: -5.75, maxX: -0.25, minZ: -6.25, maxZ: -0.75 },
+    kitchen:       { minX: -6.05, maxX: -1.55, minZ: -1.25, maxZ:  3.25 },
+    dining:        { minX: -3.75, maxX: -0.25, minZ:  0.50, maxZ:  4.50 },
+    hallway:       { minX: -0.50, maxX:  1.70, minZ: -5.75, maxZ:  0.75 },
+    bedroom:       { minX:  1.55, maxX:  6.05, minZ: -5.00, maxZ:  1.00 },
+    bathroom:      { minX:  2.30, maxX:  5.30, minZ:  0.00, maxZ:  3.00 },
+    studio:        { minX: -3.95, maxX: -1.45, minZ: -5.25, maxZ: -2.75 },
+  };
+  for (const [room, b] of Object.entries(BOUNDS)) {
     if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return room;
   }
   return 'hallway'; // safe fallback — hallway connects everything
@@ -621,24 +621,6 @@ export function updateCamera(delta) {
   const safe = resolveWallCollision(tx, tz, CAM_WALL_MARGIN);
   tx = safe.x;
   tz = safe.z;
-
-  // ── Room containment (cinematic shots only) ────────────────────
-  // resolveWallCollision() leaves door gaps open so avatars can walk
-  // through them — but a cinematic orbit shot should never wander out
-  // through a doorway just because the angle lines up with one. Clamp
-  // the orbit target to the room the SUBJECT is actually standing in,
-  // not the camera's previous room, so a transition still lets the
-  // drone route between rooms (that path is handled separately below)
-  // while a normal orbit always frames from inside the subject's room.
-  if (!_droneActive) {
-    const subjectRoomNow = _getAvatarRoom(orbitX, orbitZ);
-    const rb = _ROOM_BOUNDS[subjectRoomNow];
-    if (rb) {
-      const rm = CAM_WALL_MARGIN; // keep the same margin used against interior walls
-      tx = Math.max(rb.minX + rm, Math.min(rb.maxX - rm, tx));
-      tz = Math.max(rb.minZ + rm, Math.min(rb.maxZ - rm, tz));
-    }
-  }
 
   // ── Drone in-transit: override XZ with waypoint path ─────────
   // Y and look-at still lerp to the subject so the avatar stays
