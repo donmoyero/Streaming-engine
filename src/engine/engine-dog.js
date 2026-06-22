@@ -47,8 +47,8 @@ import { getVrmDog } from './engine-scene.js';
 const _vrmDog = () => getVrmDog();
 
 // ── Tuning zone — the only two values you should need to hand-adjust ──
-export let DOG_FRONT_LEG_DROP_Z = 1.45; // 0 = T-pose (horizontal), ~1.57 = straight down
-export let DOG_BODY_PITCH_X     = 0;    // try -1.2 to -1.4 if he stands upright like a person
+export let DOG_FRONT_LEG_DROP_Z = 1.57; // π/2 — straight down from T-pose shoulder
+export let DOG_BODY_PITCH_X     = -1.30; // tips the whole torso horizontal like a real dog
                                           // instead of lying along a horizontal back
 
 // ── Bone refs — populated by cacheBonesDog() after the VRM loads ────
@@ -124,8 +124,8 @@ export function setRestPoseDog() {
   if (boneHipsDog)  boneHipsDog.rotation.x  = DOG_BODY_PITCH_X;
   if (boneSpineDog) boneSpineDog.rotation.x = DOG_BODY_PITCH_X * 0.3;
   if (boneChestDog) boneChestDog.rotation.x = DOG_BODY_PITCH_X * 0.15;
-  if (boneNeckDog)  boneNeckDog.rotation.x  = -DOG_BODY_PITCH_X * 0.4;
-  if (boneHeadDog)  boneHeadDog.rotation.x  = -0.10;
+  if (boneNeckDog)  boneNeckDog.rotation.x  = Math.abs(DOG_BODY_PITCH_X) * 0.55; // lift head back to level
+  if (boneHeadDog)  boneHeadDog.rotation.x  = Math.abs(DOG_BODY_PITCH_X) * 0.25; // fine-tune head angle
 }
 
 // ================================================================
