@@ -12,7 +12,7 @@ import { getVrm, scene, camera, renderer, ambient,
          canvas, monitorGlowLight,
          VRM_PATH, API_URL, PROACTIVE_URL, TOPIC_URL, TTS_URL,
          TWITCH_CHANNEL, USER_ID,
-         setTVOn,
+         setTVOn, getVrmDog,
        } from './engine-scene.js';
 
 import { setCamMode, updateCamera, onActivityChanged, setSleepMode } from './engine-camera.js';
@@ -46,6 +46,13 @@ import {
   doBlinkMr, setBSMr, teethNodeMr,
   loraWalkUpdate, resetLoraWalkPhase,
 } from './engine-bones.js';
+
+// ── Alakurin (dog) — no AI, hand-authored bone animation only ────
+import {
+  ACTIVITY_DOG, activityUpdateDog, isDogAsleep,
+  dogGaitUpdate, resetDogGaitPhase, applyDogHeadLook,
+  boneHeadDog,
+} from './engine-dog.js';
 
 // ── Dead air ─────────────────────────────────────────────────────
 // Fires /chat/proactive after silence. Has a busy-lock so only ONE
@@ -1606,6 +1613,226 @@ function _loraLifeUpdate() {
   if (spot) _loraGoToSpot(spot);
 }
 
+// ================================================================
+//  ALAKURIN (DOG) LIFE SCHEDULER
+//  Deterministic, hand-authored, no AI/LLM calls of any kind. Just
+//  picks HOUSE spots and dog-flavoured activities on timers, plus a
+//  few reactive triggers wired in from the Twitch chat handler below
+//  (search "DOG TRIGGER" to find each one).
+// ================================================================
+const _dogActivityPool = {
+  studio:        ['idle', 'idle', 'sniff', 'sit'],
+  kitchen:       ['sniff', 'sniff', 'idle', 'sit'],
+  'living-room': ['idle', 'sit', 'lieDown', 'sniff'],
+  bedroom:       ['lieDown', 'lieDown', 'sleep', 'idle'],
+  bathroom:      ['sniff', 'idle'],
+  dining:        ['sniff', 'sit', 'idle'],
+  hallway:       ['idle', 'sniff'],
+};
+
+let _dogLifeTimer     = 0;
+let _dogLifeDwell     = 8 + Math.random() * 18;
+let _dogCurrentRoom   = 'studio';
+let _dogCurrentSpot   = null;
+let _dogWalkingToSpot = false;
+
+// Updated at every chat message / new-viewer event (see "DOG TRIGGER"
+// comments in _connectTwitchIRC below). Drives the "no chat for a
+// while → he naturally settles down to sleep" behaviour.
+let _dogLastChatAt       = Date.now();
+const DOG_SLEEP_AFTER_MS = 2 * 60 * 1000; // 2 minutes of silence
+let _dogForcedAsleep     = false;
+
+function _dogPickSpot() {
+  const allSpots = Object.entries(HOUSE).flatMap(([roomKey, roomDef]) => {
+    if (!roomDef?.spots) return [];
+    return roomDef.spots.map(s => ({ ...s, room: roomKey }));
+  });
+  const candidates = allSpots.filter(s => s !== _dogCurrentSpot);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+let _dogWalkWatchdog = null;
+function _dogWalkSafetyReset() {
+  clearTimeout(_dogWalkWatchdog);
+  _dogWalkWatchdog = setTimeout(() => {
+    if (_dogWalkingToSpot) {
+      console.warn('[Dog] Walk watchdog fired — forcing idle');
+      _dogWalkingToSpot  = false;
+      window._dogWalking = false;
+      ACTIVITY_DOG.current  = 'idle';
+      ACTIVITY_DOG.timer    = 0;
+      ACTIVITY_DOG.phase    = 0;
+      ACTIVITY_DOG.duration = 8;
+    }
+  }, 18000);
+}
+
+function _dogGoToSpot(spot, options = {}) {
+  if (!spot) return;
+  _dogCurrentSpot    = spot;
+  _dogWalkingToSpot  = true;
+  _dogWalkSafetyReset();
+
+  if (window._dogSetTarget) {
+    const _dogFromRoom = _dogCurrentRoom;
+    _dogCurrentRoom     = spot.room;
+
+    const dogVrm = window.getVrmDog ? window.getVrmDog() : null;
+    if (dogVrm) dogVrm.scene.position.y = dogVrm._restPosY || 0;
+
+    const walkTarget = spot.interactionPoint || spot;
+    // Mostly trots between spots; sometimes ambles, occasionally bolts —
+    // purely cosmetic variety, no behavioural meaning.
+    const speedRoll  = Math.random();
+    const speedMode  = speedRoll < 0.15 ? 'run' : speedRoll < 0.55 ? 'trot' : 'walk';
+
+    window._dogSetTarget(walkTarget.x, walkTarget.z, () => {
+      clearTimeout(_dogWalkWatchdog);
+      _dogWalkingToSpot = false;
+      _dogCurrentRoom    = spot.room;
+
+      const pool = _dogActivityPool[spot.room] || _dogActivityPool.studio;
+      const next = options.forceActivity && pool.includes(options.forceActivity)
+        ? options.forceActivity
+        : pool[Math.floor(Math.random() * pool.length)];
+
+      ACTIVITY_DOG.current  = next;
+      ACTIVITY_DOG.timer    = 0;
+      ACTIVITY_DOG.phase    = 0;
+      ACTIVITY_DOG.duration = 8 + Math.random() * 16;
+    }, _dogFromRoom, spot.room, speedMode);
+  } else {
+    _dogWalkingToSpot = false;
+    const pool = _dogActivityPool[spot.room] || _dogActivityPool.studio;
+    const next = pool[Math.floor(Math.random() * pool.length)];
+    ACTIVITY_DOG.current  = next;
+    ACTIVITY_DOG.timer    = 0;
+    ACTIVITY_DOG.phase    = 0;
+    ACTIVITY_DOG.duration = 8 + Math.random() * 16;
+  }
+
+  _dogLifeTimer = 0;
+  _dogLifeDwell = 8 + Math.random() * 18;
+}
+
+function _dogLifeUpdate() {
+  if (!window.getVrmDog || !window.getVrmDog()) return; // not loaded yet (or failed to load)
+
+  // ── DOG TRIGGER: no chat for a while → settle down and sleep ────
+  const silentFor = Date.now() - _dogLastChatAt;
+  if (silentFor > DOG_SLEEP_AFTER_MS) {
+    if (!_dogForcedAsleep && !_dogWalkingToSpot) {
+      _dogForcedAsleep = true;
+      ACTIVITY_DOG.current  = 'sleep';
+      ACTIVITY_DOG.timer    = 0;
+      ACTIVITY_DOG.phase    = 0;
+      ACTIVITY_DOG.duration = 9999; // stays asleep until chat wakes him
+    }
+    return; // skip normal wandering while asleep
+  } else if (_dogForcedAsleep) {
+    // Chat resumed — wake him into idle, normal scheduling takes over next tick
+    _dogForcedAsleep = false;
+    ACTIVITY_DOG.current  = 'idle';
+    ACTIVITY_DOG.timer    = 0;
+    ACTIVITY_DOG.duration = 4;
+  }
+
+  if (_dogWalkingToSpot) return;
+  _dogLifeTimer += 1/60;
+  if (_dogLifeTimer < _dogLifeDwell) return;
+  _dogLifeTimer = 0;
+  _dogLifeDwell = 8 + Math.random() * 18;
+  const spot = _dogPickSpot();
+  if (spot) _dogGoToSpot(spot);
+}
+
+// ── DOG TRIGGER: occasional spontaneous chase-tail / scratch, just
+// for character — small chance each scheduling tick, only when idle
+// and not walking, so it never interrupts a deliberate spot visit.
+function _dogMaybeFidget() {
+  if (_dogWalkingToSpot || _dogForcedAsleep) return;
+  if (ACTIVITY_DOG.current !== 'idle') return;
+  if (Math.random() < 0.002) {
+    ACTIVITY_DOG.current  = Math.random() < 0.5 ? 'chaseTail' : 'scratch';
+    ACTIVITY_DOG.timer    = 0;
+    ACTIVITY_DOG.phase    = 0;
+    ACTIVITY_DOG.duration = 3 + Math.random() * 2;
+  }
+}
+
+// ================================================================
+//  ZZZ SLEEP INDICATOR
+//  A floating "Zzz" sprite parented to each character's head bone.
+//  Created lazily on first use, toggled by sleep state each frame.
+//  Gentle vertical float + alpha pulse so it reads on any background.
+// ================================================================
+function _makeZzzSprite() {
+  const canvas = document.createElement('canvas');
+  canvas.width  = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.font         = 'bold 58px sans-serif';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle  = 'rgba(30,20,60,0.55)';
+  ctx.lineWidth    = 5;
+  ctx.strokeText('Zzz', 64, 64);
+  ctx.fillStyle = 'rgba(220,210,255,0.95)';
+  ctx.fillText('Zzz', 64, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.28, 0.28, 1);
+  sprite.visible = false;
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
+// Per-character ZZZ state
+const _zzz = {
+  miss: { sprite: null, headBone: null, attached: false, t: 0 },
+  lora: { sprite: null, headBone: null, attached: false, t: 0 },
+  dog:  { sprite: null, headBone: null, attached: false, t: 0 },
+};
+
+// headOffsetY: how far above the head bone origin the sprite floats
+// (dogs sit lower so their head bone is closer to the floor)
+const _ZZZ_BASE_Y = { miss: 0.38, lora: 0.38, dog: 0.22 };
+
+function _updateZzzFor(key, headBone, asleep, delta) {
+  const z = _zzz[key];
+  if (!headBone) return;
+
+  // Lazy create
+  if (!z.sprite) z.sprite = _makeZzzSprite();
+
+  // Lazy attach to head bone so it follows automatically
+  if (!z.attached || z.headBone !== headBone) {
+    if (z.headBone && z.sprite.parent === z.headBone) z.headBone.remove(z.sprite);
+    headBone.add(z.sprite);
+    z.sprite.position.set(0.12, _ZZZ_BASE_Y[key], 0.05);
+    z.headBone  = headBone;
+    z.attached  = true;
+  }
+
+  if (!asleep) {
+    z.sprite.visible = false;
+    z.t = 0;
+    return;
+  }
+
+  z.sprite.visible = true;
+  z.t += delta;
+
+  // Gentle float — small sine bob on top of base offset
+  const bob   = Math.sin(z.t * 0.9) * 0.025;
+  z.sprite.position.y = _ZZZ_BASE_Y[key] + bob;
+
+  // Slow alpha pulse (0.55 → 1.0)
+  z.sprite.material.opacity = 0.55 + Math.abs(Math.sin(z.t * 0.6)) * 0.45;
+}
+
 // ── Room light pulse ─────────────────────────────────────────────
 let _roomTime = 0;
 function animateRoomLights(delta) {
@@ -2145,6 +2372,24 @@ function _connectTwitchIRC(attempt = 1) {
       if (isNew) _seenViewers.add(username.toLowerCase());
       const prefixed = isNew ? `[NEW VIEWER] ${username}: ${message}` : message;
 
+      // ── DOG TRIGGER: any chat activity resets his "alone" timer ────
+      _dogLastChatAt = Date.now();
+
+      // ── DOG TRIGGER: brand new viewer → bark, then look at camera ──
+      if (isNew && window.getVrmDog?.() && !_dogWalkingToSpot && !isDogAsleep()) {
+        ACTIVITY_DOG.current  = 'bark';
+        ACTIVITY_DOG.timer    = 0;
+        ACTIVITY_DOG.phase    = 0;
+        ACTIVITY_DOG.duration = 1.4;
+        setTimeout(() => {
+          if (ACTIVITY_DOG.current === 'bark') {
+            ACTIVITY_DOG.current  = 'lookAtCamera';
+            ACTIVITY_DOG.timer    = 0;
+            ACTIVITY_DOG.duration = 2.5;
+          }
+        }, 1400);
+      }
+
       // ── !cook command — hand off to kitchen-behaviour.js ─────
       if (message.trim().toLowerCase().startsWith('!cook')) {
         if (window._handleCookCommand) {
@@ -2152,6 +2397,15 @@ function _connectTwitchIRC(attempt = 1) {
         }
         deadAir?.reset();
         return;
+      }
+
+      // ── DOG TRIGGER: a chat message makes him happy (tail-wag
+      // substitute — see ACTIVITY_DOG 'happyWiggle' in engine-dog.js) ──
+      if (window.getVrmDog?.() && !_dogWalkingToSpot && !isDogAsleep() && ACTIVITY_DOG.current !== 'bark') {
+        ACTIVITY_DOG.current  = 'happyWiggle';
+        ACTIVITY_DOG.timer    = 0;
+        ACTIVITY_DOG.phase    = 0;
+        ACTIVITY_DOG.duration = 2.2;
       }
 
       queueTwitchMessage(username, prefixed);
@@ -2996,6 +3250,51 @@ function render() {
       _maybeShowLoraThought(delta);
 
       lora.update(delta);
+
+      // ── ZZZ for Lora ──────────────────────────────────────────
+      const loraHead = lora.humanoid?.getNormalizedBoneNode?.('head') || lora.humanoid?.getBoneNode?.('head');
+      _updateZzzFor('lora', loraHead, ACTIVITY_MR.current === 'sleep', delta);
+    }
+  }
+
+  // ── Alakurin (dog) activity + VRM update ──────────────────────
+  {
+    const dog = window.getVrmDog ? window.getVrmDog() : null;
+    if (dog) {
+      // ── Life scheduler (wandering, sleep, wake) ──────────────
+      _dogLifeUpdate();
+      _dogMaybeFidget();
+
+      // ── Bone animation ───────────────────────────────────────
+      activityUpdateDog(delta);
+
+      // ── Gait — only drives bones when actually walking ───────
+      if (window._dogWalking) {
+        dogGaitUpdate(delta, window._dogSpeedMode || 'trot');
+      } else {
+        resetDogGaitPhase();
+      }
+
+      // ── Head-look bias: when Miss is speaking, dog glances her way ──
+      if (_isSpeakingBones && !window._dogWalking) {
+        applyDogHeadLook(0.18, -0.05, 0.35);
+      }
+
+      // ── ZZZ for dog ──────────────────────────────────────────
+      const dogHead = dog.humanoid?.getNormalizedBoneNode?.('head') || dog.humanoid?.getBoneNode?.('head');
+      _updateZzzFor('dog', dogHead, isDogAsleep(), delta);
+
+      dog.update(delta);
+    }
+  }
+
+  // ── ZZZ for Miss ─────────────────────────────────────────────
+  {
+    const vrm = _vrm();
+    if (vrm) {
+      const missHead = vrm.humanoid?.getNormalizedBoneNode?.('head') || vrm.humanoid?.getBoneNode?.('head');
+      const missAsleep = ACTIVITY.current === 'bedLie' || ACTIVITY.current === 'bedLiePhone';
+      _updateZzzFor('miss', missHead, missAsleep, delta);
     }
   }
 
@@ -3032,5 +3331,5 @@ export function startRenderLoop() {
     }
   }, 33);
   _scheduleRender();
-  console.log('Miss OG Tinz & Lora ready ✦');
+  console.log('Miss OG Tinz, Lora & Alakurin ready ✦');
 }
