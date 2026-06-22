@@ -14,6 +14,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 import { cacheBones, cacheBonesMr, setRestPose, setRestPoseMr, ACTIVITY } from './engine-bones.js';
+import { cacheBonesDog, setRestPoseDog } from './engine-dog.js';
 
 // NOTE: engine-life.js imports renderer/scene/camera/etc. FROM this file,
 // so importing it back statically here would create a circular import
@@ -34,6 +35,7 @@ let _cam = null;
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = '/MissOgTinz_Master.vrm';
 export const VRM_LORA_PATH  = '/Lora_Master.vrm';
+export const VRM_DOG_PATH   = '/Alakurin.vrm';
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -355,14 +357,28 @@ export function _setVrmMr(v) { vrmMr = v; }
 
 window.getVrmLora = () => vrmMr;
 
+// ── Alakurin (dog) VRM ───────────────────────────────────────────
+export let vrmDog             = null;
+// Best-guess default — same convention as Miss/Lora. If he loads
+// facing backwards, this is the first thing to flip (add/remove Math.PI).
+export let VRM_DOG_BASE_ROT_Y = Math.PI;
+export function getVrmDog()   { return vrmDog; }
+export function _setVrmDog(v) { vrmDog = v; }
+window.getVrmDog = () => vrmDog;
+
 // ── Spawn positions ──────────────────────────────────────────────
 export let MISS_SPAWN_X = -2.2;
 export let MISS_SPAWN_Z = -3.2;
 export let LORA_SPAWN_X = -3.2;
 export let LORA_SPAWN_Z = -3.2;
+// Spawns just off to the side of Miss/Lora's spot, near the studio —
+// adjust freely, he wanders the whole house once the scheduler kicks in.
+export let DOG_SPAWN_X  = -2.7;
+export let DOG_SPAWN_Z  = -2.6;
 export const MISS_FACE_Y  =  Math.PI * 0.55;   // Miss faces left toward Lora
 // FIX: was -Math.PI * 0.55 — now offset by Math.PI to match corrected base rotation
 export const LORA_FACE_Y  =  Math.PI * 0.45;   // Lora faces right toward Miss
+export const DOG_FACE_Y   =  0;
 
 // ── Raycast floor helper ─────────────────────────────────────────
 function _rayFloor(spawnX, spawnZ) {
@@ -548,9 +564,10 @@ function _finaliseVRM(v, spawnX, spawnZ, faceY) {
 // ── Load state ───────────────────────────────────────────────────
 let _missLoaded = false;
 let _loraLoaded = false;
+let _dogLoaded  = false;
 
 function _onBothLoaded() {
-  if (!_missLoaded || !_loraLoaded) return;
+  if (!_missLoaded || !_loraLoaded || !_dogLoaded) return;
   _life.setProgress(100);
   setTimeout(() => {
     _life.loader_el.classList.add('hidden');
@@ -567,6 +584,7 @@ function _onBothLoaded() {
       console.log('[Kitchen] behaviour wired ✓  !cook command active');
     });
     _initLoraWalk();
+    _initDogWalk();
   }, 400);
 }
 
@@ -617,7 +635,9 @@ _gltfLoader.load('/House.glb', (gltf) => {
     MISS_SPAWN_Z *= hScale;
     LORA_SPAWN_X *= hScale;
     LORA_SPAWN_Z *= hScale;
-    console.log(`[House] spawns scaled → Miss(${MISS_SPAWN_X.toFixed(2)},${MISS_SPAWN_Z.toFixed(2)}) Lora(${LORA_SPAWN_X.toFixed(2)},${LORA_SPAWN_Z.toFixed(2)})`);
+    DOG_SPAWN_X  *= hScale;
+    DOG_SPAWN_Z  *= hScale;
+    console.log(`[House] spawns scaled → Miss(${MISS_SPAWN_X.toFixed(2)},${MISS_SPAWN_Z.toFixed(2)}) Lora(${LORA_SPAWN_X.toFixed(2)},${LORA_SPAWN_Z.toFixed(2)}) Dog(${DOG_SPAWN_X.toFixed(2)},${DOG_SPAWN_Z.toFixed(2)})`);
 
     for (const roomDef of Object.values(_life.HOUSE)) {
       if (!roomDef.spots) continue;
@@ -656,10 +676,11 @@ _gltfLoader.load('/House.glb', (gltf) => {
       };
     }
     console.log(`[Kitchen] ${Object.keys(KITCHEN_PROP_WORLD).length} props registered at hScale=${hScale.toFixed(3)}`);  }
-  if (vrm || vrmMr) {
+  if (vrm || vrmMr || vrmDog) {
     requestAnimationFrame(() => {
-      if (vrm)   _finaliseVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
-      if (vrmMr) _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
+      if (vrm)    _finaliseVRM(vrm,    MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
+      if (vrmMr)  _finaliseVRM(vrmMr,  LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
+      if (vrmDog) _finaliseVRM(vrmDog, DOG_SPAWN_X,  DOG_SPAWN_Z,  DOG_FACE_Y);
       _cam?._snapCameraToVRM?.();
     });
   }
@@ -709,6 +730,32 @@ gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
 },
 (p) => _life.setProgress(Math.min(50 + (p.loaded/(p.total||1))*38, 88)),
 (err) => { console.error(err); _life.setStatus('Failed to load Lora VRM', 'error'); }
+);
+
+// ── Load Alakurin (dog) ───────────────────────────────────────────
+// He keeps his own baked textures — no colour-map recolouring like
+// Miss/Lora, just disable frustum culling so a moving quadruped at
+// the edge of frame doesn't pop in/out.
+const gltfLoaderDog = new GLTFLoader();
+gltfLoaderDog.register(parser => new VRMLoaderPlugin(parser));
+
+gltfLoaderDog.load(VRM_DOG_PATH, (gltf) => {
+  vrmDog = gltf.userData.vrm;
+  VRMUtils.removeUnnecessaryJoints(gltf.scene);
+  vrmDog.scene.traverse((obj) => { if (obj.isMesh) obj.frustumCulled = false; });
+  _finaliseVRM(vrmDog, DOG_SPAWN_X, DOG_SPAWN_Z, DOG_FACE_Y);
+  cacheBonesDog();
+  setRestPoseDog();
+  _dogLoaded = true;
+  _onBothLoaded();
+},
+undefined,
+(err) => {
+  console.error(err);
+  console.warn('[Dog] Failed to load Alakurin.vrm — is it in /public? Continuing without him.');
+  _dogLoaded = true; // don't block Miss/Lora's stream over a missing dog file
+  _onBothLoaded();
+}
 );
 
   _life.startRenderLoop();
@@ -888,4 +935,129 @@ function _updateLoraWalk(dt) {
   // which calls window._loraSetTarget via _loraGoToSpot with BFS door routing,
   // proper HOUSE spot facingY, yOffset, and ACTIVITY_MR callbacks.
   // Nothing to do here when idle.
+}
+
+// ================================================================
+//  ALAKURIN (DOG) INLINE WALK SYSTEM
+//  Position movement only — mirrors _updateLoraWalk above. The leg
+//  gait itself (dogGaitUpdate) lives in engine-dog.js and is driven
+//  from engine-life.js's render loop, same split as Lora/Miss.
+// ================================================================
+let _dogTarget   = null;
+let _dogWalking  = false;
+let _dogSpeedMode = 'trot'; // 'walk' | 'trot' | 'run' — set via window._dogSetTarget
+const _DOG_SPEED_MPS = { walk: 0.55, trot: 1.0, run: 1.8 };
+
+function _initDogWalk() {
+  if (!vrmDog) { setTimeout(_initDogWalk, 500); return; }
+
+  let _dogArrivalCb = null;
+
+  // Same BFS door-pathing helper as Lora's, reusing the shared
+  // ROOM_CONNECTIONS_REF (the house graph is identical for everyone).
+  function _dogFindPath(fromRoom, toRoom) {
+    const CONN = window.ROOM_CONNECTIONS_REF || {};
+    if (fromRoom === toRoom) return [];
+    const visited = new Set([fromRoom]);
+    const queue   = [[fromRoom, []]];
+    while (queue.length) {
+      const [room, path] = queue.shift();
+      const conns = CONN[room] || {};
+      for (const [nextRoom, doorWp] of Object.entries(conns)) {
+        if (visited.has(nextRoom)) continue;
+        const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
+        if (nextRoom === toRoom) return newPath;
+        visited.add(nextRoom);
+        queue.push([nextRoom, newPath]);
+      }
+    }
+    return [];
+  }
+
+  function _dogWalkThroughWaypoints(waypoints, finalX, finalZ, onArrival) {
+    if (!waypoints.length) {
+      _dogTarget    = { x: finalX, z: finalZ };
+      _dogWalking   = true;
+      _dogArrivalCb = onArrival || null;
+      return;
+    }
+    const [first, ...rest] = waypoints;
+    _dogTarget    = { x: first.waypoint.x, z: first.waypoint.z };
+    _dogWalking   = true;
+    _dogArrivalCb = () => _dogWalkThroughWaypoints(rest, finalX, finalZ, onArrival);
+  }
+
+  // engine-life's dog scheduler calls window._dogSetTarget(x, z, onArrival, fromRoom, toRoom, speedMode)
+  window._dogSetTarget = (x, z, onArrival, fromRoom, toRoom, speedMode) => {
+    _dogSpeedMode = speedMode || 'trot';
+    if (fromRoom && toRoom && fromRoom !== toRoom) {
+      const waypoints = _dogFindPath(fromRoom, toRoom);
+      if (waypoints.length) {
+        _dogWalkThroughWaypoints(waypoints, x, z, onArrival);
+        return;
+      }
+    }
+    _dogTarget    = { x, z };
+    _dogWalking   = true;
+    _dogArrivalCb = onArrival || null;
+  };
+
+  window._dogSetFacing = (facingY) => {
+    if (vrmDog) vrmDog.scene.rotation.y = facingY;
+  };
+
+  Object.defineProperty(window, '_dogArrivalCbRef', {
+    get: () => _dogArrivalCb,
+    set: (v) => { _dogArrivalCb = v; },
+    configurable: true,
+  });
+  Object.defineProperty(window, '_dogSpeedModeRef', {
+    get: () => _dogSpeedMode,
+    configurable: true,
+  });
+
+  let _lastT = performance.now();
+  function _dogTick() {
+    const now   = performance.now();
+    const delta = Math.min((now - _lastT) / 1000, 0.1);
+    _lastT      = now;
+    _updateDogWalk(delta);
+    requestAnimationFrame(_dogTick);
+  }
+  requestAnimationFrame(_dogTick);
+  console.log('[Dog Walk] inline system started ✓');
+}
+
+function _updateDogWalk(dt) {
+  if (!vrmDog) return;
+
+  if (_dogWalking && _dogTarget) {
+    window._dogWalking = true;
+    const pos   = vrmDog.scene.position;
+    const dx    = _dogTarget.x - pos.x;
+    const dz    = _dogTarget.z - pos.z;
+    const dist  = Math.sqrt(dx*dx + dz*dz);
+    const spd   = _DOG_SPEED_MPS[_dogSpeedMode] || _DOG_SPEED_MPS.trot;
+    const step  = spd * dt;
+
+    if (dist <= step + 0.05) {
+      pos.x        = _dogTarget.x;
+      pos.z        = _dogTarget.z;
+      _dogWalking  = false;
+      _dogTarget   = null;
+      window._dogWalking = false;
+      const cb = window._dogArrivalCbRef;
+      if (cb) { window._dogArrivalCbRef = null; cb(); }
+    } else {
+      // Dog model's forward convention — flip sign here if he walks backwards.
+      vrmDog.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
+      const moveX = (dx / dist) * step;
+      const moveZ = (dz / dist) * step;
+      const safe  = wallAwareStep(pos.x, pos.z, moveX, moveZ, AVATAR_RADIUS);
+      pos.x = safe.x;
+      pos.z = safe.z;
+    }
+    return;
+  }
+  // Idle — scheduling handled entirely by _dogLifeUpdate in engine-life.js.
 }
