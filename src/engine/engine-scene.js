@@ -532,7 +532,7 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
 }
 
 // ── VRM finalise (scale, floor, rotation) ────────────────────────
-function _finaliseVRM(v, spawnX, spawnZ, faceY) {
+function _finaliseVRM(v, spawnX, spawnZ, faceY, targetHeight = 1.65) {
   VRMUtils.rotateVRM0(v);
   v.scene.scale.set(1,1,1);
   v.scene.position.set(0,0,0);
@@ -542,7 +542,7 @@ function _finaliseVRM(v, spawnX, spawnZ, faceY) {
   const boxRaw    = new THREE.Box3().setFromObject(v.scene);
   const sizeRaw   = boxRaw.getSize(new THREE.Vector3());
   const centerRaw = boxRaw.getCenter(new THREE.Vector3());
-  const scaleVal  = 1.65 / sizeRaw.y;
+  const scaleVal  = targetHeight / sizeRaw.y;
   v.scene.scale.set(scaleVal, scaleVal, scaleVal);
   v.scene.position.set(-centerRaw.x * scaleVal, 0, -centerRaw.z * scaleVal);
 
@@ -680,7 +680,7 @@ _gltfLoader.load('/House.glb', (gltf) => {
     requestAnimationFrame(() => {
       if (vrm)    _finaliseVRM(vrm,    MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
       if (vrmMr)  _finaliseVRM(vrmMr,  LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-      if (vrmDog) _finaliseVRM(vrmDog, DOG_SPAWN_X,  DOG_SPAWN_Z,  DOG_FACE_Y);
+      if (vrmDog) _finaliseVRM(vrmDog, DOG_SPAWN_X,  DOG_SPAWN_Z,  DOG_FACE_Y, 0.72);
       _cam?._snapCameraToVRM?.();
     });
   }
