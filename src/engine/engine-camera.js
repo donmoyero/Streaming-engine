@@ -8,8 +8,22 @@
 //  resolveWallCollision() from engine-scene keeps it out of walls.
 // ================================================================
 
-import { camera, getVrm, getVrmLora, HOUSE_BOUNDS, resolveWallCollision } from './engine-scene.js';
-import { walk, getRoomPath, DOORS, HOUSE_GRAPH, vrmPos } from './engine-life.js';
+import { camera, getVrm, getVrmLora, resolveWallCollision } from './engine-scene.js';
+
+// NOTE: engine-life.js imports setCamMode/updateCamera/onActivityChanged/
+// setSleepMode FROM this file, so importing it back statically here would
+// create a circular import (engine-camera.js ⇄ engine-life.js). Turbopack's
+// static export analysis can misresolve that cycle and report real exports
+// (e.g. setTVOn) as missing. Load it dynamically once instead — walk,
+// getRoomPath, DOORS, and HOUSE_GRAPH are all stable references/objects
+// that are safe to read every frame once the import resolves.
+// (vrmPos and HOUSE_BOUNDS were imported but never used here — dropped.)
+let _life = null;
+(async () => { _life = await import('./engine-life.js'); })();
+
+// Safe accessor for walk — used every frame in updateCamera() below, so it
+// needs a harmless fallback for the brief window before _life resolves.
+function _getWalk() { return _life ? _life.walk : { active: false }; }
 
 // ── Wall-clamp margin ────────────────────────────────────────────
 const CAM_WALL_MARGIN = 1.6;
@@ -180,6 +194,8 @@ let _droneTargetRoom = null;
 const DRONE_SPEED   = 1.8;   // units per second — slightly faster than avatar walk
 
 function _buildDroneWaypoints(fromRoom, toRoom) {
+  if (!_life) return []; // life.js hasn't resolved yet — skip, room label still updates elsewhere
+  const { getRoomPath, DOORS, HOUSE_GRAPH } = _life;
   if (!fromRoom || !toRoom || fromRoom === toRoom) return [];
   if (!HOUSE_GRAPH[fromRoom] || !HOUSE_GRAPH[toRoom]) return [];
   const roomPath = getRoomPath(fromRoom, toRoom);
@@ -273,22 +289,22 @@ function _startDroneRoute(subjectRoom) {
   console.log(`[Camera] Routing ${_fmtRoom(_cameraRoom)} → ${_fmtRoom(subjectRoom)}`);
 }
 
+// ── Room bounding boxes ────────────────────────────────────────────
+// Shared by _getAvatarRoom() (below) and the cinematic orbit room-clamp.
+const _ROOM_BOUNDS = {
+  'living-room': { minX: -5.75, maxX: -0.25, minZ: -6.25, maxZ: -0.75 },
+  kitchen:       { minX: -6.05, maxX: -1.55, minZ: -1.25, maxZ:  3.25 },
+  dining:        { minX: -3.75, maxX: -0.25, minZ:  0.50, maxZ:  4.50 },
+  hallway:       { minX: -0.50, maxX:  1.70, minZ: -5.75, maxZ:  0.75 },
+  bedroom:       { minX:  1.55, maxX:  6.05, minZ: -5.00, maxZ:  1.00 },
+  bathroom:      { minX:  2.30, maxX:  5.30, minZ:  0.00, maxZ:  3.00 },
+  studio:        { minX: -3.95, maxX: -1.45, minZ: -5.25, maxZ: -2.75 },
+};
+
 // ── Determine which room the focused avatar is in ─────────────────
 // Uses the avatar's world-space X/Z against HOUSE room origin+size bounds.
 function _getAvatarRoom(x, z) {
-  // Import is not available at module level, so we check HOUSE bounds inline.
-  // HOUSE is not exported from engine-life so we replicate the bounds here
-  // using the same origin/size values defined in HOUSE.
-  const BOUNDS = {
-    'living-room': { minX: -5.75, maxX: -0.25, minZ: -6.25, maxZ: -0.75 },
-    kitchen:       { minX: -6.05, maxX: -1.55, minZ: -1.25, maxZ:  3.25 },
-    dining:        { minX: -3.75, maxX: -0.25, minZ:  0.50, maxZ:  4.50 },
-    hallway:       { minX: -0.50, maxX:  1.70, minZ: -5.75, maxZ:  0.75 },
-    bedroom:       { minX:  1.55, maxX:  6.05, minZ: -5.00, maxZ:  1.00 },
-    bathroom:      { minX:  2.30, maxX:  5.30, minZ:  0.00, maxZ:  3.00 },
-    studio:        { minX: -3.95, maxX: -1.45, minZ: -5.25, maxZ: -2.75 },
-  };
-  for (const [room, b] of Object.entries(BOUNDS)) {
+  for (const [room, b] of Object.entries(_ROOM_BOUNDS)) {
     if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return room;
   }
   return 'hallway'; // safe fallback — hallway connects everything
@@ -524,12 +540,12 @@ export function updateCamera(delta) {
   let df = rawFacing - _camFacingY;
   while (df >  Math.PI) df -= Math.PI * 2;
   while (df < -Math.PI) df += Math.PI * 2;
-  const facingLerp = walk.active ? 0.025 : 0.035;
+  const facingLerp = _getWalk().active ? 0.025 : 0.035;
   _camFacingY += df * Math.min(1, delta / facingLerp);
   _camFacingY  = ((_camFacingY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 
   // ── Angle dwell timer — suppressed while speaking (req 10) ───
-  if (camMode === 'IDLE' && !walk.active && !_speakLock) {
+  if (camMode === 'IDLE' && !_getWalk().active && !_speakLock) {
     _angleDwellTimer += delta * 1000;
     if (_angleDwellTimer >= _angleDwellDuration) {
       _angleDwellTimer    = 0;
@@ -575,7 +591,7 @@ export function updateCamera(delta) {
   const roomPreset     = _resolveRoomPreset(_cameraRoom, _currentActivity);
   const actMod         = ACTIVITY_CAM_MODIFIERS[_currentActivity];
 
-  if (walk.active) {
+  if (_getWalk().active) {
     interactionPreset = STREAMER_CAM.WALK;
     effectiveAngle    = ANGLE_PRESETS.FRONT; // was WIDE — FRONT tracks character safely
   } else if (camMode === 'SPEAK') {
@@ -622,6 +638,24 @@ export function updateCamera(delta) {
   tx = safe.x;
   tz = safe.z;
 
+  // ── Room containment (cinematic shots only) ────────────────────
+  // resolveWallCollision() leaves door gaps open so avatars can walk
+  // through them — but a cinematic orbit shot should never wander out
+  // through a doorway just because the angle lines up with one. Clamp
+  // the orbit target to the room the SUBJECT is actually standing in,
+  // not the camera's previous room, so a transition still lets the
+  // drone route between rooms (that path is handled separately below)
+  // while a normal orbit always frames from inside the subject's room.
+  if (!_droneActive) {
+    const subjectRoomNow = _getAvatarRoom(orbitX, orbitZ);
+    const rb = _ROOM_BOUNDS[subjectRoomNow];
+    if (rb) {
+      const rm = CAM_WALL_MARGIN; // keep the same margin used against interior walls
+      tx = Math.max(rb.minX + rm, Math.min(rb.maxX - rm, tx));
+      tz = Math.max(rb.minZ + rm, Math.min(rb.maxZ - rm, tz));
+    }
+  }
+
   // ── Drone in-transit: override XZ with waypoint path ─────────
   // Y and look-at still lerp to the subject so the avatar stays
   // visible throughout the transit. Only the camera's XZ position
@@ -635,7 +669,7 @@ export function updateCamera(delta) {
   }
 
   // ── Lerp ──────────────────────────────────────────────────────
-  const L = camMode === 'SPEAK' ? 0.09 : walk.active ? 0.03 : 0.018;
+  const L = camMode === 'SPEAK' ? 0.09 : _getWalk().active ? 0.03 : 0.018;
   const lf = Math.min(1, L * 60 * delta);
 
   // Look at midpoint when two-shot, otherwise focused character
