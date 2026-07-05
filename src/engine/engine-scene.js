@@ -1,41 +1,23 @@
 // ================================================================
-//  engine-scene.js  — DUAL AVATAR (Miss OG Tinz + Lora)
-//  Two best friends, different outfits, facing each other.
-//
-//  FIXES in this version:
-//  1. VRM_MR_BASE_ROT_Y = Math.PI  (Lora was facing backwards)
-//  2. LORA_FACE_Y corrected to Math.PI * 0.45
-//  3. _updateLoraWalk facing uses Math.atan2(dx,dz) + Math.PI
-//  4. _LORA_ROOMS corrected to actual house furniture positions
+//  engine-scene.js  — PODCAST DESK (Miss OG Tinz + Lora)
+//  Two hosts, seated at a desk, facing the camera. No house, no
+//  walking, no dog, no kitchen. Replaces the old House.glb rig.
 // ================================================================
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
-import { cacheBones, cacheBonesMr, setRestPose, setRestPoseMr, ACTIVITY } from './engine-bones.js';
-import { cacheBonesDog, setRestPoseDog } from './engine-dog.js';
+import { cacheBones, cacheBonesMr, setRestPose, setRestPoseMr, ACTIVITY, ACTIVITY_MR } from './engine-bones.js';
 
-// NOTE: engine-life.js imports renderer/scene/camera/etc. FROM this file,
-// so importing it back statically here would create a circular import
-// (engine-scene.js ⇄ engine-life.js). Turbopack's static export analysis
-// can misresolve that cycle and report real exports as missing. Instead
-// we load it dynamically once, inside startEngine(), after this module's
-// own exports (renderer, scene, camera, ...) are already in place.
+// engine-life.js imports renderer/scene/camera/etc. FROM this file, so a
+// static import back here would create a circular import. Loaded once,
+// dynamically, inside startEngine() after this module's own exports exist.
 let _life = null;
-
-// Same problem, one module over: engine-camera.js statically imports
-// camera/getVrm/getVrmLora/resolveWallCollision FROM this file, so a
-// static import of _snapCameraToVRM here would create a second circular
-// import (engine-scene.js ⇄ engine-camera.js). Loaded dynamically once
-// in startEngine() too. (setCamFacingY was imported but never used here
-// — dropped.)
-let _cam = null;
 
 // ── Config ──────────────────────────────────────────────────────
 export const VRM_PATH       = '/MissOgTinz_Master.vrm';
 export const VRM_LORA_PATH  = '/Lora_Master.vrm';
-export const VRM_DOG_PATH   = '/Alakurin.vrm';
 export const API_URL        = 'https://impactgrid-dijo.onrender.com/chat/message';
 export const PROACTIVE_URL  = 'https://impactgrid-dijo.onrender.com/chat/proactive';
 export const TOPIC_URL      = 'https://impactgrid-dijo.onrender.com/chat/topic/current';
@@ -43,10 +25,7 @@ export const USER_ID        = 'stream-viewer-' + Math.random().toString(36).slic
 export const TTS_URL        = 'https://impactgrid-dijo.onrender.com/tts';
 export const TWITCH_CHANNEL = 'Miss_ogtinz';
 
-// ── Elements — resolved lazily at init time (not at module parse time) ──
-// All getElementById and new THREE.WebGLRenderer calls MUST happen after
-// React has mounted the DOM. We expose them via module-level lets that are
-// populated by initScene(), which AvatarStage.tsx calls from useEffect.
+// ── Elements — resolved lazily at init time ──────────────────────
 export let canvas     = null;
 export let loader_el2 = null;
 export let bar_fill   = null;
@@ -81,15 +60,16 @@ export function initScene() {
   stageLight = document.getElementById('stage-light');
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setClearColor(0x080510, 1);
+  renderer.setClearColor(0x0c0a12, 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   scene  = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 999999);
-  camera.position.set(0, 1.55, 3.8);
-  camera.lookAt(0, 1.15, 0);
+  camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.01, 999999);
+  // Fixed two-shot: far enough back to frame both hosts at the desk.
+  camera.position.set(0, 1.5, 3.35);
+  camera.lookAt(0, 1.25, 0);
 
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -101,245 +81,133 @@ export function initScene() {
   ambient = new THREE.AmbientLight(0xffffff, 2.5);
   scene.add(ambient);
 
-  const keyLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
-  keyLight.position.set(1.5, 3, 2);
+  const keyLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
+  keyLight.position.set(1.5, 3, 2.5);
   scene.add(keyLight);
 
-  const fillLight = new THREE.DirectionalLight(0xffe0b0, 1.4);
-  fillLight.position.set(-2, 1, 1);
+  const fillLight = new THREE.DirectionalLight(0xffe0b0, 1.3);
+  fillLight.position.set(-2, 1.5, 1.5);
   scene.add(fillLight);
 
-  const rimLight = new THREE.DirectionalLight(0xffb830, 0.5);
-  rimLight.position.set(0, 2, -3);
+  const rimLight = new THREE.DirectionalLight(0xffb830, 0.6);
+  rimLight.position.set(0, 2.2, -2);
   scene.add(rimLight);
 
-  neonPink   = new THREE.PointLight(0xff2d78, 1.8, 12);
-  neonBlue   = new THREE.PointLight(0x00aaff, 1.5, 12);
-  neonPurple = new THREE.PointLight(0x9b30ff, 1.2, 10);
-  floorGlow  = new THREE.PointLight(0xff6a00, 0.4, 6);
-  neonPink.position.set(-4, 2.5, -3);   scene.add(neonPink);
-  neonBlue.position.set(4, 2.5, -3);    scene.add(neonBlue);
-  neonPurple.position.set(0, 3.5, -5);  scene.add(neonPurple);
-  floorGlow.position.set(0, 0.5, -1);   scene.add(floorGlow);
+  neonPink   = new THREE.PointLight(0xff2d78, 1.4, 10);
+  neonBlue   = new THREE.PointLight(0x00aaff, 1.2, 10);
+  neonPurple = new THREE.PointLight(0x9b30ff, 1.0, 8);
+  floorGlow  = new THREE.PointLight(0xff6a00, 0.35, 5);
+  neonPink.position.set(-3, 2.2, -2.2);   scene.add(neonPink);
+  neonBlue.position.set(3, 2.2, -2.2);    scene.add(neonBlue);
+  neonPurple.position.set(0, 3.0, -3.2);  scene.add(neonPurple);
+  floorGlow.position.set(0, 0.4, -0.6);   scene.add(floorGlow);
+
+  _buildDeskSet();
 } // ── end initScene() ──────────────────────────────────────────
 
-// Mesh refs
+// Mesh refs (kept for engine-bones.js compatibility)
 export let monitorMesh      = null;
 export let monitorGlowLight = null;
 export let keyboardMesh     = null;
 export let chairMesh        = null;
-export let roofMesh         = null;
-export const roomLights     = {};
 
-// ── House bounds ─────────────────────────────────────────────────
-export let _houseLoaded = false;
-export let _houseSpawnX = -2.7;
-export let _houseSpawnZ = -3.8;
-export let _houseFloorY = 0;
-export const HOUSE_BOUNDS  = { minX: -6.0, maxX: 6.0, minZ: -6.5, maxZ: 6.5 };
-export const AVATAR_RADIUS = 0.25;
+// ── Podcast desk set — desk, two chairs, monitor+PC, picture frame ──
+// Everything is placed directly, no GLB. Kept deliberately simple —
+// most of it sits below frame / behind the hosts anyway.
+function _buildDeskSet() {
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 14),
+    new THREE.MeshStandardMaterial({ color: 0x14101c, roughness: 0.85, metalness: 0.05 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
 
-// ── Interior wall segments (unscaled — multiplied by hScale on load) ─
-// Each entry: axis-aligned box { x0,z0 (min corner), x1,z1 (max corner) }
-// Derived from the GLB wall mesh map — walls that avatars must NOT cross.
-// Doors create gaps so the avatar walks THROUGH them, not through solid wall.
-export const INTERIOR_WALLS = [
-  // Vertical wall left side — living-room / studio separator (gap at z≈-2..−1 for door)
-  { x0: -1.65, z0: -6.0,  x1: -1.35, z1: -2.1  },   // south segment
-  { x0: -1.65, z0: -0.8,  x1: -1.35, z1:  2.0  },   // north segment (gap for door.001)
-  { x0: -1.65, z0:  2.4,  x1: -1.35, z1:  6.0  },   // top segment
-  // Vertical wall right side — hallway / bedroom separator
-  { x0:  1.65, z0: -6.0,  x1:  1.95, z1: -4.0  },   // south of door.006
-  { x0:  1.65, z0: -3.6,  x1:  1.95, z1: -1.9  },   // between door.006 & .007
-  { x0:  1.65, z0: -1.5,  x1:  1.95, z1:  0.55 },   // between door.007 & .005
-  { x0:  1.65, z0:  1.0,  x1:  1.95, z1:  6.0  },   // north of door.005
-  // Horizontal wall — kitchen / living-room divider (gap for door.002)
-  { x0: -6.0,  z0: -1.65, x1: -1.5,  z1: -1.35 },   // west of gap
-  // Horizontal wall — dining / hallway (gap for door.003)
-  { x0: -1.2,  z0:  1.85, x1:  1.65, z1:  2.15 },
-];
+  // Back wall
+  const wall = new THREE.Mesh(
+    new THREE.PlaneGeometry(14, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1b1626, roughness: 0.9 })
+  );
+  wall.position.set(0, 3, -2.4);
+  scene.add(wall);
 
-// ── Avatar wall-collision helper ─────────────────────────────────
-// Call after computing a new (x, z) position. Returns the position
-// pushed out of any interior wall it overlaps, then clamped to HOUSE_BOUNDS.
-export function resolveWallCollision(x, z, radius = AVATAR_RADIUS) {
-  let rx = x, rz = z;
-  for (const w of INTERIOR_WALLS) {
-    const nearX = Math.max(w.x0, Math.min(w.x1, rx));
-    const nearZ = Math.max(w.z0, Math.min(w.z1, rz));
-    const dx    = rx - nearX;
-    const dz    = rz - nearZ;
-    const dist  = Math.sqrt(dx * dx + dz * dz);
-    if (dist < radius && dist > 0.0001) {
-      // Push out of wall along shortest axis
-      const push = (radius - dist) / dist;
-      rx += dx * push;
-      rz += dz * push;
-    } else if (dist === 0) {
-      // Dead centre inside wall — push in Z
-      rz = rz < (w.z0 + w.z1) / 2 ? w.z0 - radius : w.z1 + radius;
-    }
-  }
-  const m = radius + 0.15;
-  rx = Math.max(HOUSE_BOUNDS.minX + m, Math.min(HOUSE_BOUNDS.maxX - m, rx));
-  rz = Math.max(HOUSE_BOUNDS.minZ + m, Math.min(HOUSE_BOUNDS.maxZ - m, rz));
-  return { x: rx, z: rz };
-}
-
-// ── Wall-aware movement step ──────────────────────────────────────
-// Tries the full move; if a wall blocks >20% of it, slides along
-// each axis independently so avatars glide around corners.
-export function wallAwareStep(curX, curZ, moveX, moveZ, radius = AVATAR_RADIUS) {
-  const full      = resolveWallCollision(curX + moveX, curZ + moveZ, radius);
-  const fullMoved = Math.abs(full.x - curX) + Math.abs(full.z - curZ);
-  const wanted    = Math.abs(moveX) + Math.abs(moveZ);
-  if (fullMoved >= wanted * 0.8) return full;
-  const slideX = resolveWallCollision(curX + moveX, curZ,          radius);
-  const slideZ = resolveWallCollision(curX,          curZ + moveZ, radius);
-  const dxX    = Math.abs(slideX.x - curX);
-  const dzZ    = Math.abs(slideZ.z - curZ);
-  return dxX >= dzZ ? slideX : slideZ;
-}
-
-// Scale interior walls after hScale is known (called once inside House.glb loader)
-function _scaleInteriorWalls(s) {
-  for (const w of INTERIOR_WALLS) {
-    w.x0 *= s; w.z0 *= s; w.x1 *= s; w.z1 *= s;
-  }
-}
-
-// Also expose on window so engine-life.js can call it without re-importing
-window.resolveWallCollision = resolveWallCollision;
-window.wallAwareStep        = wallAwareStep;
-
-// ── Kitchen prop positions (unscaled — multiplied by hScale on load) ─
-// Kitchen room: x ≈ -6.0 to -1.5,  z ≈ -1.35 to +6.5
-// Confirmed anchors from house comment:
-//   stove/counter [-4.18, 0.03]   sink [-4.85, -0.93]
-export const KITCHEN_PROPS = [
-  // ── STOVE SURFACE ───────────────────────────────────────────────
-  { id: 'frying-pan',        x: -4.18, z:  0.10, rotY: 0, surface: 'stove'   },
-  { id: 'pot',               x: -4.40, z:  0.10, rotY: 0, surface: 'stove'   },
-  { id: 'pot-stew',          x: -4.60, z:  0.10, rotY: 0, surface: 'stove'   },
-
-  // ── COUNTER (main prep zone, right of stove) ────────────────────
-  { id: 'cutting-board',     x: -3.80, z:  0.30, rotY: 0, surface: 'counter' },
-  { id: 'cutting-board-round', x: -3.60, z: 0.30, rotY: 0, surface: 'counter' },
-  { id: 'knife-block',       x: -3.20, z:  0.20, rotY: 0, surface: 'counter' },
-  { id: 'shaker-salt',       x: -3.50, z:  0.50, rotY: 0, surface: 'counter' },
-  { id: 'shaker-pepper',     x: -3.40, z:  0.50, rotY: 0, surface: 'counter' },
-  { id: 'bottle-oil',        x: -3.30, z:  0.40, rotY: 0, surface: 'counter' },
-  { id: 'bottle-ketchup',    x: -3.10, z:  0.40, rotY: 0, surface: 'counter' },
-  { id: 'bottle-musterd',    x: -3.00, z:  0.40, rotY: 0, surface: 'counter' },
-  { id: 'honey',             x: -2.90, z:  0.45, rotY: 0, surface: 'counter' },
-  { id: 'bread',             x: -3.70, z:  0.55, rotY: 0, surface: 'counter' },
-  { id: 'banana',            x: -3.00, z:  0.55, rotY: 0, surface: 'counter' },
-  { id: 'apple',             x: -2.90, z:  0.55, rotY: 0, surface: 'counter' },
-  { id: 'carrot',            x: -3.10, z:  0.55, rotY: 0, surface: 'counter' },
-  { id: 'celery-stick',      x: -3.20, z:  0.55, rotY: 0, surface: 'counter' },
-
-  // ── UTENSILS (resting near stove) ──────────────────────────────
-  { id: 'cooking-spatula',   x: -4.10, z:  0.45, rotY: 0, surface: 'counter' },
-  { id: 'cooking-spoon',     x: -4.00, z:  0.45, rotY: 0, surface: 'counter' },
-  { id: 'cooking-fork',      x: -3.90, z:  0.45, rotY: 0, surface: 'counter' },
-  { id: 'whisk',             x: -3.80, z:  0.45, rotY: 0, surface: 'counter' },
-
-  // ── SINK AREA ───────────────────────────────────────────────────
-  { id: 'bowl',              x: -4.85, z: -0.93, rotY: 0, surface: 'sink'    },
-
-  // ── FRIDGE (far left wall, cold storage) ───────────────────────
-  { id: 'egg',               x: -5.50, z:  0.50, rotY: 0, surface: 'fridge'  },
-  { id: 'bacon-raw',         x: -5.50, z:  0.70, rotY: 0, surface: 'fridge'  },
-  { id: 'carton',            x: -5.40, z:  0.60, rotY: 0, surface: 'fridge'  },
-  { id: 'carton-small',      x: -5.30, z:  0.60, rotY: 0, surface: 'fridge'  },
-  { id: 'tomato',            x: -5.50, z:  0.80, rotY: 0, surface: 'fridge'  },
-  { id: 'avocado',           x: -5.40, z:  0.80, rotY: 0, surface: 'fridge'  },
-  { id: 'cheese',            x: -5.30, z:  0.80, rotY: 0, surface: 'fridge'  },
-
-  // ── DINING / SERVING (island / table edge) ─────────────────────
-  { id: 'bowl-soup',         x: -2.50, z:  1.60, rotY: 0, surface: 'table'   },
-  { id: 'bowl-cereal',       x: -2.40, z:  1.60, rotY: 0, surface: 'table'   },
-  { id: 'cup-coffee',        x: -2.30, z:  1.60, rotY: 0, surface: 'table'   },
-  { id: 'cup-tea',           x: -2.20, z:  1.60, rotY: 0, surface: 'table'   },
-  { id: 'utensil-fork',      x: -2.60, z:  1.70, rotY: 0, surface: 'table'   },
-  { id: 'utensil-knife',     x: -2.55, z:  1.70, rotY: 0, surface: 'table'   },
-  { id: 'utensil-spoon',     x: -2.50, z:  1.70, rotY: 0, surface: 'table'   },
-];
-
-// Filled at house-load time (hScale applied). Used by kitchen-behaviour.js
-// for IK walk targets. Access via window.KITCHEN_PROP_WORLD['frying-pan'].
-export const KITCHEN_PROP_WORLD = {};
-window.KITCHEN_PROP_WORLD = KITCHEN_PROP_WORLD;
-
-// ── Door nodes — collected after GLB loads ────────────────────────
-// Keyed by mesh name → { node: THREE.Object3D, open: bool, hingeAxis: 'x'|'z' }
-export const DOOR_NODES = {};
-const DOOR_OPEN_ANGLE  = Math.PI / 2;   // 90° open
-
-export function toggleDoor(name) {
-  const d = DOOR_NODES[name];
-  if (!d) return;
-  d.open = !d.open;
-  const target = d.open ? DOOR_OPEN_ANGLE : 0;
-  _animateDoor(d, target);
-}
-
-export function openDoor(name)  { const d = DOOR_NODES[name]; if (d && !d.open)  { d.open = true;  _animateDoor(d, DOOR_OPEN_ANGLE); } }
-export function closeDoor(name) { const d = DOOR_NODES[name]; if (d && d.open)   { d.open = false; _animateDoor(d, 0); } }
-
-function _animateDoor(d, targetAngle) {
-  const start = d.node.rotation.y;
-  const diff  = targetAngle - start;
-  const STEPS = 30;
-  let step = 0;
-  function _step() {
-    step++;
-    const t = step / STEPS;
-    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-    d.node.rotation.y = start + diff * ease;
-    if (step < STEPS) requestAnimationFrame(_step);
-  }
-  requestAnimationFrame(_step);
-}
-
-// Collect door nodes from the loaded GLB scene
-function _collectDoors(houseScene) {
-  houseScene.traverse(n => {
-    if (!n.isMesh && !n.isObject3D) return;
-    if (/^dvere(\.\d+)?$/i.test(n.name)) {
-      DOOR_NODES[n.name] = { node: n, open: false };
-      console.log(`[Door] found ${n.name} at`, n.position);
-    }
+  // Desk — wide enough for both hosts, low enough to not block faces
+  const deskMat = new THREE.MeshStandardMaterial({ color: 0x2a1f14, roughness: 0.4, metalness: 0.2 });
+  const desk = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.9), deskMat);
+  desk.position.set(0, 0.78, -0.55);
+  scene.add(desk);
+  const deskLegGeo = new THREE.BoxGeometry(0.06, 0.78, 0.06);
+  [[-1.2,-0.9],[1.2,-0.9],[-1.2,-0.2],[1.2,-0.2]].forEach(([x,z]) => {
+    const leg = new THREE.Mesh(deskLegGeo, deskMat);
+    leg.position.set(x, 0.39, z);
+    scene.add(leg);
   });
-  console.log(`[Door] ${Object.keys(DOOR_NODES).length} doors indexed`);
+
+  // Monitor — glowing screen, center of desk
+  const monitorGroup = new THREE.Group();
+  const screenGeo = new THREE.PlaneGeometry(0.5, 0.3);
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: 0x0a0a12, emissive: 0x2a6bff, emissiveIntensity: 1.4, roughness: 0.3,
+  });
+  const screen = new THREE.Mesh(screenGeo, screenMat);
+  screen.position.set(0, 1.08, -0.85);
+  monitorGroup.add(screen);
+  const monitorStand = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.18, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+  );
+  monitorStand.position.set(0, 0.9, -0.85);
+  monitorGroup.add(monitorStand);
+  scene.add(monitorGroup);
+  monitorMesh = screen;
+
+  monitorGlowLight = new THREE.PointLight(0x3a7bff, 0.8, 2.5);
+  monitorGlowLight.position.set(0, 1.08, -0.7);
+  scene.add(monitorGlowLight);
+
+  // Keyboard prop (visual only)
+  keyboardMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35, 0.02, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 })
+  );
+  keyboardMesh.position.set(0, 0.815, -0.5);
+  scene.add(keyboardMesh);
+
+  // Picture frame on the back wall
+  const frameGroup = new THREE.Group();
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.6, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.35, metalness: 0.6 })
+  );
+  const art = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.78, 0.48),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a55, roughness: 0.8 })
+  );
+  art.position.z = 0.025;
+  frameGroup.add(frame, art);
+  frameGroup.position.set(-2.6, 2.9, -2.38);
+  scene.add(frameGroup);
+
+  // Two simple chairs (mostly hidden by seated hosts, kept minimal)
+  chairMesh = _buildChair(-0.62, 0);
+  _buildChair(0.62, 0);
 }
 
-// ── TV mesh ref — populated after house GLB loads ────────────────
-export let tvMesh = null;
-
-// Call this when any character starts/stops watching TV.
-// Finds the 'tv' node in House.glb and toggles its emissive glow
-// so the screen visually turns on/off.
-export function setTVOn(on) {
-  if (!tvMesh) return;
-  tvMesh.traverse(obj => {
-    if (!obj.isMesh) return;
-    if (!obj.material) return;
-    // Clone material once so we don't dirty the shared GLB material
-    if (!obj._tvMatCloned) {
-      obj.material = obj.material.clone();
-      obj._tvMatCloned = true;
-    }
-    if (on) {
-      // Bright blue-white screen glow
-      obj.material.emissive     = new THREE.Color(0x88aaff);
-      obj.material.emissiveIntensity = 1.8;
-    } else {
-      obj.material.emissive     = new THREE.Color(0x000000);
-      obj.material.emissiveIntensity = 0;
-    }
-    obj.material.needsUpdate = true;
-  });
+function _buildChair(x, z) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.6 });
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.42), mat);
+  seat.position.set(0, 0.44, 0);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.06), mat);
+  back.position.set(0, 0.7, -0.2);
+  const postGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.44, 8);
+  const post = new THREE.Mesh(postGeo, mat);
+  post.position.set(0, 0.22, 0);
+  group.add(seat, back, post);
+  group.position.set(x, 0, z);
+  scene.add(group);
+  return group;
 }
 
 export let vrm            = null;
@@ -347,83 +215,38 @@ export let VRM_BASE_ROT_Y = Math.PI;
 export function getVrm()   { return vrm; }
 export function _setVrm(v) { vrm = v; }
 
-// ── Lora VRM ref ─────────────────────────────────────────────────
+// ── Lora VRM ─────────────────────────────────────────────────────
 export let vrmMr             = null;
-// FIX: was 0 — Lora's model forward is +Z same as Miss, so needs Math.PI
 export let VRM_MR_BASE_ROT_Y = Math.PI;
 export function getVrmMr()   { return vrmMr; }
 export function getVrmLora() { return vrmMr; }
 export function _setVrmMr(v) { vrmMr = v; }
-
 window.getVrmLora = () => vrmMr;
 
-// ── Alakurin (dog) VRM ───────────────────────────────────────────
-export let vrmDog             = null;
-// Best-guess default — same convention as Miss/Lora. If he loads
-// facing backwards, this is the first thing to flip (add/remove Math.PI).
-export let VRM_DOG_BASE_ROT_Y = Math.PI;
-export function getVrmDog()   { return vrmDog; }
-export function _setVrmDog(v) { vrmDog = v; }
-window.getVrmDog = () => vrmDog;
-
-// ── Spawn positions ──────────────────────────────────────────────
-export let MISS_SPAWN_X = -2.2;
-export let MISS_SPAWN_Z = -3.2;
-export let LORA_SPAWN_X = -3.2;
-export let LORA_SPAWN_Z = -3.2;
-// Spawns just off to the side of Miss/Lora's spot, near the studio —
-// adjust freely, he wanders the whole house once the scheduler kicks in.
-export let DOG_SPAWN_X  = -2.7;
-export let DOG_SPAWN_Z  = -2.6;
-export const MISS_FACE_Y  =  Math.PI * 0.55;   // Miss faces left toward Lora
-// FIX: was -Math.PI * 0.55 — now offset by Math.PI to match corrected base rotation
-export const LORA_FACE_Y  =  Math.PI * 0.45;   // Lora faces right toward Miss
-export const DOG_FACE_Y   =  0;
-
-// ── Raycast floor helper ─────────────────────────────────────────
-function _rayFloor(spawnX, spawnZ) {
-  const offsets = [[0,0],[0.2,0],[-0.2,0],[0,0.2],[0,-0.2]];
-  const candidates = [];
-  for (const [ox, oz] of offsets) {
-    const ray = new THREE.Raycaster(
-      new THREE.Vector3(spawnX + ox, 50, spawnZ + oz),
-      new THREE.Vector3(0, -1, 0), 0, 100
-    );
-    const hits = ray.intersectObjects(scene.children, true)
-      .filter(h => h.object.isMesh)
-      .sort((a, b) => b.point.y - a.point.y);
-    if (hits.length > 0) {
-      const y = hits[0].point.y;
-      if (y > -0.5 && y < 5) candidates.push(y);
-    }
-  }
-  if (!candidates.length) return _houseFloorY;
-  candidates.sort((a, b) => a - b);
-  return candidates[Math.floor(candidates.length / 2)];
-}
+// ── Seat positions — both hosts facing the camera (+Z), either side
+// of the desk. yOffset (-0.39) matches the sofaSit bone pose's hip
+// bend so the seated pose lines up with the chair's seat height —
+// same value the original house rig used for its sofa/chair spots.
+export const MISS_SEAT_X = -0.62, MISS_SEAT_Z = 0.15;
+export const LORA_SEAT_X =  0.62, LORA_SEAT_Z = 0.15;
+export const SEAT_FACE_Y = 0;          // facing +Z, straight at camera
+const SEAT_Y_OFFSET      = -0.39;
 
 export function _placeVRMOnFloor() {
-  _placeOneVRM(vrm,   MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
-  _placeOneVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-  _cam?._snapCameraToVRM?.();
+  _placeOneVRM(vrm,   MISS_SEAT_X, MISS_SEAT_Z, SEAT_FACE_Y);
+  _placeOneVRM(vrmMr, LORA_SEAT_X, LORA_SEAT_Z, SEAT_FACE_Y);
 }
 
 function _placeOneVRM(v, spawnX, spawnZ, faceY) {
   if (!v) return;
-  const floorY   = _rayFloor(spawnX, spawnZ);
   const safeFeet = (v._feetOffset ?? 0) < 0.05 ? 0.82 : v._feetOffset;
-  const finalY   = floorY + safeFeet;
+  const finalY   = safeFeet + SEAT_Y_OFFSET;
   v.scene.position.set(spawnX, finalY, spawnZ);
   v._restPosY        = finalY;
   v.scene.rotation.y = faceY;
 }
 
-// ── Miss OG Tinz colour map ──────────────────────────────────────
-// node name  →  mesh name  (for reference)
-// Julie_Figure → Julie_Figuremesh   Brow → Browmesh   Teargum → Teargummesh
-// Ear_Jewel → Ear_Jewelmesh   Lashes → Lashesmesh   Teeth → Teethmesh
-// Hair_Block → Hair_Blockmesh   Top → Topmesh   Bottom → Bottommesh
-// Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Necklecemesh
+// ── Miss OG Tinz colour map (unchanged from the house build) ─────
 const MISS_COLOURS = {
   Julie_Figure: { hex: 0x7B3F00, isSkin: true              },
   Brow:         { hex: 0x1a0a00, isSkin: false             },
@@ -439,12 +262,7 @@ const MISS_COLOURS = {
   Necklece:     { hex: 0xFFD700, isSkin: false, metallic: true },
 };
 
-// ── Lora colour map ──────────────────────────────────────────────
-// node name  →  mesh name  (for reference)
-// Mr_OgTinz_Figure → Figure_mesh   Brow → Browmesh   Teargum → Teargummesh
-// Ear_Jewel → Ear_mesh   Lashes → Lashes_mesh   Teeth → Teethmesh
-// Hair_Block → Hair_mesh   Top → Shirt_mesh   Bottom → Trousers_mesh
-// Shoe_R → Shoe_Rmesh   Shoe_L → Shoe_Lmesh   Necklece → Chain_mesh
+// ── Lora colour map (unchanged) ───────────────────────────────────
 const LORA_COLOURS = {
   Mr_OgTinz_Figure: { hex: 0xc68642, isSkin: true              },
   Brow:             { hex: 0x2a1500, isSkin: false             },
@@ -531,7 +349,7 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
   });
 }
 
-// ── VRM finalise (scale, floor, rotation) ────────────────────────
+// ── VRM finalise (scale + seat) ───────────────────────────────────
 function _finaliseVRM(v, spawnX, spawnZ, faceY, targetHeight = 1.65) {
   VRMUtils.rotateVRM0(v);
   v.scene.scale.set(1,1,1);
@@ -552,512 +370,79 @@ function _finaliseVRM(v, spawnX, spawnZ, faceY, targetHeight = 1.65) {
   const feetOffset = Math.max(0, -boxPosed.min.y);
   v._feetOffset    = feetOffset;
 
-  const floorY   = _houseLoaded ? _rayFloor(spawnX, spawnZ) : _houseFloorY;
-  const safeFeet = feetOffset < 0.05 ? 0.82 : feetOffset;
-  const finalY   = floorY + safeFeet;
+  const finalY   = feetOffset + SEAT_Y_OFFSET;
   v.scene.position.set(spawnX, finalY, spawnZ);
   v._restPosY        = finalY;
   v.scene.rotation.y = faceY;
-  console.log(`[VRM] placed at (${spawnX},${finalY.toFixed(3)},${spawnZ}) faceY=${faceY.toFixed(3)}`);
+  console.log(`[VRM] seated at (${spawnX},${finalY.toFixed(3)},${spawnZ}) faceY=${faceY.toFixed(3)}`);
 }
 
 // ── Load state ───────────────────────────────────────────────────
 let _missLoaded = false;
 let _loraLoaded = false;
-let _dogLoaded  = false;
 
 function _onBothLoaded() {
-  if (!_missLoaded || !_loraLoaded || !_dogLoaded) return;
+  if (!_missLoaded || !_loraLoaded) return;
   _life.setProgress(100);
   setTimeout(() => {
     _life.loader_el.classList.add('hidden');
     _life.setStatus('Ready ✦', 'ready');
-    _life.showBubble("Heyyy welcome to the stream!! 🎉💕", "Miss OG Tinz");
+    _life.showBubble("Heyyy! Welcome to the stream!!", "Miss OG Tinz");
     setTimeout(() => _life.speak("Heyyy welcome to the stream!!", 'happy'), 600);
     _life.initUI();
     _life.startTopicPolling();
     _life._initDeadAir();
     _life.initTwitchChat();
     import('./engine-bff.js').then(m => m.startCoupleEngine());
-    import('./kitchen/kitchen-behaviour.js').then(m => {
-      window._handleCookCommand = m.handleCookCommand;
-      console.log('[Kitchen] behaviour wired ✓  !cook command active');
-    });
-    _initLoraWalk();
-    _initDogWalk();
   }, 400);
 }
 
 // ── startEngine() — called from AvatarStage.tsx useEffect ────────
-// All loading must happen AFTER initScene() has run (renderer/scene exist).
 export async function startEngine() {
   _life = await import('./engine-life.js');
-  _cam  = await import('./engine-camera.js');
 
-// ── House GLB loader ─────────────────────────────────────────────
-const _gltfLoader = new GLTFLoader();
+  // ── Load Miss OG Tinz ────────────────────────────────────────────
+  const gltfLoader = new GLTFLoader();
+  gltfLoader.register(parser => new VRMLoaderPlugin(parser));
+  _life.setProgress(10);
+  _life.setStatus('Loading Miss OG Tinz...');
 
-_gltfLoader.load('/House.glb', (gltf) => {
-  const house   = gltf.scene;
-  scene.add(house);
-  const rawBox  = new THREE.Box3().setFromObject(house);
-  const rawSize = rawBox.getSize(new THREE.Vector3());
-  const hScale  = 16 / Math.max(rawSize.x, rawSize.z);
-  house.scale.setScalar(hScale);
-  const sBox    = new THREE.Box3().setFromObject(house);
-  const sCenter = sBox.getCenter(new THREE.Vector3());
-  house.position.set(-sCenter.x, -sBox.min.y, -sCenter.z);
-  const finalBox = new THREE.Box3().setFromObject(house);
-  _houseFloorY   = finalBox.min.y + (finalBox.max.y - finalBox.min.y) * 0.05;
-  if (_houseFloorY < 0 || isNaN(_houseFloorY)) _houseFloorY = 0;
-  HOUSE_BOUNDS.minX = -5.195 * hScale * 0.96;
-  HOUSE_BOUNDS.maxX =  5.203 * hScale * 0.96;
-  HOUSE_BOUNDS.minZ = -5.460 * hScale * 0.96;
-  HOUSE_BOUNDS.maxZ =  5.540 * hScale * 0.96;
-  house.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-  house.traverse(n => {
-    if (n.isMesh && /roof|strecha|ceiling|dach|techo|plafond/i.test(n.name)) {
-      roofMesh = n;
-    }
-  });
-  _collectDoors(house);
+  gltfLoader.load(VRM_PATH, (gltf) => {
+    _life.setProgress(50);
+    vrm = gltf.userData.vrm;
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+    applyVRMColours(vrm, MISS_COLOURS, false);
+    _finaliseVRM(vrm, MISS_SEAT_X, MISS_SEAT_Z, SEAT_FACE_Y);
+    cacheBones();
+    setRestPose();
+    ACTIVITY.current = 'sofaSit'; ACTIVITY.timer = 0; ACTIVITY.duration = 3;
+    _missLoaded = true;
+    _life.setStatus('Loading Lora...');
+    _onBothLoaded();
+  },
+  (p) => _life.setProgress(Math.min(10 + (p.loaded/(p.total||1))*40, 50)),
+  (err) => { console.error(err); _life.setStatus('Failed to load Miss VRM', 'error'); }
+  );
 
-  // ── Collect TV mesh (node name 'tv' in House.glb) ─────────────
-  house.traverse(n => {
-    if (n.name === 'tv') { tvMesh = n; console.log('[TV] mesh found ✓'); }
-  });
-  _houseLoaded = true;
-  if (!window._houseScaled) {
-    window._houseScaled = true;
-    _scaleInteriorWalls(hScale);
+  // ── Load Lora ────────────────────────────────────────────────────
+  const gltfLoaderLora = new GLTFLoader();
+  gltfLoaderLora.register(parser => new VRMLoaderPlugin(parser));
 
-    MISS_SPAWN_X *= hScale;
-    MISS_SPAWN_Z *= hScale;
-    LORA_SPAWN_X *= hScale;
-    LORA_SPAWN_Z *= hScale;
-    DOG_SPAWN_X  *= hScale;
-    DOG_SPAWN_Z  *= hScale;
-    console.log(`[House] spawns scaled → Miss(${MISS_SPAWN_X.toFixed(2)},${MISS_SPAWN_Z.toFixed(2)}) Lora(${LORA_SPAWN_X.toFixed(2)},${LORA_SPAWN_Z.toFixed(2)}) Dog(${DOG_SPAWN_X.toFixed(2)},${DOG_SPAWN_Z.toFixed(2)})`);
-
-    for (const roomDef of Object.values(_life.HOUSE)) {
-      if (!roomDef.spots) continue;
-      for (const spot of roomDef.spots) {
-        spot.x *= hScale; spot.z *= hScale;
-        const m = AVATAR_RADIUS + 0.3;
-        spot.x = Math.max(HOUSE_BOUNDS.minX+m, Math.min(HOUSE_BOUNDS.maxX-m, spot.x));
-        spot.z = Math.max(HOUSE_BOUNDS.minZ+m, Math.min(HOUSE_BOUNDS.maxZ-m, spot.z));
-      }
-      if (roomDef.origin) { roomDef.origin.x *= hScale; roomDef.origin.z *= hScale; }
-    }
-    for (const wp of Object.values(_life.ROOM_WAYPOINT_DEFS)) { wp.x *= hScale; wp.z *= hScale; }
-    // Scale Lora room destinations once, alongside all other coords
-    if (!window._loraRoomsScaled) {
-      window._loraRoomsScaled = true;
-      for (const r of _LORA_ROOMS) { r.x *= hScale; r.z *= hScale; }
-    }
-    if (window.ROOM_CONNECTIONS_REF) {
-      for (const targets of Object.values(window.ROOM_CONNECTIONS_REF)) {
-        for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
-      }
-    }
-    if (window.LORA_ROOM_CONNECTIONS_REF) {
-      for (const targets of Object.values(window.LORA_ROOM_CONNECTIONS_REF)) {
-        for (const wp of Object.values(targets)) { wp.x *= hScale; wp.z *= hScale; }
-      }
-    }
-
-    // ── Scale kitchen prop positions and populate world lookup ────
-    for (const prop of KITCHEN_PROPS) {
-      KITCHEN_PROP_WORLD[prop.id] = {
-        x:       prop.x * hScale,
-        z:       prop.z * hScale,
-        rotY:    prop.rotY,
-        surface: prop.surface,
-      };
-    }
-    console.log(`[Kitchen] ${Object.keys(KITCHEN_PROP_WORLD).length} props registered at hScale=${hScale.toFixed(3)}`);  }
-  if (vrm || vrmMr || vrmDog) {
-    requestAnimationFrame(() => {
-      if (vrm)    _finaliseVRM(vrm,    MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
-      if (vrmMr)  _finaliseVRM(vrmMr,  LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-      if (vrmDog) _finaliseVRM(vrmDog, DOG_SPAWN_X,  DOG_SPAWN_Z,  DOG_FACE_Y, 0.72);
-      _cam?._snapCameraToVRM?.();
-    });
-  }
-  console.log(`[House] loaded ✓  scale=${hScale.toFixed(3)}`);
-},
-(xhr) => _life.setProgress(Math.round(xhr.loaded / xhr.total * 100)),
-(err) => console.warn('[House] GLB load failed:', err)
-);
-
-// ── Load Miss OG Tinz ────────────────────────────────────────────
-const gltfLoader = new GLTFLoader();
-gltfLoader.register(parser => new VRMLoaderPlugin(parser));
-_life.setProgress(10);
-_life.setStatus('Loading Miss OG Tinz...');
-
-gltfLoader.load(VRM_PATH, (gltf) => {
-  _life.setProgress(50);
-  vrm = gltf.userData.vrm;
-  VRMUtils.removeUnnecessaryJoints(gltf.scene);
-  applyVRMColours(vrm, MISS_COLOURS, false);
-  _finaliseVRM(vrm, MISS_SPAWN_X, MISS_SPAWN_Z, MISS_FACE_Y);
-  cacheBones();
-  setRestPose();
-  ACTIVITY.current = 'idle'; ACTIVITY.timer = 0; ACTIVITY.duration = 3;
-  _missLoaded = true;
-  _life.setStatus('Loading Lora...');
-  _onBothLoaded();
-},
-(p) => _life.setProgress(Math.min(10 + (p.loaded/(p.total||1))*35, 45)),
-(err) => { console.error(err); _life.setStatus('Failed to load Miss VRM', 'error'); }
-);
-
-// ── Load Lora ────────────────────────────────────────────────────
-const gltfLoaderLora = new GLTFLoader();
-gltfLoaderLora.register(parser => new VRMLoaderPlugin(parser));
-
-gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
-  _life.setProgress(90);
-  vrmMr = gltf.userData.vrm;
-  VRMUtils.removeUnnecessaryJoints(gltf.scene);
-  applyVRMColours(vrmMr, LORA_COLOURS, true);
-  _finaliseVRM(vrmMr, LORA_SPAWN_X, LORA_SPAWN_Z, LORA_FACE_Y);
-  cacheBonesMr();
-  setRestPoseMr();
-  _loraLoaded = true;
-  _onBothLoaded();
-},
-(p) => _life.setProgress(Math.min(50 + (p.loaded/(p.total||1))*38, 88)),
-(err) => { console.error(err); _life.setStatus('Failed to load Lora VRM', 'error'); }
-);
-
-// ── Load Alakurin (dog) ───────────────────────────────────────────
-// He keeps his own baked textures — no colour-map recolouring like
-// Miss/Lora, just disable frustum culling so a moving quadruped at
-// the edge of frame doesn't pop in/out.
-const gltfLoaderDog = new GLTFLoader();
-gltfLoaderDog.register(parser => new VRMLoaderPlugin(parser));
-
-gltfLoaderDog.load(VRM_DOG_PATH, (gltf) => {
-  vrmDog = gltf.userData.vrm;
-  VRMUtils.removeUnnecessaryJoints(gltf.scene);
-  vrmDog.scene.traverse((obj) => { if (obj.isMesh) obj.frustumCulled = false; });
-  _finaliseVRM(vrmDog, DOG_SPAWN_X, DOG_SPAWN_Z, DOG_FACE_Y);
-  cacheBonesDog();
-  setRestPoseDog();
-  _dogLoaded = true;
-  _onBothLoaded();
-},
-undefined,
-(err) => {
-  console.error(err);
-  console.warn('[Dog] Failed to load Alakurin.vrm — is it in /public? Continuing without him.');
-  _dogLoaded = true; // don't block Miss/Lora's stream over a missing dog file
-  _onBothLoaded();
-}
-);
+  gltfLoaderLora.load(VRM_LORA_PATH, (gltf) => {
+    _life.setProgress(90);
+    vrmMr = gltf.userData.vrm;
+    VRMUtils.removeUnnecessaryJoints(gltf.scene);
+    applyVRMColours(vrmMr, LORA_COLOURS, true);
+    _finaliseVRM(vrmMr, LORA_SEAT_X, LORA_SEAT_Z, SEAT_FACE_Y);
+    cacheBonesMr();
+    setRestPoseMr();
+    ACTIVITY_MR.current = 'sofaSit'; ACTIVITY_MR.timer = 0; ACTIVITY_MR.duration = 3;
+    _loraLoaded = true;
+    _onBothLoaded();
+  },
+  (p) => _life.setProgress(Math.min(50 + (p.loaded/(p.total||1))*40, 90)),
+  (err) => { console.error(err); _life.setStatus('Failed to load Lora VRM', 'error'); }
+  );
 
   _life.startRenderLoop();
 } // ── end startEngine() ────────────────────────────────────────
-
-// ================================================================
-//  LORA INLINE WALK SYSTEM
-// ================================================================
-
-// FIX: All room coordinates corrected to match actual house furniture positions.
-//
-// House coordinate reference (unscaled, before hScale multiply):
-//   X axis: -6 left (kitchen) ←→ +6 right (bedroom)
-//   Z axis: -6 back (TV wall) ←→ +6 front (windows)
-//
-//   living-room:  sofa [-4.16,-4.42]  coffee table [-3.04,-3.68]  TV [-1.93,-4.46]
-//   kitchen:      stove/counter [-4.18, 0.03]  sink [-4.85,-0.93]
-//   dining:       tables [-2.29,1.58] [-2.13,3.26]  chairs cluster [-2.5,1.5]
-//   hallway:      door junction [0.6,-2.0] — between all rooms
-//   bedroom:      closets [2.76,-0.84] [4.36,2.39]  rug [3.21,0.86]
-//   bathroom:     right front zone [3.8, 1.5]
-//   studio:       spawn area near TV wall [-2.5,-3.5]
-
-const _LORA_ROOMS = [
-  { name: 'studio',      x: -2.5, z: -3.5 },  // spawn area, TV wall — ✅ was correct
-  { name: 'livingRoom',  x: -3.0, z: -3.8 },  // sofa + coffee table — ✅ was close
-  { name: 'kitchen',     x: -4.0, z:  0.3 },  // FIX: was [2.8,-3.5] (bedroom area)
-  { name: 'dining',      x: -2.0, z:  2.5 },  // FIX: was missing — tables + chairs
-  { name: 'hallway',     x:  0.6, z: -1.8 },  // door junction — ✅ was close
-  { name: 'bedroom',     x:  3.5, z: -1.0 },  // FIX: was [-3.0,1.8] (dining area)
-  { name: 'bathroom',    x:  3.8, z:  1.5 },  // FIX: was missing — right front zone
-];
-
-let _loraRoom    = 0;
-let _loraTarget  = null;
-let _loraWalking = false;
-let _loraMoveT   = 0;
-let _loraOrigin  = null;
-let _loraIdleT   = 0;
-const _LORA_IDLE_MIN = 12;
-const _LORA_IDLE_MAX = 28;
-const _LORA_WALK_SPD = 0.9;   // m/s
-
-function _loraPickNextRoom() {
-  const options = _LORA_ROOMS.filter((_, i) => i !== _loraRoom);
-  const next    = options[Math.floor(Math.random() * options.length)];
-  _loraRoom = _LORA_ROOMS.indexOf(next);
-  return next;
-}
-
-function _initLoraWalk() {
-  if (!vrmMr) { setTimeout(_initLoraWalk, 500); return; }
-  // _LORA_ROOMS are scaled at house-load time — nothing to do here.
-  _loraIdleT = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
-  let _lastT  = performance.now();
-
-  function _loraTick() {
-    const now   = performance.now();
-    const delta = Math.min((now - _lastT) / 1000, 0.1);
-    _lastT      = now;
-    _updateLoraWalk(delta);
-    requestAnimationFrame(_loraTick);
-  }
-  requestAnimationFrame(_loraTick);
-  console.log('[Lora Walk] inline system started ✓  rooms:', _LORA_ROOMS.map(r => r.name).join(', '));
-
-  // ── Cross-module bridge for engine-life's Lora scheduler ──────
-  // engine-life._loraGoToSpot() calls window._loraSetTarget(x, z, onArrival)
-  // to hand off movement to this walk system, then gets a callback on arrival.
-  let _loraArrivalCb = null;
-
-  // BFS door-path helper — mirrors engine-life's findRoomPath but
-  // uses the shared ROOM_CONNECTIONS_REF so scaled waypoints are used.
-  function _loraFindPath(fromRoom, toRoom) {
-    const CONN = window.ROOM_CONNECTIONS_REF || {};
-    if (fromRoom === toRoom) return [];
-    const visited = new Set([fromRoom]);
-    const queue   = [[fromRoom, []]];
-    while (queue.length) {
-      const [room, path] = queue.shift();
-      const conns = CONN[room] || {};
-      for (const [nextRoom, doorWp] of Object.entries(conns)) {
-        if (visited.has(nextRoom)) continue;
-        const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
-        if (nextRoom === toRoom) return newPath;
-        visited.add(nextRoom);
-        queue.push([nextRoom, newPath]);
-      }
-    }
-    return [];
-  }
-
-  // Walk Lora through a sequence of door waypoints then to the final spot.
-  // Mirrors engine-life's walkThroughWaypoints but uses Lora's own walk state.
-  function _loraWalkThroughWaypoints(waypoints, finalX, finalZ, onArrival) {
-    if (!waypoints.length) {
-      // Final leg — walk straight to destination
-      _loraTarget    = { x: finalX, z: finalZ };
-      _loraWalking   = true;
-      _loraArrivalCb = onArrival || null;
-      return;
-    }
-    const [first, ...rest] = waypoints;
-    _loraTarget    = { x: first.waypoint.x, z: first.waypoint.z };
-    _loraWalking   = true;
-    _loraArrivalCb = () => {
-      // Update Lora's tracked room in engine-life
-      if (window._loraCurrentRoomRef !== undefined) window._loraCurrentRoomRef = first.throughRoom;
-      _loraWalkThroughWaypoints(rest, finalX, finalZ, onArrival);
-    };
-  }
-
-  window._loraSetTarget = (x, z, onArrival, fromRoom, toRoom) => {
-    // If room info is provided, use BFS door pathfinding.
-    // engine-life._loraGoToSpot passes fromRoom = _loraCurrentRoom, toRoom = spot.room.
-    if (fromRoom && toRoom && fromRoom !== toRoom) {
-      const waypoints = _loraFindPath(fromRoom, toRoom);
-      if (waypoints.length) {
-        _loraWalkThroughWaypoints(waypoints, x, z, onArrival);
-        return;
-      }
-    }
-    // Same room or no path found — walk direct (original behaviour)
-    _loraTarget    = { x, z };
-    _loraWalking   = true;
-    _loraArrivalCb = onArrival || null;
-  };
-
-  window._loraSetFacing = (facingY) => {
-    if (vrmMr) vrmMr.scene.rotation.y = facingY;
-  };
-
-  // Patch _updateLoraWalk to fire arrival callback
-  const _origUpdate = _updateLoraWalk;
-  Object.defineProperty(window, '_loraArrivalCbRef', {
-    get: () => _loraArrivalCb,
-    set: (v) => { _loraArrivalCb = v; },
-    configurable: true,
-  });
-}
-
-function _updateLoraWalk(dt) {
-  if (!vrmMr) return;
-
-  if (_loraWalking && _loraTarget) {
-    window._loraWalking = true;
-    const pos   = vrmMr.scene.position;
-    const dx    = _loraTarget.x - pos.x;
-    const dz    = _loraTarget.z - pos.z;
-    const dist  = Math.sqrt(dx*dx + dz*dz);
-    const step  = _LORA_WALK_SPD * dt;
-
-    if (dist <= step + 0.05) {
-      // Arrived
-      pos.x         = _loraTarget.x;
-      pos.z         = _loraTarget.z;
-    _loraWalking  = false;
-    _loraTarget   = null;
-    _loraIdleT    = _LORA_IDLE_MIN + Math.random() * (_LORA_IDLE_MAX - _LORA_IDLE_MIN);
-    window._loraWalking = false;
-      // Fire engine-life arrival callback if one was set
-      const cb = window._loraArrivalCbRef;
-      if (cb) { window._loraArrivalCbRef = null; cb(); }
-    } else {
-      // FIX: was Math.atan2(dx,dz) — Lora's forward is +PI offset from raw atan2
-      vrmMr.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
-      const moveX = (dx / dist) * step;
-      const moveZ = (dz / dist) * step;
-      const safe  = wallAwareStep(pos.x, pos.z, moveX, moveZ, AVATAR_RADIUS);
-      pos.x = safe.x;
-      pos.z = safe.z;
-    }
-    return;
-  }
-
-  // Scheduling is handled entirely by _loraLifeUpdate in engine-life.js,
-  // which calls window._loraSetTarget via _loraGoToSpot with BFS door routing,
-  // proper HOUSE spot facingY, yOffset, and ACTIVITY_MR callbacks.
-  // Nothing to do here when idle.
-}
-
-// ================================================================
-//  ALAKURIN (DOG) INLINE WALK SYSTEM
-//  Position movement only — mirrors _updateLoraWalk above. The leg
-//  gait itself (dogGaitUpdate) lives in engine-dog.js and is driven
-//  from engine-life.js's render loop, same split as Lora/Miss.
-// ================================================================
-let _dogTarget   = null;
-let _dogWalking  = false;
-let _dogSpeedMode = 'trot'; // 'walk' | 'trot' | 'run' — set via window._dogSetTarget
-const _DOG_SPEED_MPS = { walk: 0.55, trot: 1.0, run: 1.8 };
-
-function _initDogWalk() {
-  if (!vrmDog) { setTimeout(_initDogWalk, 500); return; }
-
-  let _dogArrivalCb = null;
-
-  // Same BFS door-pathing helper as Lora's, reusing the shared
-  // ROOM_CONNECTIONS_REF (the house graph is identical for everyone).
-  function _dogFindPath(fromRoom, toRoom) {
-    const CONN = window.ROOM_CONNECTIONS_REF || {};
-    if (fromRoom === toRoom) return [];
-    const visited = new Set([fromRoom]);
-    const queue   = [[fromRoom, []]];
-    while (queue.length) {
-      const [room, path] = queue.shift();
-      const conns = CONN[room] || {};
-      for (const [nextRoom, doorWp] of Object.entries(conns)) {
-        if (visited.has(nextRoom)) continue;
-        const newPath = [...path, { throughRoom: nextRoom, waypoint: doorWp }];
-        if (nextRoom === toRoom) return newPath;
-        visited.add(nextRoom);
-        queue.push([nextRoom, newPath]);
-      }
-    }
-    return [];
-  }
-
-  function _dogWalkThroughWaypoints(waypoints, finalX, finalZ, onArrival) {
-    if (!waypoints.length) {
-      _dogTarget    = { x: finalX, z: finalZ };
-      _dogWalking   = true;
-      _dogArrivalCb = onArrival || null;
-      return;
-    }
-    const [first, ...rest] = waypoints;
-    _dogTarget    = { x: first.waypoint.x, z: first.waypoint.z };
-    _dogWalking   = true;
-    _dogArrivalCb = () => _dogWalkThroughWaypoints(rest, finalX, finalZ, onArrival);
-  }
-
-  // engine-life's dog scheduler calls window._dogSetTarget(x, z, onArrival, fromRoom, toRoom, speedMode)
-  window._dogSetTarget = (x, z, onArrival, fromRoom, toRoom, speedMode) => {
-    _dogSpeedMode = speedMode || 'trot';
-    if (fromRoom && toRoom && fromRoom !== toRoom) {
-      const waypoints = _dogFindPath(fromRoom, toRoom);
-      if (waypoints.length) {
-        _dogWalkThroughWaypoints(waypoints, x, z, onArrival);
-        return;
-      }
-    }
-    _dogTarget    = { x, z };
-    _dogWalking   = true;
-    _dogArrivalCb = onArrival || null;
-  };
-
-  window._dogSetFacing = (facingY) => {
-    if (vrmDog) vrmDog.scene.rotation.y = facingY;
-  };
-
-  Object.defineProperty(window, '_dogArrivalCbRef', {
-    get: () => _dogArrivalCb,
-    set: (v) => { _dogArrivalCb = v; },
-    configurable: true,
-  });
-  Object.defineProperty(window, '_dogSpeedModeRef', {
-    get: () => _dogSpeedMode,
-    configurable: true,
-  });
-
-  let _lastT = performance.now();
-  function _dogTick() {
-    const now   = performance.now();
-    const delta = Math.min((now - _lastT) / 1000, 0.1);
-    _lastT      = now;
-    _updateDogWalk(delta);
-    requestAnimationFrame(_dogTick);
-  }
-  requestAnimationFrame(_dogTick);
-  console.log('[Dog Walk] inline system started ✓');
-}
-
-function _updateDogWalk(dt) {
-  if (!vrmDog) return;
-
-  if (_dogWalking && _dogTarget) {
-    window._dogWalking = true;
-    const pos   = vrmDog.scene.position;
-    const dx    = _dogTarget.x - pos.x;
-    const dz    = _dogTarget.z - pos.z;
-    const dist  = Math.sqrt(dx*dx + dz*dz);
-    const spd   = _DOG_SPEED_MPS[_dogSpeedMode] || _DOG_SPEED_MPS.trot;
-    const step  = spd * dt;
-
-    if (dist <= step + 0.05) {
-      pos.x        = _dogTarget.x;
-      pos.z        = _dogTarget.z;
-      _dogWalking  = false;
-      _dogTarget   = null;
-      window._dogWalking = false;
-      const cb = window._dogArrivalCbRef;
-      if (cb) { window._dogArrivalCbRef = null; cb(); }
-    } else {
-      // Dog model's forward convention — flip sign here if he walks backwards.
-      vrmDog.scene.rotation.y = Math.atan2(dx, dz) + Math.PI;
-      const moveX = (dx / dist) * step;
-      const moveZ = (dz / dist) * step;
-      const safe  = wallAwareStep(pos.x, pos.z, moveX, moveZ, AVATAR_RADIUS);
-      pos.x = safe.x;
-      pos.z = safe.z;
-    }
-    return;
-  }
-  // Idle — scheduling handled entirely by _dogLifeUpdate in engine-life.js.
-}
