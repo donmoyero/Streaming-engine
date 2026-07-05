@@ -217,7 +217,6 @@ async function _askLora(missSaid, context = '') {
       body: JSON.stringify({
         miss_said:    missSaid,
         context:      context,
-        current_room: window._currentRoom || 'studio',
       }),
     });
     if (res.status === 429) {
@@ -266,12 +265,6 @@ const STARTERS = [
   "If you could only keep 3 apps on your phone, which ones survive?",
   "Describe your perfect Saturday in one sentence.",
   "What's a skill you have that most people don't know about?",
-  // ── Kitchen starters — fire when either char is cooking ──────
-  "Okay be honest — whose cooking is actually better, mine or yours? Chat, weigh in 👀🍳",
-  "What's the one dish you cannot mess up no matter what? Mine is rice. I will not elaborate.",
-  "If we had to cook for a dinner party of 10 right now with what's in this kitchen — what are we making?",
-  "Be real — do you actually taste as you cook or are you just winging it every time?",
-  "What's a dish your mum makes that you've never been able to replicate properly?",
 ];
 
 // ════════════════════════════════════════════════════════════════
@@ -310,10 +303,8 @@ let _busy        = false;
 let _lastSpeaker = null;
 
 // Returns true if we should skip a BFF exchange right now.
-// Kitchen sessions set window._kitchenRunning so the BFF engine
-// stands down gracefully rather than talking over a recipe.
 function _shouldSkip() {
-  return _busy || window._kitchenRunning === true;
+  return _busy;
 }
 
 async function _turn(who, text, mood = 'happy') {
@@ -479,13 +470,6 @@ export function startCoupleEngine() {
   setInterval(() => {
     if (_busy) return;
 
-    // During kitchen sessions, fire cooking emoji from both chars
-    if (window._kitchenRunning) {
-      if (Math.random() < 0.3) floatEmoji('miss', _emojiForContext('miss', 'happy'), 1);
-      if (Math.random() < 0.25) floatEmoji('lora', _emojiForContext('lora', 'happy'), 1);
-      return;
-    }
-
     // Only fire occasionally (not every interval) and only when doing something visual
     if (Math.random() < 0.18) {
       const act = window._missCurrentActivity || 'idle';
@@ -549,18 +533,12 @@ function _startMusicSession() {
   _currentTrack = SAFE_TRACKS[Math.floor(Math.random() * SAFE_TRACKS.length)];
   console.log(`[Music] Now playing: ${_currentTrack.title} — ${_currentTrack.artist}`);
 
-  // Fire music emoji from both chars
+  // Fire music emoji from both chars — they stay seated at the desk,
+  // just vibing to the track rather than getting up to dance.
   floatEmoji('miss', rndEmoji(EMOJI_MUSIC, 2), 2);
   setTimeout(() => floatEmoji('lora', rndEmoji(EMOJI_MUSIC, 2), 2), 800);
 
-  // Set listenDance on both via the shared ACTIVITY objects
-  if (window._setMissActivity)  window._setMissActivity('listenDance', 18 + Math.random() * 20);
-  if (window._setLoraActivity)  window._setLoraActivity('listenDance', 18 + Math.random() * 20);
-
-  // Notify camera
-  if (window._onActivityChanged) window._onActivityChanged('listenDance');
-
-  // Raise background music volume during dance session
+  // Raise background music volume during the session
   setMusicVolume(0.22);
 }
 
