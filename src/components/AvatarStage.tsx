@@ -6,17 +6,19 @@ import './avatar-stage.css';
 /**
  * AvatarStage
  * ------------------------------------------------------------------
- * This component is a faithful port of the old index.html <body>.
- * It does NOT rewrite engine-scene.js / engine-life.js / engine-camera.js /
- * engine-bones.js / engine-bff.js / engine-music.js / kitchen-*.js into
- * React. Those files keep their original logic untouched (only asset
- * paths were changed from relative to absolute — see engine-scene.js).
+ * Podcast-desk build: Miss OG Tinz + Lora seated at a desk, facing
+ * the camera, chatting. No house, no walking, no dog, no kitchen.
+ * Viewers reach the hosts through Twitch chat (anonymous IRC over
+ * WebSocket, handled inside engine-life.js) — there's no on-screen
+ * text box for them; the debug chat box below is dev-only, tucked
+ * behind the CONTROLS toggle.
  *
- * Why: that engine is a tightly-coupled, already-tuned render loop with
+ * This component still doesn't rewrite engine-scene.js / engine-life.js /
+ * engine-camera.js / engine-bones.js / engine-bff.js / engine-music.js
+ * into React — that engine is a tightly-coupled render loop with
  * module-level side effects (WebGLRenderer, AudioContext created at
- * import time). It has no reason to be "more React" — it just needs to
- * run client-side, after this markup exists in the DOM. That's exactly
- * what the useEffect below does.
+ * import time). It just needs to run client-side once this markup
+ * exists in the DOM, which is what the useEffect below does.
  *
  * All the IDs below (canvas, loader, bar-fill, chat-bubble, posX, etc.)
  * must stay exactly as they are — the engine files grab these elements
@@ -34,23 +36,12 @@ export default function AvatarStage() {
     let cancelled = false;
 
     async function boot() {
-      // 1. Load tmi.js from npm and expose it as a global so the engine
-      //    code can reach it via `window.tmi` / `tmi.Client(...)`, exactly
-      //    as it did when tmi was loaded via <script src="...">.
-      if (!window.tmi) {
-        const tmiModule = await import('tmi.js');
-        // tmi.js ships as a CommonJS bundle; the default export IS the
-        // tmi namespace (Client, ChatUserstate, etc.).
-        window.tmi = tmiModule.default ?? tmiModule;
-      }
-      if (cancelled) return;
-
-      // 2. Now that tmi exists and this markup is mounted, boot the engine.
-      //    engine-scene.js owns initScene() (creates renderer/scene/camera
-      //    from the DOM nodes this component just rendered) and
-      //    startEngine() (loads House.glb + both VRMs, then dynamically
-      //    pulls in engine-life.js for UI/render-loop/life-sim wiring).
-      //    Both must run, in this order, after mount.
+      // engine-scene.js owns initScene() (creates renderer/scene/camera
+      // from the DOM nodes this component just rendered) and
+      // startEngine() (loads both VRMs onto the desk set, then
+      // dynamically pulls in engine-life.js for UI/render-loop wiring
+      // and engine-bff.js for the two-host banter). Both must run,
+      // in this order, after mount.
       const sceneModule = await import('@/engine/engine-scene.js');
       if (cancelled) return;
       sceneModule.initScene();
@@ -112,9 +103,11 @@ export default function AvatarStage() {
       {/* Controls toggle */}
       <button id="panel-toggle">CONTROLS</button>
       <div id="control-panel" className="hidden">
-        <div className="ctrl-label">Send a Message</div>
+        {/* Dev/test only — real viewers reach the hosts via Twitch chat,
+            handled by engine-life.js's IRC connection, not this box. */}
+        <div className="ctrl-label">Test Message (dev only)</div>
         <div className="ctrl-chat-row">
-          <input id="chat-input" type="text" placeholder="Chat with Miss OG Tinz..." maxLength={200} />
+          <input id="chat-input" type="text" placeholder="Test a message to Miss OG Tinz..." maxLength={200} />
           <button id="send-btn">SEND</button>
         </div>
 
