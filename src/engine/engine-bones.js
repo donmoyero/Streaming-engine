@@ -279,10 +279,14 @@ export function activityUpdate(delta) {
       const headNod  = Math.sin(t * 0.28) * 0.018;
       const headTurn = Math.sin(t * 0.19) * 0.06;
 
-      // Hips — 90–110° hip angle per guide. rotation.x ≈ 1.65 (94°)
-      // Slight right lean, subtle sway
+      // Hips — kept near-neutral. Hips is the skeleton root, so a large
+      // rotation.x here pitches the ENTIRE body (spine, head, and legs
+      // via inheritance) forward, not just the pelvis — that was the bug
+      // causing heads to droop toward the desk and legs to flip upward.
+      // The actual "sitting" bend now comes entirely from the upper/lower
+      // leg rotations below, which already assume hips ≈ 0.
       if (boneHips) {
-        boneHips.rotation.x =  1.65;
+        boneHips.rotation.x =  0.06;
         boneHips.rotation.z =  0.04 + microZ;
         boneHips.rotation.y =  Math.sin(t * 0.22) * 0.015;
       }
@@ -334,35 +338,38 @@ export function activityUpdate(delta) {
       if (boneLToes) boneLToes.rotation.x =  0.04;
       if (boneRToes) boneRToes.rotation.x =  0.04;
 
-      // ── Arms — resting on thighs, elbows 90–110° per guide ───
-      // Elbow angle 90–110° = lower arm roughly horizontal
+      // ── Arms — reaching forward, hands resting near the laptop/
+      // keyboard on the desk (elbows bent, forearms raised to desk
+      // height) instead of resting flat on the thighs.
+      const typeTapL = Math.sin(t * 3.1) * 0.02;
+      const typeTapR = Math.sin(t * 3.1 + 1.4) * 0.02;
       if (boneLUpperArm) {
-        boneLUpperArm.rotation.z =  0.72 + Math.sin(t * 0.6) * 0.015;
-        boneLUpperArm.rotation.x =  0.38;
-        boneLUpperArm.rotation.y = -0.06;
+        boneLUpperArm.rotation.z =  0.5 + Math.sin(t * 0.6) * 0.012;
+        boneLUpperArm.rotation.x =  0.6;
+        boneLUpperArm.rotation.y = -0.10;
       }
       if (boneLLowerArm) {
-        boneLLowerArm.rotation.z =  0.48;
-        boneLLowerArm.rotation.x =  0.10;
+        boneLLowerArm.rotation.z =  0.30;
+        boneLLowerArm.rotation.x =  0.15;
       }
       if (boneLHand) {
-        boneLHand.rotation.z     =  0.18 + Math.sin(t * 1.4) * 0.03;
-        boneLHand.rotation.x     =  0.05 + Math.sin(t * 2.0) * 0.025;
-        boneLHand.rotation.y     =  Math.sin(t * 1.1) * 0.03;
+        boneLHand.rotation.z     =  0.18;
+        boneLHand.rotation.x     = -0.05 + typeTapL;
+        boneLHand.rotation.y     =  Math.sin(t * 1.1) * 0.02;
       }
       if (boneRUpperArm) {
-        boneRUpperArm.rotation.z = -0.72 - Math.sin(t * 0.6 + 1.0) * 0.015;
-        boneRUpperArm.rotation.x =  0.38;
-        boneRUpperArm.rotation.y =  0.06;
+        boneRUpperArm.rotation.z = -0.5 - Math.sin(t * 0.6 + 1.0) * 0.012;
+        boneRUpperArm.rotation.x =  0.6;
+        boneRUpperArm.rotation.y =  0.10;
       }
       if (boneRLowerArm) {
-        boneRLowerArm.rotation.z = -0.48;
-        boneRLowerArm.rotation.x =  0.10;
+        boneRLowerArm.rotation.z = -0.30;
+        boneRLowerArm.rotation.x =  0.15;
       }
       if (boneRHand) {
-        boneRHand.rotation.z     = -0.18 - Math.sin(t * 1.4 + 1.0) * 0.03;
-        boneRHand.rotation.x     =  0.05 + Math.sin(t * 2.0 + 1.0) * 0.025;
-        boneRHand.rotation.y     =  Math.sin(t * 1.1 + 0.8) * 0.03;
+        boneRHand.rotation.z     = -0.18;
+        boneRHand.rotation.x     = -0.05 + typeTapR;
+        boneRHand.rotation.y     =  Math.sin(t * 1.1 + 0.8) * 0.02;
       }
 
       // ── Head — straight, slight natural movement ──────────────
@@ -1890,8 +1897,10 @@ export function activityUpdateMr(delta) {
       const headWave = Math.sin(t * 0.28) * 0.018;
       const microZ  = Math.sin(t * 0.38) * 0.016;
 
-      // Hips — 90–110° hip angle (rotation.x ≈ 1.65 = 94°)
-      if (boneHipsMr)  { boneHipsMr.rotation.x = 1.65; boneHipsMr.rotation.z = 0.04 + microZ; boneHipsMr.rotation.y = Math.sin(t*0.22)*0.015; }
+      // Hips — kept near-neutral (Hips is the skeleton root; a large
+      // rotation.x here pitches the whole body, not just the pelvis —
+      // that was the bug flipping legs up and dropping heads to the desk).
+      if (boneHipsMr)  { boneHipsMr.rotation.x = 0.06; boneHipsMr.rotation.z = 0.04 + microZ; boneHipsMr.rotation.y = Math.sin(t*0.22)*0.015; }
       // Spine — 100–110° back angle, leaning slightly back
       if (boneSpineMr) { boneSpineMr.rotation.x = -0.18 + breathe; boneSpineMr.rotation.z = -microZ * 0.4; boneSpineMr.rotation.y = Math.sin(t*0.18)*0.010; }
       if (boneChestMr) { boneChestMr.rotation.x = -0.08 + breathe * 0.6; boneChestMr.rotation.z = -microZ * 0.25; }
@@ -1909,13 +1918,16 @@ export function activityUpdateMr(delta) {
       if (boneLFootMr)     { boneLFootMr.rotation.x = -0.12; boneLFootMr.rotation.z = -0.05; }
       if (boneRFootMr)     { boneRFootMr.rotation.x = -0.12; boneRFootMr.rotation.z =  0.05; }
 
-      // Arms — resting on thighs, elbow 90–110° per guide
-      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.70 + Math.sin(t*0.5)*0.012; boneLUpperArmMr.rotation.x =  0.36; boneLUpperArmMr.rotation.y = -0.05; }
-      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.70 - Math.sin(t*0.5+1)*0.012; boneRUpperArmMr.rotation.x =  0.36; boneRUpperArmMr.rotation.y =  0.05; }
-      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.48 + Math.sin(t*0.7)*0.03; boneLLowerArmMr.rotation.x =  0.10; }
-      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.48 - Math.sin(t*0.7+1)*0.03; boneRLowerArmMr.rotation.x =  0.10; }
-      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.16; boneLHandMr.rotation.x =  0.06; }
-      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.16; boneRHandMr.rotation.x =  0.06; }
+      // Arms — reaching forward, hands resting near the laptop/keyboard
+      // on the desk instead of resting flat on the thighs.
+      const typeTapLMr = Math.sin(t * 3.1 + 0.6) * 0.02;
+      const typeTapRMr = Math.sin(t * 3.1 + 2.0) * 0.02;
+      if (boneLUpperArmMr) { boneLUpperArmMr.rotation.z =  0.5 + Math.sin(t*0.5)*0.012; boneLUpperArmMr.rotation.x =  0.6; boneLUpperArmMr.rotation.y = -0.10; }
+      if (boneRUpperArmMr) { boneRUpperArmMr.rotation.z = -0.5 - Math.sin(t*0.5+1)*0.012; boneRUpperArmMr.rotation.x =  0.6; boneRUpperArmMr.rotation.y =  0.10; }
+      if (boneLLowerArmMr) { boneLLowerArmMr.rotation.z =  0.30; boneLLowerArmMr.rotation.x =  0.15; }
+      if (boneRLowerArmMr) { boneRLowerArmMr.rotation.z = -0.30; boneRLowerArmMr.rotation.x =  0.15; }
+      if (boneLHandMr)     { boneLHandMr.rotation.z =  0.18; boneLHandMr.rotation.x = -0.05 + typeTapLMr; }
+      if (boneRHandMr)     { boneRHandMr.rotation.z = -0.18; boneRHandMr.rotation.x = -0.05 + typeTapRMr; }
 
       // Phase: look around naturally
       if (phase < 4)       setExpressionMr('neutral');
