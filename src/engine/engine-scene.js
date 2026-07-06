@@ -144,35 +144,41 @@ function _buildDeskSet() {
     scene.add(leg);
   });
 
-  // Monitor — glowing screen, center of desk
-  const monitorGroup = new THREE.Group();
-  const screenGeo = new THREE.PlaneGeometry(0.5, 0.3);
-  const screenMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0a12, emissive: 0x2a6bff, emissiveIntensity: 1.4, roughness: 0.3,
-  });
-  const screen = new THREE.Mesh(screenGeo, screenMat);
-  screen.position.set(0, 1.08, -0.85);
-  monitorGroup.add(screen);
-  const monitorStand = new THREE.Mesh(
-    new THREE.BoxGeometry(0.06, 0.18, 0.06),
-    new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+  // Podcast mic — single mic on a small desk stand, centered, close to
+  // the hosts (mics sit near the front edge, not pushed back like a
+  // monitor would be).
+  const micGroup = new THREE.Group();
+  const micStandBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.06, 0.02, 16),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.3 })
   );
-  monitorStand.position.set(0, 0.9, -0.85);
-  monitorGroup.add(monitorStand);
-  scene.add(monitorGroup);
-  monitorMesh = screen;
+  micStandBase.position.set(0, 0.79, -0.38);
+  micGroup.add(micStandBase);
 
-  monitorGlowLight = new THREE.PointLight(0x3a7bff, 0.8, 2.5);
-  monitorGlowLight.position.set(0, 1.08, -0.7);
-  scene.add(monitorGlowLight);
-
-  // Keyboard prop (visual only)
-  keyboardMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(0.35, 0.02, 0.14),
-    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 })
+  const micArm = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.34, 8),
+    new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.4, metalness: 0.6 })
   );
-  keyboardMesh.position.set(0, 0.815, -0.5);
-  scene.add(keyboardMesh);
+  micArm.position.set(0, 0.96, -0.38);
+  micGroup.add(micArm);
+
+  const micHead = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.035, 0.09, 4, 12),
+    new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.35, metalness: 0.7 })
+  );
+  micHead.rotation.z = Math.PI / 2.4;
+  micHead.position.set(0, 1.15, -0.36);
+  micGroup.add(micHead);
+
+  const micWindscreen = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 12, 12),
+    new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9 })
+  );
+  micWindscreen.position.set(0, 1.19, -0.34);
+  micGroup.add(micWindscreen);
+
+  scene.add(micGroup);
+  monitorMesh = micHead; // kept for engine-bones.js compatibility (unused ref)
 
   // Picture frame on the back wall
   const frameGroup = new THREE.Group();
@@ -229,7 +235,9 @@ window.getVrmLora = () => vrmMr;
 // same value the original house rig used for its sofa/chair spots.
 export const MISS_SEAT_X = -0.62, MISS_SEAT_Z = 0.15;
 export const LORA_SEAT_X =  0.62, LORA_SEAT_Z = 0.15;
-export const SEAT_FACE_Y = 0;          // facing +Z, straight at camera
+export const SEAT_FACE_Y = Math.PI;    // facing +Z toward camera — this VRM's
+                                        // forward lands on -Z after rotateVRM0,
+                                        // so a 180° yaw is needed to face front.
 const SEAT_Y_OFFSET      = -0.39;
 
 export function _placeVRMOnFloor() {
