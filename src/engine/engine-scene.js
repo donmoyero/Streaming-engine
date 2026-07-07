@@ -135,12 +135,12 @@ function _buildDeskSet() {
   // Desk — wide enough for both hosts, low enough to not block faces
   const deskMat = new THREE.MeshStandardMaterial({ color: 0x2a1f14, roughness: 0.4, metalness: 0.2 });
   const desk = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.9), deskMat);
-  desk.position.set(0, 0.78, -0.55);
+  desk.position.set(0, 0.60, -0.55);
   scene.add(desk);
-  const deskLegGeo = new THREE.BoxGeometry(0.06, 0.78, 0.06);
+  const deskLegGeo = new THREE.BoxGeometry(0.06, 0.60, 0.06);
   [[-1.2,-0.9],[1.2,-0.9],[-1.2,-0.2],[1.2,-0.2]].forEach(([x,z]) => {
     const leg = new THREE.Mesh(deskLegGeo, deskMat);
-    leg.position.set(x, 0.39, z);
+    leg.position.set(x, 0.30, z);
     scene.add(leg);
   });
 
@@ -152,14 +152,14 @@ function _buildDeskSet() {
     new THREE.CylinderGeometry(0.05, 0.06, 0.02, 16),
     new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.3 })
   );
-  micStandBase.position.set(0, 0.79, -0.38);
+  micStandBase.position.set(0, 0.61, -0.38);
   micGroup.add(micStandBase);
 
   const micArm = new THREE.Mesh(
     new THREE.CylinderGeometry(0.012, 0.012, 0.34, 8),
     new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.4, metalness: 0.6 })
   );
-  micArm.position.set(0, 0.96, -0.38);
+  micArm.position.set(0, 0.78, -0.38);
   micGroup.add(micArm);
 
   const micHead = new THREE.Mesh(
@@ -167,14 +167,14 @@ function _buildDeskSet() {
     new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.35, metalness: 0.7 })
   );
   micHead.rotation.z = Math.PI / 2.4;
-  micHead.position.set(0, 1.15, -0.36);
+  micHead.position.set(0, 0.97, -0.36);
   micGroup.add(micHead);
 
   const micWindscreen = new THREE.Mesh(
     new THREE.SphereGeometry(0.055, 12, 12),
     new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9 })
   );
-  micWindscreen.position.set(0, 1.19, -0.34);
+  micWindscreen.position.set(0, 1.01, -0.34);
   micGroup.add(micWindscreen);
 
   scene.add(micGroup);
@@ -238,7 +238,13 @@ export const LORA_SEAT_X =  0.62, LORA_SEAT_Z = 0.15;
 export const SEAT_FACE_Y = Math.PI;    // facing +Z toward camera — this VRM's
                                         // forward lands on -Z after rotateVRM0,
                                         // so a 180° yaw is needed to face front.
-const SEAT_Y_OFFSET      = -0.39;
+const SEAT_Y_OFFSET      = -0.78;
+// ^ Was -0.39, tuned against the old broken pose where the 94° hip fold
+// dropped the torso near the ground. With hips now upright, the torso
+// sits much taller for the same root Y, so the whole body needs to sit
+// lower to bring the waist down to desk height. This is a starting
+// guess — use window.tuneSeatY(value) in the browser console to dial
+// it in live (see below), then hardcode the final number here.
 
 export function _placeVRMOnFloor() {
   _placeOneVRM(vrm,   MISS_SEAT_X, MISS_SEAT_Z, SEAT_FACE_Y);
@@ -358,6 +364,8 @@ function applyVRMColours(vrmObj, colourMap, isLora = false) {
 }
 
 // ── VRM finalise (scale + seat) ───────────────────────────────────
+const _seatedVRMs = []; // [{v, spawnX, spawnZ}] — used by tuneSeatY() below
+
 function _finaliseVRM(v, spawnX, spawnZ, faceY, targetHeight = 1.65) {
   VRMUtils.rotateVRM0(v);
   v.scene.scale.set(1,1,1);
@@ -383,7 +391,24 @@ function _finaliseVRM(v, spawnX, spawnZ, faceY, targetHeight = 1.65) {
   v._restPosY        = finalY;
   v.scene.rotation.y = faceY;
   console.log(`[VRM] seated at (${spawnX},${finalY.toFixed(3)},${spawnZ}) faceY=${faceY.toFixed(3)}`);
+
+  _seatedVRMs.push({ v, spawnX, spawnZ });
 }
+
+// ── Live seat-height tuning (dev helper) ───────────────────────────
+// From the browser console: tuneSeatY(-0.7)  — moves both hosts up/down
+// instantly so you can eyeball desk height against the live render
+// without redeploying. Once it looks right, copy that number into
+// SEAT_Y_OFFSET above and remove the guesswork.
+export function tuneSeatY(offset) {
+  _seatedVRMs.forEach(({ v, spawnX, spawnZ }) => {
+    const finalY = v._feetOffset + offset;
+    v.scene.position.set(spawnX, finalY, spawnZ);
+    v._restPosY = finalY;
+  });
+  console.log(`[VRM] tuneSeatY(${offset}) applied to ${_seatedVRMs.length} host(s)`);
+}
+if (typeof window !== 'undefined') window.tuneSeatY = tuneSeatY;
 
 // ── Load state ───────────────────────────────────────────────────
 let _missLoaded = false;
